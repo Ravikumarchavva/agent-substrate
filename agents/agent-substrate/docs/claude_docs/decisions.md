@@ -1,0 +1,986 @@
+# Decisions — Check Here Before Re-litigating
+
+## An agent's account is viewable read only: pairs are record channels, lists are keyset-paged (2026-10-10)
+
+**Context.** The user wants to open any agent and see what it sees (its chats with you, with other agents, in groups), without being able to write in it,
+and an agent may have a hundred contacts. A chip strip or a pane per pair did not scale; the model is "open his account with read permission".
+
+* **Agent-to-agent conversations are record channels, one per pair** (`pair/<id>`, row in `agent_pairs` with `agent_a < agent_b`). Opened with no members,
+  so nothing in them is woken; entries are posted by the agents themselves with `fresh=True` (a request, then its answer, keyed `<thread>:ask|answer`, so
+  a repeat lands once). `ask_agent` writes them; an answer that arrives after the asker stopped waiting is followed in the background and written when
+  it comes. The hidden delegation thread stays as the full trace. Deleting an agent deletes its pairs and their channels.
+* **Lists are rows, not reads.** `agent_pairs` carries the latest line and time (denormalised), indexed `(user, agent, last_at)`, so an agent's list is a
+  keyset page on time (no OFFSET) with the name search done in SQL; groups come from one `channel_heads` call; the page is merged by time. The cost of a
+  page does not depend on how many contacts there are. (The API caps a user at 20 agents today; the tests insert agents directly to exercise 100.)
+* **One read-only API** (`/agents/{id}/view/chats`, `/view/chats/{key}/messages`, every route GET, checked by a test on the routes themselves). A
+  conversation is paged back with the engine's new `channel_read_before`. "You" is the agent's main thread projected to text only until DMs move onto
+  channels.
+* **Live:** `POST /feed` takes `watch: <agentId>` and also follows that agent's pairs (`pair-<id>`); the UI keeps a second feed while a viewed account is open.
+* **UI:** `/chat/view/<agentId>[/<chat>]`, a banner ("Viewing X's account, read only"), the same `ChatList` driven by the server (search, filter, load more),
+  entry points: header eye, profile "View as", account menu picker. `Messages` has a `readOnly` mode (no actions, no ticks).
+* **Found on the way (not fixed, not ours):** with OpenTelemetry's FastAPI instrumentation a request whose path matches a route but not its method (a
+  405) raises `'_IncludedRouter' object has no attribute 'path'` and surfaces as a 500.
+
+---
+
+## Conversations are channels: people are members, every change is an entry, the feed is a convenience (2026-10-09)
+
+**Context.** Direct chats were threads (no message ids, no read state, a private branching history) and groups were channels, with the person
+outside the channel. The approved plan (`messenger` in the session plans) makes the channel the one conversation primitive. This records the first
+step, which changed the engine's channel and the platform's groups.
+
+* **A member is a participant, not an actor.** `Member(agent=participant, kind, inbox, cursor, delivered, joined_seq)`. A person (`human`, or
+  `external` through a bridge) has no inbox: an append never wakes, queues or starts a run for one. An agent's inbox defaults to itself; a separate
+  inbox (the actor to wake) is how one agent will be present in many chats under one identity later. Budgets still charge the participant.
+* **Edits, reactions and deletes are entries of their own** (`EDIT`, `REACTION`, `TOMBSTONE`) with their own `seq`, `reply_to` the target. Reading
+  a channel `after` a position is therefore enough to hear about every change; there is no second sync mechanism and no global revision counter
+  (a counter would serialise every append of every tenant). An edit keeps the previous text in its marker; a delete (a person's right to erase)
+  blanks the text, attachments and every edit's kept text. Agents never read markers (`SPOKEN` filters them out of `read_channel` and
+  `recall_channel`); the cursor still moves past them.
+* **The breaker counts depth, not a streak.** An agent entry is one deeper than the entry it answers (`cause_seq`, by default the latest message);
+  a person's entry or an agent's `fresh` one (a timer woke it) starts at 0. A direct chat that receives a daily routine report never pauses; two
+  agents answering each other still do. A member whose budget is used up is told once (a system entry, `exhausted_noticed`), not silently skipped.
+* **Read state is a cursor in the channel.** `Group.user_read_seq` is gone (the column is dropped at startup, `_DROP_COLUMNS`). Unread is one
+  `GROUP BY` over the cursor (`channel_heads`), uncapped; it used to stop at 200.
+* **The feed.** Every committed entry reaches an observer after the commit (`channel_observe`), wherever the commit happened. The platform's
+  `Relay` publishes `{channel, seq, kind}` to Redis and each process's `FeedHub` hears every process's messages (without Redis, the local hub
+  directly), so a reply written by a worker reaches a person connected to another process. `POST /feed` is one SSE stream per person: it catches the
+  client up from its own `since` (per conversation) and then follows the hub, reading each entry from the store. Server-sent events rather than a
+  WebSocket: one direction is all it needs (sending is a POST), and it passes the existing authenticated proxy, load balancers and mobile
+  browsers unchanged. A watcher that falls behind is told to `resync`; nothing sent is the only copy. Because the stream stays open, uvicorn is
+  started with `--timeout-graceful-shutdown 10` so a restart is not held up by it.
+* **Each nsjail run has a chroot of its own.** Mount points nsjail creates for `/groups/<label>` lived in one shared root and showed every later
+  run (anyone's) the names of drives that were not theirs.
+* **Deferred, on purpose:** the chat types still live in `runtime/channel.py` (they move to `types/chat.py` when `context/` needs them);
+  `store.tenant(t)` does not yet cover channels (the platform authorises by ownership); the Redis relay is not yet run by a separate worker process.
+
+---
+
+## The kernel is the engine, not a layer of contracts (2026-10-02)
+
+**Decision:** `substrate` does the work of running an agent — routed agents, the durable
+runtime, journal, telemetry, budgets, tool invocation — and declares what it needs from outside in
+`kernel/abstractions`. Vendor clients, databases and HTTP live above it (`integrations/`, `serving/`).
+The old L0/L1/L2 stack (frozen contracts / default implementations / adapters) and the `agents/` layer
+are gone; `grep -r substrate.agents` is empty by test.
+
+**Why:** the audit found ~40 defects that were not carelessness but what a pure-contracts kernel
+produces: guarantees written as docstrings that nothing executed, three runtime backends that drifted,
+safety and identity as optional defaulted parameters, cross-cutting concerns with no owner. Making the
+kernel the engine gives each concern one owner; the invariant register (`architecture/invariants.md`)
+makes each guarantee a test.
+
+**Ruled out:** a thin kernel plus a swappable "runtime layer" (what we had) — the swap point was never
+used and the seam is where the defects lived.
+
+## One RuntimeStore port, written once over a Database protocol (2026-10-02)
+
+The three per-protocol runtime backends (event log, inbox, scheduler, signals, supervisor × in-memory /
+SQLite / Postgres, ~3.2k lines) are replaced by one command-oriented `RuntimeStore` whose `commit` is a
+single transaction, implemented once as `RuntimeStore` over a small `Database` protocol (SQLite in
+the kernel, asyncpg in `integrations/runtime`). There is deliberately no in-memory store: tests use a
+store in a throwaway folder through the same code. **Consequence accepted:** an embedded database in a folder is the
+zero-infra floor, so a process always has real files to write.
+
+## One observability mechanism: the lifecycle hook manager and the second exception tree are deleted (2026-10-02)
+
+`kernel/hooks` (RUN/LLM/TOOL start/end callbacks) duplicated what spans and metrics now record, and
+`kernel/exceptions.py` carried an `AgentError` tree nothing raised. Both are gone; telemetry is the one way to
+observe a run and `abstractions/exceptions.py` the one error taxonomy.
+
+## No in-memory stores; the floor is a folder (2026-10-02)
+
+`InMemoryThreadStore`, `InMemoryVectorStore`, `InMemoryGraphStore`, `InMemoryFileStore` and the dict-based
+`TaskStore` are deleted (the kernel's task default is `LocalFilesystemTaskStore`). A store that forgets on exit
+cannot be what an agent's conversation, memory or tasks rest on, and a second implementation per port is a second
+thing to drift. Tests use `tmp_path` folders (`tests/_stores.py`); runtime tests use `ephemeral_runtime()` (a store in a throwaway folder).
+Removing them also removed the resolver's "pin actors with in-memory history" guard.
+
+## Tools declare risk and idempotency; MCP defaults to deny (2026-10-02)
+
+`Toolbox.add` refuses a tool without a `ToolRisk` and an `idempotent` bool. `idempotent` decides what a
+crash window means: re-run under the same idempotency key, or fail the run keeping the intent for
+compensation. A tool from an MCP server is `HIGH` / not idempotent unless its operator says otherwise —
+a server's own claims about its tools are not trusted.
+
+## Memory is addressed by scope, and omission narrows (2026-10-02)
+
+`MemoryStore` reads and deletes take the caller's `MemoryNamespace`; a record is visible when the
+caller shares each owner field the record sets, so leaving a field out can only narrow a query.
+Deleting requires owning the record (same user), so a user cannot delete an organisation-wide fact.
+Cross-user reads need `TenantWide(reason=…)`. Postgres memory moved to a new `memory_records` table
+keyed `(tenant_id, id)` — **no migration from `agent_memories`** (no backward compatibility, by decision).
+
+## Budgets are the engine's, and count the whole tree (2026-10-02)
+
+`ExecutionTracker` is deleted. Token/cost/turn budgets are enforced in `RunContext.llm` against the
+execution tree's total spend (`RuntimeStore.tree_spend`), checked before and after each model call.
+Spend rides on the `llm.call` journal entry, so it is counted exactly once. A cap can be exceeded only by
+calls already in flight when it was reached.
+
+## OpenTelemetry: the engine takes the API only (2026-10-02)
+
+Core dependencies carry `opentelemetry-api`; the SDK, OTLP exporter and FastAPI instrumentation moved to
+the `server` extra (and the SDK to the `dev` group for tests). The engine instruments itself
+unconditionally and costs nothing until a host configures an SDK.
+
+## Text-input safety model: Prompt Guard 2 86M, not Opir-edge-multilang
+
+**Decision:** the live-chat-turn jailbreak/prompt-attack classifier is
+`meta-llama/Llama-Prompt-Guard-2-86M` (community ONNX export, INT8, via
+`onnxruntime` + `tokenizers` — no torch/transformers), not
+`knowledgator/opir-edge-multilang-v1.0`, despite Opir winning on nearly
+every static axis: Apache 2.0 (vs. Prompt Guard's Llama Community license,
+a real obligation — acceptable-use policy + attribution + 700M-MAU clause),
+23 languages (vs. 8), 1024-token context (vs. 512, halving document
+chunking), and consolidating jailbreak + harmful-content detection into one
+model instead of two.
+
+**Why:** real measurement, not the model card. The ONNX export itself
+worked and was numerically correct (verified: max abs probability delta
+1.27e-07 vs. the original PyTorch model, across benign/jailbreak/Hindi/
+long-input/empty-string fixtures) — but at **685-851ms per 512-token scan**,
+roughly 50x the card's own claimed 15.6ms p50, and far over the ~250ms
+hot-path budget. Root cause not fully chased down (plausibly the exported
+graph lacks a fused kernel for ModernBERT's alternating full/sliding-window
+attention), because two independent INT8 quantization attempts (default
+dynamic, and `MatMul`-only + per-channel) both broke the model outright
+(max abs delta 0.996 and 0.729 respectively against the same 1e-3 gate) —
+INT8 wasn't a viable path to close the latency gap. Prompt Guard's own
+community ONNX/INT8 export, measured the same way on the same hardware,
+runs in 20-35ms for short chat-length text.
+
+**Ruled out:** shipping Opir at fp32 anyway (572MB, correct, but 700-850ms
+would put a visible stall on every flagged turn) or accepting a
+"documents-only, chat-text-only-gets-Prompt-Guard" split just to use Opir
+somewhere — the whole point of the Opir bet was consolidating two models
+into one; a split defeats that and Prompt Guard already has to be present
+for chat text regardless.
+
+**Consequence accepted:** two text models instead of one — Prompt Guard for
+jailbreak/prompt-attack, `gravitee-io/bert-mini-toxicity` (11.2M params, 14
+languages claimed, OpenRAIL++ — another restricted license, acknowledged)
+for content-safety on the document-upload path only, not live chat text.
+Both license obligations (Llama Community + OpenRAIL++) are therefore live,
+not hypothetical.
+
+**Revisit when:** someone has time to properly fix Opir's ONNX export path
+(likely: `onnxruntime-transformers`-specific conversion tooling instead of
+raw `torch.onnx.export`, or static INT8 with real calibration data instead
+of dynamic) — if that closes the latency gap without breaking correctness,
+it's still the better model on every other axis and would let both
+`bert-mini-toxicity` and its OpenRAIL++ license go away too.
+
+---
+
+
+Short ADR-style entries: the decision, why, and what it rules out. Edit in
+place when a decision changes; note the date and reason for the change rather
+than deleting history.
+
+---
+
+## Suspension uses `SignalBusProtocol.signal()`, never `asyncio.Future`
+
+**Decision:** any tool or agent behavior that pauses a run waiting on an
+external event (human input, a timer, another agent) uses
+`ctx.sleep_until_signal(name)` — never holds an `asyncio.Future` open inside
+the running Task.
+
+**Why:** a pending Future keeps the agent's asyncio Task alive — it's not
+truly dormant, and per `kernel/runtime/wakeup.py`'s docstring, a properly
+suspended run should cost "zero RAM and zero CPU." The Future pattern also
+means a 60-second-or-so tool-call timeout will cancel the coroutine mid-wait
+if the human takes too long, silently dropping their eventual answer — this
+was a real, shipped bug in `ask_human` before the signal-based migration
+(see [`roadmap.md`](roadmap.md) "Recently shipped").
+
+**Ruled out:** adding more Future-based HITL mechanisms. The existing tool
+approval path (`ToolApprovalHandler`) still uses Futures — that's tracked
+debt to migrate ([`roadmap.md`](roadmap.md) P1), not a template to copy from.
+
+**Update (2026-07-03):** the durability gap this caveat used to describe is
+closed — `SignalBus` + `SuspendInterrupt`-based suspend/resume
+(Phase 1 PR4-PR5, see [`roadmap.md`](roadmap.md) "Recently shipped") means a
+suspended run's `ravi_run_queue.status` row is genuinely `'suspended'` and
+survives a process restart. See
+[`architecture/kernel.md`](architecture/kernel.md) for the
+current state and the one remaining boundary case (durable `deadline`
+column has no writer yet).
+
+---
+
+## Tools that suspend must declare `suspends = True`
+
+**Decision:** any `Tool` whose `execute()` calls `ctx.sleep_until_signal()`
+(or otherwise blocks on a human/external event) must set `suspends: bool = True`
+as a class attribute.
+
+**Why:** `ToolInvoker` (`agents/tools/invoker.py`) wraps every tool call in
+`asyncio.wait_for(..., timeout=policy.call_timeout_s)` by default. A human can
+take minutes; the invoker checks `getattr(tool, "suspends", False)` and skips
+the timeout wrapper entirely for such tools. Forgetting this flag reproduces
+the exact "answer silently dropped after 60s" bug described above.
+
+**Ruled out:** raising `call_timeout_s` globally to "fix" this — that would
+let a genuinely hung *non-suspending* tool block the run for minutes instead
+of failing fast.
+
+---
+
+## Kernel (L0) is frozen — new contracts need zero deps and multi-layer need
+
+**Decision:** `kernel/` only grows when a new contract (a) has zero external
+dependencies and (b) is genuinely needed by more than one layer above it.
+Otherwise the code goes in `agents/`, `capabilities/`, or `fabric/`.
+
+**Why:** kernel's entire value is that every backend (in-memory today,
+Postgres/Redis tomorrow) can implement its Protocols and be swapped freely.
+A concrete helper snuck into kernel breaks that swappability guarantee and
+creates a backdoor dependency that `lint-imports` can't catch (it only checks
+import direction, not "should this Protocol exist at all").
+
+**Enforcement:** `tests/architecture/test_kernel_invariants.py` — LOC ceiling
+(6k), file-count ceiling (45), no concrete implementations (only
+Protocols/ABCs/dataclasses/enums). These are tripwires, not the actual review
+— use judgment on *whether something belongs*, not just whether it fits under
+the ceiling.
+
+---
+
+## Card reconstruction reads from `tool_result`, never `assistant_message.tool_calls`
+
+**Decision:** any UI state that must survive a page reload and depends on a
+tool call's arguments (like the `ask_human` card's question/options) should
+be embedded in the tool's **result** payload, not read back from the
+assistant turn's persisted `tool_calls`.
+
+**Why:** verified in production — a 3-question `ask_human` turn persisted all
+3 `tool_result` rows correctly, but the assistant_message's `tool_calls` array
+came back **empty**. The turn-flush logic in `AgentStreamSession` (which
+decides when to persist an assistant turn) can drop tool_calls for ask-only
+turns depending on timing. `tool_result` rows, by contrast, are always
+persisted per-call and are the more reliable source of truth.
+
+**Applies beyond HITL:** if you're building any other "reconstruct rich UI
+state from history" feature, default to reading from tool_result payloads,
+and treat `assistant_message.generation.tool_calls` as best-effort /
+supplementary, not authoritative.
+
+---
+
+## Task-board anchoring uses `TaskList.created_at`, not a live-only frontend map
+
+**Decision:** the frontend attaches a plan board to the chat turn that created
+it by comparing the board's persisted `created_at` timestamp against user
+message timestamps — not by an in-memory `Map` populated only during active
+streaming.
+
+**Why:** the original implementation (`boardAnchors` state in `page.tsx`) was
+cleared on every thread-id change, which happens right after the first
+message promotes a new thread. Any board created before that point lost its
+anchor and fell back to "attach to the most recent user message" — so simply
+sending a second message would visually relocate an earlier turn's board.
+This reproduced live, not just on reload.
+
+**Ruled out:** trying to patch the live-anchor map to survive thread
+promotion — the underlying problem is that ephemeral client state can't
+reliably answer "which turn created this," only the server's timestamp can.
+
+---
+
+## Suspension is `SuspendInterrupt` unwind + replay-from-top, never coroutine pickling
+
+**Decision:** every primitive that suspends a run (`ctx.ask`, `ctx.join`,
+`ctx.sleep_until_signal`, `ctx.sleep_until`) follows one shape: attempt a
+non-blocking claim (`SignalBusProtocol.consume()` or a direct wall-clock check); on a
+miss, raise `SuspendInterrupt` — a `BaseException` subclass in
+`kernel/core/errors.py`. This unwinds straight out of `agent.run()` to the
+Worker, which releases the lease as `SUSPENDED` and lets the asyncio Task end
+completely. Resume is a fresh lease: any worker folds a new `EffectCache`
+from the EventLog and calls `agent.run()` again from the top; every
+already-completed effect and already-consumed signal is a cache/consume hit,
+so execution silently fast-forwards back to the same wait point.
+
+**Why:** the alternative — serializing/pickling a paused coroutine's stack to
+resume it later — doesn't exist in Python in any general, safe form, and even
+language-level continuations wouldn't survive a process crash cleanly. A
+`BaseException` (not `Exception`) is deliberate: ordinary `except Exception`
+handlers in agent or tool code (guardrails, retry wrappers, `try/except
+Exception` around a tool call) must NOT be able to swallow a suspension and
+silently turn "go dormant" into "crash" or "keep running as if nothing
+happened."
+
+**Ruled out:** giving `SignalBusProtocol` a blocking `wait_for_signal()`/`SupervisorProtocol`
+a blocking `join()` that parks a live coroutine — that was the actual
+original implementation and is exactly what made suspended runs
+non-durable (see the "signal-based pattern isn't fully durable" caveat
+above, now resolved). Both `InMemorySupervisor.join()` and
+`Supervisor.join()` still exist, purely for kernel `SupervisorProtocol`
+Protocol conformance — nothing in this codebase calls them; `ctx.join()`
+consumes a `child:{run_id}` signal exactly like `ctx.ask()` does instead.
+
+---
+
+## Effect/signal identity is derived from `RunContext._alloc_path()`, never from message fields or freshly-computed values
+
+**Decision:** any deterministic id needed inside `agent.run()` — an
+`effect_id`, a `correlation_id`, a spawned child's identity — is derived from
+`RunContext._alloc_path()` (a hierarchical position: "the Nth journaled call
+in this run, nested under the Mth journaled call before it"). Never from a
+`Message.id`/`Message.correlation_id` the agent constructs itself, and never
+from a value computed fresh at call time (e.g. "the parent log's current
+`last_seq`").
+
+**Why:** found the hard way, three times, while building durable
+suspend/resume (Phase 1 PR5): agent `run()` code re-executes in full on every
+replay attempt. A fresh `Message()` constructed inside `run()` gets a new
+`uuid4()`-derived `.id`/`.correlation_id` on every attempt — so anything keyed
+off it (a signal's consume-effect_id, an ask's correlation_id) can never be
+re-claimed on replay; it looks like a brand-new, never-consumed wait every
+time. Likewise, deriving an effect_id from "the parent's current `last_seq`"
+is self-referentially unstable: the very act of spawning is what advances
+that counter, so replaying the same spawn call computes a *different* id than
+the live attempt did. `_alloc_path()` has neither problem — it's a pure
+function of "how many times has this run's code, at this exact call site,
+reached a journaled call before," which is identical on every replay by
+construction (see `RunContext`'s class docstring in `context.py`).
+
+**Concretely fixed by this pattern:** `ctx.ask()`'s correlation_id,
+`SupervisorProtocol.spawn()`'s effect_id (removed `boot.id` from the hash args
+entirely), and a `spawn()`+`ask()` double-delivery collision closed by
+`RunHandle.boot_correlation_id` (spawn's boot delivery and a subsequent
+`ctx.ask()` to the same handle must never both deliver — see that field's
+docstring in `kernel/runtime/supervisor.py`).
+
+---
+
+## Coordination state (signals, supervision, cancel, deadlines) is all-Postgres, one database, transactional with the scheduler
+
+**Decision:** `SignalBusProtocol`, `SupervisorProtocol`, and the scheduler's wakeup/cancel/
+deadline columns (`wake_signals`, `wake_at`, `cancel_requested`, `deadline`)
+all live in the same Postgres database as `EventLogProtocol`/`InboxProtocol`/`SchedulerProtocol`
+(`ravi_signals`, `ravi_run_tree`, `ravi_spawn_effects` alongside
+`ravi_run_queue`), not in Redis or a separate coordination store.
+
+**Why:** the lost-wakeup race (a signal arriving between a suspending run's
+"nothing here yet" check and its `release(SUSPENDED)` landing) and the
+cancel-cascade race (a run finishing between a cascading cancel's read and
+its write) both need to be closed with actual transactions, not "check twice
+and hope." `Scheduler.release(SUSPENDED)` double-checks
+`ravi_signals` for an already-arrived signal in the same transaction as the
+park; `SignalBus.signal()` does the INSERT and the matching-run wake
+in one transaction. Neither is expressible cleanly across two different
+datastores (Postgres for the scheduler, Redis for signals) without a
+distributed transaction or an accepted race window. `RedisJournal` was
+already removed from the effect-durability path in PR3 for the same class of
+reason (a TTL'd store silently expiring mid-suspension); Redis's role in this
+codebase is now cache/rate-limiting only, never correctness.
+
+**Ruled out:** a Redis-backed `SignalBusProtocol` (the original Stage 1 direction
+documented in `kernel/runtime/wakeup.py`'s docstring before this decision) —
+superseded once the race-closure requirement above became clear during PR4
+design. If that docstring still says Redis, it's stale; Postgres is correct.
+
+---
+
+## Durable cross-process cancellation rides the existing heartbeat, not a new push channel
+
+**Decision:** `SupervisorProtocol.cancel()` cascading to a run currently owned by a
+*different* worker process reaches that process via `SchedulerProtocol.heartbeat()`
+returning `bool` (kernel Protocol change, Phase 1 PR7) — the Worker's
+periodic heartbeat call now also reads back `cancel_requested`/`deadline`
+and cancels the run's local `CancellationToken` when either fires. No new
+push mechanism (a second signal, a pub/sub cancel channel) was added.
+
+**Why:** a cancelling process has no reference to another process's live
+asyncio Task — the only channel already crossing that boundary on a fixed,
+bounded cadence is the heartbeat every running lease already sends
+(`_HEARTBEAT_INTERVAL = 15s` in `worker.py`). Reusing it means cancellation
+latency is bounded (≤15s) and requires no new infrastructure. Suspended runs
+are the one case heartbeat can't reach (no live task polling anything) —
+those are terminal-marked directly by `SupervisorProtocol.cancel()` instead, since
+nothing will ever heartbeat them again.
+
+**Ruled out:** a lower-latency push-based cancel (e.g. `pg_notify` straight
+to a listening Worker). Not implemented because nothing in the program's
+verification criteria demanded sub-15s cancel latency, and adding a second
+live-Task-reachable channel alongside heartbeat would be complexity without
+a stated requirement driving it — revisit if a real latency requirement
+shows up.
+
+---
+
+## Single-flight and cancel are enforced by the Scheduler/Supervisor, never a per-process lock or Event
+
+**Decision:** "only one active run per thread" and "stop this run" are both
+enforced entirely through durable state (`ravi_run_queue.thread_id` +
+unique partial index; `SupervisorProtocol.cancel()`'s `cancel_requested`/terminal-mark)
+— never through an `asyncio.Lock`/`asyncio.Event` owned by the HTTP request
+handler (`ServerDependencies.thread_locks`/`cancel_registry`, both deleted
+in Phase 2, 2026-07-03).
+
+**Why:** a per-process primitive is invisible to every OTHER replica. Two
+uvicorn workers (or two pods) each hold their own empty `thread_locks` dict
+— a second `POST /chat` for a thread already streaming on a *different*
+replica sails right through the check. Same failure mode for cancel: a
+`POST /cancel` landing on a different replica than the one running the
+stream found nothing in its local `cancel_registry` and silently did
+nothing. Neither of these was a live bug in a single-replica deployment,
+which is exactly why it went unnoticed — it only manifests once you actually
+scale out, which is the whole point of Phase 2.
+
+**How resolution propagates:** the SSE-serving replica never needs to be
+told about a cross-replica cancel directly — it just keeps doing what it
+already does, tailing the run's EventLog. A durable cancel eventually
+appends a `run.cancelled` entry (via the owning worker's heartbeat noticing
+`cancel_requested`, or immediately if suspended), and `AgentStreamSession`'s
+tail loop treats that exactly like any other termination. No new "who do I
+need to notify" logic was needed on the reading side at all — see
+`AgentStreamSession._check_disconnect`'s docstring.
+
+**Ruled out:** adding a cross-replica pub/sub channel (Redis, `pg_notify`)
+purely to propagate "someone cancelled this" faster. The EventLogProtocol's own
+tail already delivers `run.cancelled` to every replica tailing that run
+(2026-10-09 correction: that tail is not LISTEN/NOTIFY, it polls the database
+every second at most — `runtime/tail.py` — which is still what carries it) — a
+second notification channel would be solving a problem that doesn't exist for
+cancel. Conversations are different: see "Conversations are channels".
+
+---
+
+## Deferring a fix is a recorded decision, not a silent gap
+
+**Decision:** when a sub-item of a larger remediation phase turns out to be
+a substantially bigger feature than the surrounding fix (e.g. migrating
+tool-approval off Futures onto signals, or wiring `agent_runtime` to run an
+`AskHumanTool` against `human_gate`), it gets scoped out explicitly and
+recorded in `roadmap.md`'s "Explicitly deferred" section — with the
+reasoning for why it's out of scope — rather than either (a) rushed through
+shallowly to claim the phase "done," or (b) silently dropped with no trace.
+
+**Why:** "Phase 2/3/4 done" as a checkbox is meaningless if it papers over
+a rushed, undertested piece bolted onto otherwise-solid work — the next
+person (or the next session) needs to know precisely which claims are
+backed by tests and which are explicitly punted, not have to re-derive that
+by reading a diff. A recorded deferral with reasoning also does the
+scoping work once, so it doesn't need re-litigating from scratch next time
+someone considers picking it up.
+
+**How to apply:** before marking any multi-part item "done," ask whether
+every sub-bullet actually shipped with test coverage. If not, split it: the
+parts that did ship are "done," the parts that didn't get their own
+"deferred" entry with the concrete reason (bigger scope, negligible real
+risk, needs a design decision first, etc.) — not folded into a vague
+"mostly done."
+
+---
+
+## A version-mismatched persisted run spec fails cleanly, never resumes silently
+
+**Decision:** when `resume_pending_runs()` (`infrastructure/serving_factory.py`)
+finds a cold-resume spec whose `agent_version` doesn't match the running
+`substrate.__version__`, it refuses to rebuild/register the agent. The run
+is terminally failed instead (`run.failed` EventLogProtocol entry with
+`status: "version_mismatch"`, `Scheduler.fail_pending_run()`,
+`SupervisorProtocol.finish_run(FAILED)`).
+
+**Why:** replay-from-top (Phase 1's suspend/resume design) re-executes the
+agent's actual code path and only skips effects it finds in the journal.
+If the code has changed since the spec was persisted — a tool renamed or
+removed, prompt logic altered, control flow restructured — the replayed
+effect path can silently diverge from what the journal expects, corrupting
+the run in a way that's hard to detect (unlike a hard crash, which is
+loud). Resuming-with-a-warning was considered and rejected: it has the same
+silent-divergence risk, just with a log line nobody's watching in the
+failure path.
+
+**Ruled out:** silently resuming version-mismatched specs; resuming with
+only a warning log. Both leave the divergence risk in place.
+
+**How to apply:** if a future change needs "resume anyway, best-effort" for
+some specific version delta (e.g. a genuinely compatible minor bump), that
+needs its own compatibility-range design (e.g. semver-range matching, not
+exact-equality) — don't relax the exact-match check as a quick fix.
+
+---
+
+## Middleware is one `Middleware` Protocol, one `MiddlewareContext`, one `MiddlewarePipeline` — never split by what it wraps
+
+**Decision (final, 2026-07-04 — supersedes both prior iterations below; the
+kernel-location detail was itself corrected 2026-07-05, see the note at the
+end of this entry):** there is exactly one middleware concept in this
+framework. `agents/middleware/_contracts.py` defines one `Middleware`
+Protocol (`process(context, call_next)`) and one concrete `MiddlewareContext`
+dataclass; `kernel/agent/middleware.py` holds only the `MiddlewareStage` enum
+(`TURN`/`CHAT`/`TOOL`) the `stage` field is typed against. `MiddlewareContext`
+has a `stage` field and
+every stage's fields declared (unused ones are `None`) plus three
+precisely-typed result fields (`turn_result: AgentRunResult`,
+`chat_result: LLMResponse`, `tool_result: InvocationResult` — typed
+separately rather than one `Any`, since the three result shapes are
+genuinely different classes middleware reads real members off of).
+`ReActAgent.__init__` takes exactly one `middleware: MiddlewarePipeline`. A
+middleware that only cares about one stage declares that via a class-level
+`stages: ClassVar[frozenset[MiddlewareStage]]`; `MiddlewarePipeline.execute()`
+filters to only the middlewares whose declared `stages` include the current
+context's `stage` before building the call chain — a middleware that didn't
+declare a stage never gets `process()` called for it, not even as a no-op
+pass-through.
+
+This still dispatches at the same three real call sites as before
+(`agents/core/react.py`'s `_handle_message()` builds a `stage=TURN` context;
+`agents/runtime/context/`'s (now a package — `journal.py`/`llm.py`/`tool.py`/
+`messaging.py`/`supervision.py`) `RunContext.llm()`/`.tool()` build
+`CHAT`/`TOOL` contexts) — what changed is that all three now share the *same*
+pipeline object and the *same* context class, with `stage` as data rather
+than type or attachment-point distinguishing them.
+
+!!! note "2026-07-05 correction: kernel never actually kept a `Middleware` Protocol copy for long"
+    The paragraph above originally said `kernel/agent/middleware.py` defines
+    the `Middleware` Protocol and a `MiddlewareContextProtocol`. That was
+    true only briefly: investigating a direct question about why
+    Protocols were being defined in `agents/` at all turned up that this
+    kernel-side pair had **zero real consumers** — every actual middleware
+    needs the concrete `MiddlewareContext`'s stage-specific fields, so
+    nothing outside kernel's own re-export ever imported the kernel copy.
+    Deleted both; kernel now holds only `MiddlewareStage`. The decision
+    below (one Protocol, one context, one pipeline, `stages`-based filtering)
+    is otherwise unchanged — only *where* the Protocol/context class
+    physically live was corrected.
+
+**Why:** the user's explicit read on the two prior iterations — three
+separate context types (`AgentCallContext`/`ChatContext`/`FunctionContext`)
+bundled via a `MiddlewareBundle` with one `MiddlewarePipeline` per field —
+was "we completely messed up middleware... a middleware is a middleware
+across the framework, no different kinds." That design also left a
+pre-existing duplication unfixed: `kernel/agent/middleware.py` and
+`agents/middleware/pipeline.py` each independently declared their own
+structurally-identical `Middleware`/`MiddlewareProtocol`, and the kernel
+separately aliased `AgentMiddleware`/`ChatMiddleware`/`FunctionMiddleware` as
+three "kinds" of the same generic protocol — exactly the proliferation being
+rejected. Collapsing to one Protocol/context/pipeline, with `stages`-based
+filtering as the only per-middleware customization, resolves both the
+literal "no different kinds" ask and the kernel/agents duplication.
+
+**Ruled out:**
+- A single `agent.middleware` (kernel `RunContext`-based) hook for
+  everything (the *first* iteration, pre-`MiddlewareBundle`). Works for
+  middleware that only needs `run_id`/`tenant_id` (tracing), but
+  `RunContext` has no `.messages`/`.arguments`/result shape — structurally
+  incapable of content filtering, PII detection, token limits, or caching.
+- Three separate context types bundled into three separate pipelines (the
+  *second* iteration, `MiddlewareBundle`). Fixed the guardrail-wireability
+  problem but reintroduced "kinds" at the type and attachment-point level —
+  judged wrong by the user despite working correctly.
+- Manual self-filtering (`if context.stage != X: return await call_next()`
+  at the top of every `process()`) instead of declarative `stages`. Confirmed
+  with the user directly: declarative filtering is more robust (can't forget
+  the check; a TOOL-only middleware simply never sees a TURN/CHAT context to
+  misinterpret) at the cost of one more attribute per middleware class.
+
+**How to apply:** every new middleware — guardrail or infra — is a plain
+class with `process(self, context: MiddlewareContext, call_next)` and a
+`stages` attribute naming which `MiddlewareStage`(s) it needs. Wire it into
+`create_assistant_agent(..., middleware=[...])` (`agents/factory.py`, one
+list, order = outermost-first) or directly into `MiddlewarePipeline([...])`
+passed to `ReActAgent(middleware=...)`. Add an end-to-end test in
+`tests/agents/test_middleware_wiring.py` (through a real `ReActAgent` +
+`Runtime`, not just a hand-built context) — a unit test that calls
+`.process()` directly with a hand-built context proves the guardrail's logic
+but not that it's actually reachable at its real call site.
+
+---
+
+## A dependency audit must check runtime string-based loading, not just `import` statements
+
+**Decision:** before removing a package from `[project.dependencies]` as
+"unused," grep for more than direct Python imports — also check config/DSN
+strings, plugin-name registries, and anything else that names a package by
+string rather than importing it, since those never show up in an
+`import`/`from` grep.
+
+**Why:** during the v1 remediation dependency-hygiene pass (2026-07-05),
+`psycopg[binary]` was deleted from base dependencies because `grep -rn
+"import psycopg"` returned zero hits in `src/`. It was still load-bearing:
+`serving/monolith/database.py::init_db()` calls `create_async_engine(settings
+.DATABASE_URL)`, and `DATABASE_URL` is a `postgresql+psycopg://` DSN —
+SQLAlchemy resolves and imports the `psycopg` driver *by the DSN scheme
+string* at connection time, not via a static import anywhere in this
+codebase's own source. The removal shipped, and the only reason it was
+caught before landing was `tests/serving/test_scheduled.py` happening to
+spin up the real monolith lifespan against an actual Postgres connection —
+a test relying on incidental integration coverage, not a targeted check.
+
+**Ruled out:** trusting `grep -rn "import X"` / an IDE's "unused import"
+pass as sufficient evidence a dependency is dead. It is necessary but not
+sufficient — it only proves the package isn't imported *by name in Python
+source*, not that nothing in the system names it another way (a connection
+string's scheme, a plugin registry's string key, an entry-point name, a
+subprocess command).
+
+**How to apply:** when auditing dependencies for removal, in addition to the
+import grep: (1) grep the same package/driver name across `.env`/config
+defaults and any `Settings`/`Config` class field values (DSN schemes are the
+sharpest case — `postgresql+psycopg`, `redis+ssl`, etc.); (2) actually run
+the test suite against a real backend (not just mocks) after removing a
+package, before considering the removal verified — a green `pytest` run
+with only in-memory/mocked backends will not catch this class of bug; (3) if
+a removal is in the same pass as several others, don't assume catching one
+mistake clears the rest — re-run the full check against each remaining
+removal candidate, don't stop at the first one that turns out fine.
+
+---
+
+## Extraction-service embedding/reranking: Qwen3-VL pair via llama-server sidecars, not SigLIP+MiniLM in-process
+
+**Decision:** the extraction service's embedding and reranking models are
+`Qwen3-VL-Embedding-2B` and `Qwen3-VL-Reranker-2B` (both Q4_K_M GGUF, Apache
+2.0), served as two separate `llama-server` HTTP sidecars
+(`deployment/docker/llama-server.Dockerfile`, `docker-compose.yml`'s
+`llama-embed`/`llama-rerank` services) — not loaded in-process via
+`sentence-transformers`/`CrossEncoder` the way SigLIP + `ms-marco-MiniLM`
+were before this. `EmbeddingReranker`
+(`runtimes/embedding_reranker/service/embedding.py`) is a thin HTTP client
+to these two services — split into its own `runtimes/embedding_reranker`
+service (see the "runtimes/ grouping" entry below) since it shares no code
+or state with document-intelligence's OCR/layout pipeline.
+
+**Why:** the deployment target has no GPU. Real candidates were narrowed and
+verified by actually running them, not by reading spec sheets:
+- `jina-clip-v2` / `jina-embeddings-v5-omni-nano` (dense+multimodal,
+  otherwise attractive) — ruled out: CC BY-NC-4.0, non-commercial only;
+  self-hosting inside a commercial SaaS product is exactly the use that
+  license excludes.
+- `UEmbed-2B` (Alibaba) — MLX-quantized community builds are Apple-Silicon
+  only; the base model needs a GPU or heavy full-precision CPU inference;
+  too new (days old at evaluation time) for a mature non-MLX quantization.
+- `Qwen3-VL-Embedding-2B` / `Qwen3-VL-Reranker-2B` — real Qwen/Alibaba team
+  pair (same paper), Apache 2.0, genuinely multimodal (text/image/video in
+  one space), published benchmarks (MMEB-v2 73.2/75.1). Verified by
+  building `llama-server` from source and running both for real: correct
+  2048-dim embeddings (cosine 0.82 similar-pair / 0.13 dissimilar-pair),
+  correct reranking (0.50 relevant / 0.22 irrelevant), ~2.0-2.1GB RSS each.
+
+The in-process Python path was tried first and doesn't work for these two
+models: `llama-cpp-python`'s generic embedding call does not expose correct
+pooling for either model (first attempt produced inconsistent embedding
+dimensions per call — silently wrong, not an error) — only passing
+`pooling_type` explicitly fixed the embedder, and the reranker only works at
+all via `llama-server`'s dedicated `--reranking` mode + `/rerank` endpoint,
+not via any generic embedding call with `pooling_type=RANK`, which produced
+garbage (denormalized/uninitialized-looking floats) even after specifying
+the pooling type correctly for the embedder case.
+
+**Ruled out:** trusting a model's file size or download page as sufficient
+evidence it works — the first GGUF conversion tried (`TitleOS/...` for the
+embedder) loaded without error and *looked* fine until dimensions were
+actually compared across calls. A clean load + no exception is not proof of
+correct output; only checking the actual output shape and running a
+real cosine-similarity/relevance sanity check caught it.
+
+**How to apply:** don't raise `llama-embed`/`llama-rerank`'s `--parallel`
+above the conservative launch defaults (2 and 1 respectively) without
+benchmarking real RSS and latency first — this session's own default,
+unset `--ctx-size` run pushed the reranker to ~9.5GB before being caught.
+See the RAG pipeline redesign plan for the full pipeline this pair feeds
+into (hybrid retrieval, reranking, page-adjacency context).
+
+---
+
+## `runtimes/` top-level grouping; `doc_handler` renamed `document_intelligence`; `embedding_reranker` split out
+
+**Decision:** `src/substrate/runtimes/` is a new orthogonal top-level
+package (same tier as `serving/`/`integrations/`/`infrastructure/`, outside
+the L0-L3 import-linter layer stack) for independently-deployable,
+heavy-dependency, HTTP-only-consumed first-party services. The old
+`doc_handler` package moved there and was renamed `document_intelligence`
+(a deliberately more professional name — `doc_handler` was informal,
+never a considered choice). Its embedding/reranking proxy
+(`service/embedding.py`'s `EmbeddingReranker`) was split out into a
+sibling `runtimes/embedding_reranker/` package with its own client, config,
+FastAPI service, Dockerfile, compose service, and k8s manifest.
+
+**Placement rule for `runtimes/`:** a package belongs there when **both**
+(a) it has a heavy/optional dependency footprint the main API process must
+never import, and (b) callers only ever reach it via a thin,
+always-importable HTTP client — never direct Python import of its service
+internals. Contrast with `capabilities/tools/code_interpreter/.../
+agent-sandbox/` (a k8s pod template tied 1:1 to one tool, not a
+general-purpose HTTP service other parts of the framework call) and
+`llama-embed`/`llama-rerank` (no `src/substrate` package at all — pure
+`llama-server` binaries, thin client lives inside whichever `runtimes/`
+package consumes them).
+
+**Why the split:** `document_intelligence` (PaddleOCR/PPStructureV3 layout
++ OCR) and `embedding_reranker` (a thin httpx proxy to the llama-embed/
+llama-rerank sidecars) shared zero code or state — they were co-located
+inside one FastAPI app purely by convenience. Splitting lets one person own
+document extraction and another own embedding/reranking infra without
+touching each other's files, and gives `embedding_reranker` its own,
+much lighter deployment footprint (no local model, no `paddlepaddle`
+dependency) instead of inheriting `document_intelligence`'s heavy image.
+
+**Why now, not just documented for later:** no prior decision recorded why
+`doc_handler` was a bare top-level package (confirmed absent from this
+file and `roadmap.md` via full-file grep) — this was genuinely undecided
+precedent, not something worth preserving out of caution.
+
+**Full rename map:** Python package
+`doc_handler` → `runtimes/document_intelligence`; pyproject extras
+`doc-handler`/`doc-handler-gpu` → `document-intelligence`/
+`document-intelligence-gpu`; env prefix `DOC_HANDLER_` →
+`DOCUMENT_INTELLIGENCE_` (embedding_reranker gets its own new
+`EMBEDDING_RERANKER_` prefix); Dockerfiles, compose services/profiles, k8s
+manifest, CI workflow, and Makefile targets renamed to match
+(`document-intelligence`/`document-intelligence-gpu`); new
+`embedding-reranker` Dockerfile/compose service (port 8023)/k8s manifest/
+Makefile target added.
+
+**Also added in the same pass:** a `DocumentExtractor` kernel Protocol
+(`kernel/document/protocols.py`, mirroring `VectorStore`/`GraphStore`/
+`ThreadStore`'s shape) with `ExtractionPipeline`
+(`PPStructureV3`-backed, `runtimes/document_intelligence`) as one real
+implementation and a new `capabilities/knowledge/loaders/
+xycut_extractor.py` (pdfplumber word-level bboxes + a fixed
+`recursive_xy_cut` — upstream paddlex's version crashes on an empty
+x-interval chunk at word-level granularity; the fix is a one-line guard) as
+a second, lightweight, no-OCR-needed implementation for digital PDFs. Also
+wired `ExtractionClient` into `PDFLoader` itself (previously only
+`LocalRagBackend` called it directly, not `PDFLoader` when constructed
+bare).
+
+**Superseded in a later pass:** the Protocol never got an `agents/` (L1)
+default under the layer-charter rule ("every kernel Protocol gets exactly
+one zero-infra default"), and `xycut_extractor.py` turned out to secretly
+require `paddlex` (for two geometry helper functions) despite its own
+docstring claiming otherwise — so it was never actually the lightweight
+option it was meant to be, and nothing in the repo ended up calling it.
+Replaced with `agents/document/local_extractor.py::LocalDocumentExtractor`
+(pdfplumber/pypdf text layer + a bare-minimum Tesseract OCR fallback for
+scanned pages, the `ocr` extra) as the real L1 default;
+`runtimes/document_intelligence/extract.py::ServiceBackedDocumentExtractor`
+is now the L2 adapter over the PaddleOCR service, both implementing the
+same kernel `DocumentExtractor` Protocol so either is a drop-in for
+`PDFLoader(extractor=...)`. `xycut_extractor.py` was deleted outright (dead
+code, no callers). The service-internal duplicate `ExtractionResult`
+dataclass (`runtimes/document_intelligence/service/types.py`) was also
+deleted — every engine and `extract_document()` now speak kernel's
+`ExtractionResult`/`ExtractedPage`/`ExtractedImage` directly, no converter
+hop.
+
+---
+
+## Harness pass (2026-09-24): capabilities, RunScope, reasoning, and what a tool result may lose
+
+**Decisions** (each is a fix for something verified broken, not a preference):
+
+- **`ChatModel.capabilities: ModelCapabilities` is required** (kernel). A client never sends content
+  outside `capabilities.input_modalities`; it calls `agents.llm.modalities.fit_to_capabilities`,
+  which swaps unsupported media for a text note. `ModelProfile` derives `supports_vision`/audio from
+  `modalities` (one source of truth) and exposes `.capabilities`. Unlisted models resolve to
+  text-only, unpriced.
+- **Tool media reaches the model natively**, per vendor (OpenAI Responses `function_call_output.output`
+  list; Anthropic `tool_result` content; Gemini 3 `function_response.parts`, older Gemini as trailing
+  parts of the same turn; Chat Completions has no other way, so a follow-up user message after the
+  whole tool-message run). Nothing is uploaded as a side effect of encoding — the OpenAI client used to
+  push every tool image to the Files API and never delete it.
+- **Usage/cost is real.** All four clients now report usage on the *streaming* path (the only path
+  `ctx.llm` uses — it was zero, so no budget ever tripped). `Usage.input_tokens` includes cached
+  tokens for every vendor (Anthropic's excludes them natively; normalized). `LLMResponse.cost_usd`
+  is priced from `capabilities` and fed to `ExecutionTracker`.
+- **`RunScope` replaces six ContextVars** (see the run-scope entry in project memory / layers.md).
+  Sub-agents inherit tenant, user, conversation and branch.
+- **`GenerationOptions.reasoning: ReasoningEffort`** is the one typed control; nothing in the repo could
+  turn reasoning on before. Gemini ignores it on tool-calling turns (thought signatures aren't
+  persisted) and says so in the log.
+- **Direct tool calls get `DIRECT_CALL_POLICY`**, not the sandbox-chain defaults (50 calls, 60 s) that
+  capped every run at 50 tool calls and killed the code interpreter at 60 s of its advertised 300.
+  `ReActAgent(tool_policy=...)` overrides it.
+- **Hitting `max_iterations` wraps up** (one last tool-free call, persisted, `run.truncated` logged)
+  and a budget stop persists the partial turn — both used to discard the whole turn.
+- **`concurrency_safe = True`** on a tool opts it into concurrent execution within a turn
+  (`ctx.tool_batch`, journal paths forked per call so replay is exact). Default is sequential.
+- **Every `Local*` store builds paths through `safe_name`** (percent-encoding, injective, ordinary ids
+  unchanged). Ids come from request bodies; `delete_session("../..")` used to `rmtree` outside the store.
+- **One token estimator** (`agents/context/tokens.py`) counting tool args, tool results and media;
+  five drifting copies removed. Compaction never drops a tool result's images/data, and window slicing
+  never starts on an orphaned tool result.
+
+**Found and NOT fixed (listed for a decision):** a run whose only input message is dead-lettered after
+its retries replays with an empty inbox and ends `run.completed` having done nothing (worker.py);
+history persistence has no idempotency key, so a crash between persist and `run.completed` can
+duplicate a turn on replay (not reproduced — reasoned from the code); `TaskStore` (L1 default) is
+in-memory; `CompactionCoordinator`'s PRE_LLM/POST_TOOL phases are not used by the agent loop;
+`RunMeta.tenant_id` (lease) and `scope.tenant_id` (message metadata) are two sources of tenant identity.
+
+## The engine's state is one store, not one class per backend (2026-10-02)
+
+Chroma's persist directory and a Lance database are the model: you point at a location, the library owns what is
+inside, and the public API never names the storage technology. `substrate.connect(folder)` returns a `Store` — a
+relational database (`substrate.db`: WAL, `synchronous=FULL`, versioned `migrate` scripts per component), `files/`,
+and `index/` (derived, rebuildable). The runtime journal is the first thing on it (`Runtime(store)`,
+`Runtime.open(folder)`); threads, memory, tasks, graph, vectors and files follow, each written once over the same
+`Database`, replacing the per-technology `LocalFilesystem*` / `Durable*` / `Pg*` duplicates. Done so far: the runtime
+journal, threads, long-term memory (full-text search, erasure that reaches the index and the database's own files) and
+session state, task boards, the knowledge graph, vectors, files (names in the database, contents in `files/`, written to disk before the row commits), workspace snapshots and the document catalog. The last two live in `workspace/` and `documents/` as `Workspaces(store)` / `Documents(store)`: `stores` sits below the concepts whose types they use, so `Store` cannot expose them as properties, and `Store.ensure` creates their tables on first use. Because they share a database one transaction can span them (not exposed yet), and tenancy becomes a view of the store (`store.tenant(t)`) instead of `Scoped*` wrappers around each port.
+
+
+---
+
+## `runtimes/` removed: heavy services are projects of their own, reached by URL (2026-10-02)
+
+**Decision:** `src/substrate/runtimes/` no longer exists. What it held is split by what it *is*:
+
+* the **clients** (`ExtractionClient`, `EmbeddingRerankerClient`, the llama-server sidecar client, `extract_document`) are
+  library code and live in `integrations/services/` — a base URL and a token in, a typed result out, nothing heavy imported;
+* the **servers** are projects of their own: `apps/document-intelligence`, `apps/embedding-reranker`, and
+  `packages/inference-pool` (process supervision and hardware detection, shared by both), each with its own `pyproject.toml`,
+  environment, tests and Dockerfile. `make test-apps` runs them.
+
+**Why:** the package had become a place where three unrelated deployables lived inside the library — importing the library's
+configuration and logging, reached from the library by Python import of their internals (`integrations/knowledge` imported
+`runtimes.embedding_reranker.service.embedding` and the raw-text engine), and with their extras (PaddleOCR, NVML) in the
+library's own `pyproject.toml`. The placement rule it was created with ("heavy footprint, reached only through a thin client")
+was right and was not followed. Heavy things run on a server and the library connects by URL; the rule is now the structure.
+
+**What changed in behaviour:** without a document service, a PDF is read by the light `LocalDocumentExtractor` (pdfplumber/pypdf,
+Tesseract if the `ocr` extra is there) and reports `engine="local"`; Office formats need the service and come back empty rather
+than falling back to a local markitdown/LibreOffice conversion, which now exists only inside `apps/document-intelligence`'s
+`raw_text` mode. The document security scan (`doc-firewall`) is the service's, applied to what it receives, not the library's.
+The services' modules no longer configure logging on import; each service's `app.py` does, once.
+
+
+---
+
+## `serving/` is an app, not part of the library (2026-10-02)
+
+**Decision:** `src/substrate/serving/` (the monolith, the twelve services, the composition root), `substrate.config`
+(`SubstrateConfig`), the GDPR eraser, and the per-user session index code that took the platform's settings object now live in
+`apps/substrate-cloud` (package `substrate_cloud`), a consumer of the library with its own `pyproject.toml`, lock file,
+environment, tests and import contract. The library keeps what a downstream project needs: the engine, `substrate.server`
+(`create_app(agent)`, AG-UI), the wire protocol, `substrate chat` and `substrate serve`. The platform's CLI is `substrate-cloud`
+(`up`, `down`, `start`, `stop`, `status`).
+
+**Why:** the library imported the application — `integrations/gdpr` imported the platform's ORM models,
+`SessionDocumentSearchTool` and `session_ingest` called `serving.factory` with the platform's settings object, and the CLI
+started the monolith — so "pip install agent-substrate" carried a SaaS inside it, and the one place that picks backends *by
+name* (settings) was part of the library whose rule is that you pass instances. Choosing backends from configuration is an
+application's job; that is now literally the app's `config.py` and `factory.py`.
+
+**Consequences:** the library's `server` extra is gone (its dependencies are the app's). `Tenant.erase` is the library's erase;
+the GDPR eraser, which also sweeps the platform's own tables and Redis, is the app's. The library's console reads provider
+keys from the environment (`provider_keys_from_env`). Root tests no longer include the platform's (261 moved with it).
+
+
+---
+
+## A model describes and files documents, after the upload, as an additive layer (2026-10-03)
+
+**Context.** The bundle's index said only counts ("3 pages · 1 sections"; "Page 1 — ~43 tokens"). Fine for ten files; useless for choosing among
+thousands. Prior art points the same way: a tree whose nodes carry model-written summaries and page references (PageIndex, 98.7% on FinanceBench
+without vectors), short model-written context in front of each chunk (Anthropic's contextual retrieval, −49% failed retrievals, −67% with
+reranking), hierarchies of index files that an agent walks (RAPTOR, "LLMs already understand filesystems").
+
+**Decision.** `Library.enrich` has a model write a description per section, a card for the document, and (knowledge bases) a topic path.
+It is **additive** (section text byte-identical, documents never moved, topics are virtual folders), **labelled** (`generated`, never
+`verified`), **checked** (cleaned, every figure verified against the text), **fail-soft** (a failing model leaves the counted index), and
+**asynchronous** (`add` never calls a model; a background queue does, within a per-tenant daily token budget). Unlike memory, the model never
+decides whether to write, never edits or supersedes a document, and has no tool to do either.
+
+**Why not in `add`.** An upload would wait for, and fail with, a model. `add` stays a pure function of the bytes: same file, same bundle.
+
+**Why a side table, not columns.** The catalog stays derived from the bundle's text; descriptions are their own tables (and live in the OKF
+files, so `reindex` restores them), and SQLite cannot add a column idempotently, which the migration framework requires.
+
+**Found by running it.** Two concurrent runs of one document collided on Postgres (a startup sweep queued it once per library over one store):
+fixed with upserts, a per-document lock and a queue keyed by document. Padding in the safety classifier (a separate finding the same day) cost
+1.2 s per message: see `PromptGuardClassifier`.
+
+**Follow-up (2026-10-04): the tree is redrawn as a whole.** Filing one document at a time drifts, and taxonomy research says restructuring all at
+once is more coherent. `Library.reorganise` has an `Organiser` (`LLMOrganiser`: every card in one call) redraw the topics when
+`needs_reorganising` says a topic has outgrown browsing (>12 subtopics or >24 documents). Same rules as `enrich`: documents never move,
+the old topics go to `_topics/log.md`, an invalid answer changes nothing, and the platform queue runs it inside the tenant's token budget.
+`topic_path` now flattens links and tags *before* splitting on `/`, so a model-written `[x](http://y)` cannot leave a URL's words in a topic.
+
+## The product surface: conversations you can organise, share and leave running (2026-10-04)
+
+**Context.** The approved product plan (Releases 0-3) found a working core wrapped in dead ends. This records the backend decisions behind the
+Release 0/1 work; the UI side is in `substrate-ui`.
+
+* **Conversation content is read from the run journal, not a table.** Message counts, search, usage, export and public share links all read
+  `rt_runs`/`rt_events` in the engine's store (`stream/search.py`, `stream/usage.py`, `stream/export.py`) for thread ids the caller already
+  owns. The old `message_count` read two legacy empty tables and was always 0.
+* **Share links are a row, not a flag.** `thread_shares(token)` is read by token alone (32 random bytes) with no tenant context, so it has no
+  row policy; it stores the title at share time and returns only what was said (no tool output, reasoning or file contents). Deleting the
+  thread deletes its links.
+* **Background work needs `system_session`.** Row-level security hides every tenant's rows from a connection that has not set a tenant, so
+  the scheduled-task executor and the startup load found *nothing*: scheduled tasks had never run since RLS was enforced. Server-initiated
+  jobs now use `database.system_session` (bypass, one pinned connection, reset on exit). Found by running a real scheduled task, not by a test.
+* **Replicas claim a tick.** Every replica hears every APScheduler tick (in-memory store). `claim_firing` is one atomic `UPDATE ... WHERE
+  last_claimed_at < now - gap`; the winner runs. Missed-run catch-up and a durable job store are not built.
+* **A run that needs a person is parked, not awaited.** The executor used to wait on `tail()` for completion and so hung on an approval.
+  It now records `waiting`, notifies the user and returns; the run resumes when they answer in the conversation.
+* **Preferences follow the account.** `user_preferences` (instructions, timezone, model choices). The chat route builds the standing
+  instructions from it, so a browser no longer has to send them; the UI mirrors it in localStorage so the composer can read it synchronously.
+* **`/triggers/*` is namespaced by tenant** (`{tenant}::{name}`) because the scheduler, webhook registry and condition monitor are single shared
+  in-memory objects. Their state is still in memory (lost on restart); moving it to the database is open.
+* **Also fixed:** `ensure_app_role` compared asyncpg's `"char"` (bytes) to `'r'`, so a newly created table was `ALTER SEQUENCE`d and startup
+  failed; `topic_path` now flattens links and tags before reading `/` as a level.
+
+## Documents first: one `Reader`, a navigable `Library`, knowledge bases by URL (2026-10-02)
+
+**Decision:** reading a user's document is a base-install capability with one entry point, and what the model does with it is
+navigation, not retrieval.
+
+* **`Reader`** (`substrate.documents`). `Reader()` reads in the process's own machine — PDFium (`pypdfium2`, a base dependency) for the
+  text layer, headings (bookmarks, else font size), tables, figures; the standard library for DOCX/PPTX/XLSX/ODF/HTML/Markdown/CSV/JSON;
+  OCR through the `tesseract` program, or RapidOCR with the `ocr` extra, only for pages with no text. `Reader("http://…")` is the
+  document-intelligence server (layout, chart crops, PaddleOCR-VL); `Reader(engine=…)` is anything implementing `DocumentExtractor`.
+  The same `ExtractionResult` comes back from all three, and that type's JSON *is* the server's wire format. There is no "local
+  extractor" and "online extractor" — a location picks the engine, as `Store.at(folder)` does.
+* **Isolation by default.** The built-in engine runs in a pool of worker processes (`python -s -m …reading.worker`): length-prefixed
+  JSON/bytes frames (never pickle), `RLIMIT_AS`/`RLIMIT_FSIZE`/`RLIMIT_CORE`, a wall clock the parent enforces by killing the process
+  group. A parser crash, a hang or a memory bomb ends a worker, not the host, and PDFium (not thread-safe) gets real parallelism.
+  `isolate=False` is the same code in a thread behind a lock. Hostile files (zip/entity bombs, encryption) are `success=False` with a
+  reason; `read` never raises. A scanned page is recognised or listed in `needs_ocr` — never silently empty.
+* **`Library`** replaces PageIndex/GraphRAG/the session vector index/`ask`/`DocumentIngestPipeline` and the old `Documents` facet. A
+  conversation's few documents need no embeddings, so they are filed the way a person would — an **Open Knowledge Format v0.2**
+  bundle in a `FileStore` (an index, one file per section with Prev/Up/Next links, figures as PNGs) and a catalog derived from it
+  (`library_documents`/`sections`/`images`, a full-text index) — and the model works through them with one tool, `documents`:
+  `list`, `outline`, `read`, `find`, `view`. The bundle is the source of truth (`reindex` rebuilds the catalog); there is **no action
+  that adds a document or opens a path**, which removes a class of bug (`KnowledgeSearchTool` treated model text as a file path and
+  read server disk; two tools read any absolute path and were marked SAFE). The collection comes from `scope_of(ctx)`, never an
+  argument. Document text comes back in `<document>` tags — untrusted data. OKF is implemented in the core with a small stdlib
+  frontmatter codec (JSON-valued YAML on write, lenient on read), tested against PyYAML; there is no OKF package to depend on.
+* **Knowledge bases** are the same `Library` with `embedder=` and `reranker=` — an `EmbeddingModel`/`Reranker`, or a URL
+  (`RemoteEmbedder`/`RemoteReranker`: the OpenAI embeddings wire and the Jina/Cohere rerank wire, so `apps/embedding-reranker`
+  (Qwen3-VL, text and images in one space) and llama.cpp/vLLM/Ollama/TEI all work). Sections are chunked to the embedder's
+  `max_input_tokens` (`documents/chunking.py`), stored in `store.vectors`, searched by similarity fused with any-word full text,
+  reranked, and folded back into sections with page citations. A service that is down degrades `find` to words with a note and
+  stores chunks without a vector for `reindex(missing_only=True)` — it never fails an add. With no embedder, search is words.
+* **Contracts.** `EmbeddingModel` is `model`, `dimensions`, `max_input_tokens`, `modalities` and one method,
+  `embed(inputs, *, query=False)` (`embed_single`/`embed_blocks` are gone); `Reranker` is a new port with a conformance suite; errors
+  are typed (`ServiceUnavailableError`, `VectorSpaceError`, `AuthError`, `RateLimitedError`, `ContextLengthError`) — nothing returns
+  `None` on failure. The vector store (migration 2) allows a document with no embedding and records which embedder a collection came
+  from (`vector_spaces`); mixing raises `VectorSpaceError`. `SearchableVectorStore` is the lexical/hybrid port, and tenant-scoped
+  stores forward it (they used to drop it silently).
+
+**Why:** a user's document is the most important input, and the engine could read only PDFs (DOCX/PPTX/XLSX/HTML silently came back
+empty without a Paddle server); extraction was written four times; retrieval could not run without an embedder and embedded one
+vector per page with no chunking; and several tools could read the server's disk. A model reading a document well does what a
+person does — look at the contents, open the chapter — which needs structure, not vectors; vectors earn their cost on a company's
+knowledge base, where nobody can read it all.
+
+**Consequences / what changed in behaviour:** `integrations/knowledge/`, `integrations/services/`, `integrations/document/`,
+`KnowledgeSearchTool`, `DocumentAnalyzerTool`, `InvoiceExtractorTool`, `vector_namespace`, and the `rag`, `services` and `chunking`
+extras are deleted; `pdfplumber`/`pytesseract` are no longer dependencies of anything but the sandbox's package list. The platform
+reads each upload once (`Reader`, by URL when `DOCUMENT_INTELLIGENCE_SERVICE_URL` is set), files it in
+`conversation_documents_prefix`, and writes the `.extracted.md` sidecar from the same read. **Security fix:** `/rag/*` took the
+collection from the request body, so any tenant could query, list and delete any other's; the collection is now always
+`knowledge_collection(claims.tenant_id, name)`. `EMBEDDING_MODEL` now defaults to empty (a knowledge base is then searched by words);
+the `RAG_BACKEND`, `RAG_*_EMBEDDING_DIM`, `RAG_CHUNK_*` and retrieval-tuning settings, and `SESSION_INDEX_LOCAL_PATH`, are gone. Existing
+per-user session indexes are abandoned: a file is filed again the next time a conversation references it. The chat's `knowledge` tool
+searches one knowledge base per tenant (`KNOWLEDGE_CHAT_BASE`); per-instance selection needs a knowledge-base id in `RunScope`.
+The exact scan on the folder store is about 1 s per 10,000 chunks at 2,048 dimensions (a warning is logged above that); large
+knowledge bases belong on `postgres_store` (HNSW).

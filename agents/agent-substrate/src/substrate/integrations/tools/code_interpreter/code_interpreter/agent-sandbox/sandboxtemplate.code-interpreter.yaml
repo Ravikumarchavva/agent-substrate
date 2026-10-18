@@ -1,0 +1,35 @@
+# This is the BASE template. CodeInterpreterService._ensure_user_template()
+# (sandbox_service.py) reads this spec at runtime and clones it once per
+# user, adding a volume/volumeMount for a shared workspace PVC (provision
+# your own RWX PersistentVolumeClaim — this repo doesn't ship example
+# cluster manifests) mounted with `subPath: users/{user_id}` — that subPath
+# is the isolation boundary between users. This base template itself
+# carries no volume and stays the fallback used when no user identity /
+# workspace PVC is configured.
+apiVersion: extensions.agents.x-k8s.io/v1alpha1
+kind: SandboxTemplate
+metadata:
+  name: python-sandbox-template
+  namespace: default
+spec:
+  podTemplate:
+    spec:
+      containers:
+      - name: code-interpreter-runtime
+        image: code-interpreter:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8888
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8888
+          initialDelaySeconds: 1
+          periodSeconds: 2
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8888
+          initialDelaySeconds: 3
+          periodSeconds: 10
+      restartPolicy: OnFailure

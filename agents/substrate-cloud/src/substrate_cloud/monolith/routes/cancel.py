@@ -1,0 +1,69 @@
+"""Cancel endpoint — aborts a running agent stream for a given thread.
+
+POST /chat/{thread_id}/cancel
+  Resolves the thread's active run_id durably (``SchedulerProtocol.find_run_for_thread``
+  — a DB query, not an in-process registry) and cancels it via
+  ``SupervisorProtocol.cancel()``. This works regardless of which replica is actually
+  running the stream: the cancel is observed either almost-instantly (if this
+  request happens to land on the same replica, via the best-effort
+  ``Runtime.cancel()`` fast path) or within one heartbeat interval (via the
+  durable ``cancel_requested`` column — see ``Scheduler.heartbeat``),
+  and the streaming replica notices via the EventLogProtocol's ``run.cancelled``
+  entry either way (see ``AgentStreamSession._check_disconnect``'s docstring).
+"""
+
+from __future__ import annotations
+
+import logging
+
+import uuid
+
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from substrate_cloud.monolith.security.rls_deps import get_tenant_scoped_db
+from substrate_cloud.monolith.dependencies import ServerDependencies, get_ctx
+from substrate_cloud.monolith.security.deps import AuthClaims, get_current_user
+from substrate_cloud.monolith.services import get_owned_thread
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(
+    tags=["chat"],
+)
+
+
+@router.post("/chat/{thread_id}/cancel")
+async def cancel_chat(
+    thread_id: uuid.UUID,
+    ctx: ServerDependencies = Depends(get_ctx),
+    db: AsyncSession = Depends(get_tenant_scoped_db),
+    user: AuthClaims = Depends(get_current_user),
+):
+    """Cancel the active run for *thread_id*, wherever it's actually running.
+
+    Returns ``{"status": "cancelled"}`` if an active run was found,
+    or ``{"status": "not_found"}`` if nothing was active for that thread.
+    """
+    if not await get_owned_thread(db, thread_id, user):
+        raise HTTPException(status_code=404, detail="Thread not found")
+
+    runtime = ctx.runtime
+    if runtime is None:
+        raise HTTPException(status_code=503, detail="Runtime not configured")
+
+    found = await runtime.active_run_for_thread(str(thread_id))
+    if found is None:
+        logger.debug(
+            "Cancel requested for thread %s but no active run found", thread_id
+        )
+        return {"status": "not_found", "thread_id": str(thread_id)}
+
+    run_id = found.run_id
+    # Records the cancel durably for the run and everything it spawned, whichever replica
+    # owns it (the owner sees it at its next heartbeat), and interrupts the run right
+    # now if this replica happens to be the one executing it.
+    await runtime.cancel(run_id, reason="user_requested")
+
+    logger.info("Cancellation requested for thread %s (run %s)", thread_id, run_id)
+    return {"status": "cancelled", "thread_id": str(thread_id)}

@@ -1,0 +1,279 @@
+"""OrchestratorAgent — spawns sub-agents and awaits their results.
+
+The LLM decides which sub-agent to delegate to by calling a tool whose name
+matches the sub-agent's routing key.  The orchestrator spawns the sub-agent,
+waits for the reply (or timeout / failure), and loops until the task is
+complete or the budget is exhausted.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any, ClassVar
+
+from substrate.types.run import RunScope
+from substrate.types.supervision import Priority, SpawnBudget
+from substrate.types.content import (
+    ChatMessage,
+    Role,
+    TextBlock,
+    ToolResultBlock,
+    ToolUseBlock,
+)
+from substrate.types.identity import Actor
+from substrate.models.protocols import GenerationOptions
+from substrate.runtime.message import ChatPayload, DataPayload, Message
+from substrate.types.run_log import RunLogKind
+from substrate.tools.protocols import AnyTool
+from substrate.tools.protocols import ToolExecutionResult, ToolRisk
+from substrate.agents.base import BaseAgent
+from substrate.agents.routed import handle
+from substrate.context.context import ContextConfig
+from substrate.agents.spawn import SpawnTracker
+
+if TYPE_CHECKING:
+    from substrate.models.protocols import ChatModel
+    from substrate.stores.threads import ThreadStore
+    from substrate.runtime.context import Agent, RunContext
+
+
+@dataclass
+class _DelegateTool:
+    """Minimal Tool-protocol stub for sub-agent delegation.
+
+    Synthesized so that ``GenerationOptions(tools=...)`` and ``spec_of()``
+    encode the routing correctly.  ``execute()`` is never called — the
+    orchestrator handles dispatch via ``ctx.spawn`` + ``ctx.ask``.
+    """
+
+    risk: ClassVar[ToolRisk] = ToolRisk.SAFE
+    idempotent: ClassVar[bool] = False
+
+    name: str
+    description: str
+    input_schema: dict[str, object] = field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "task": {"type": "string", "description": "The task to delegate"},
+            },
+            "required": ["task"],
+        }
+    )
+
+    async def execute(self, *, ctx: Any = None, **kwargs: Any) -> ToolExecutionResult:
+        raise RuntimeError(
+            f"_DelegateTool({self.name}).execute() should never be called"
+        )
+
+
+@dataclass
+class SubAgentConfig:
+    """Declares one sub-agent available to this orchestrator."""
+
+    agent: Agent
+    description: str = ""
+    ask_timeout: float = 120.0
+    priority: Priority = Priority.NORMAL
+
+
+class OrchestratorAgent(BaseAgent):
+    """General-purpose orchestrator that spawns sub-agents via the runtime."""
+
+    def __init__(
+        self,
+        name: str,
+        *,
+        model: ChatModel | None = None,
+        sub_agents: list[SubAgentConfig] | None = None,
+        context: ContextConfig | None = None,
+        system_instructions: str = (
+            "You are an orchestrator agent.  "
+            "Break down tasks and delegate to sub-agents via their tools.  "
+            "Return the final consolidated answer when done."
+        ),
+        max_iterations: int = 10,
+        spawn_budget: SpawnBudget | None = None,
+        session_id: str | None = None,
+    ) -> None:
+        self.id = Actor(type=name, key=session_id or "")
+        self.name = name
+        self.model = model
+        self.tools = None  # built dynamically from sub-agents
+        self._sub_agents = sub_agents or []
+        self._context = context or ContextConfig.default()
+        self._system_instructions = system_instructions
+        self._max_iterations = max_iterations
+        self._spawn_budget = spawn_budget or SpawnBudget()
+
+    @property
+    def history(self) -> ThreadStore:
+        return self._context.history
+
+    @handle(ChatPayload, DataPayload)
+    async def _handle_message(self, ctx: RunContext, msg: Message) -> None:
+        session_id = msg.correlation_id or ctx.run_id
+        # See ReActAgent._handle_message.
+        ctx.set_scope(
+            RunScope.from_metadata(
+                msg.metadata,
+                thread_id=session_id,
+                agent_id=str(self.id),
+                agent_label=self.name,
+            )
+        )
+        spawn_tracker = SpawnTracker(self._spawn_budget)
+
+        branch_id = ctx.scope.branch_id
+        history_messages = await self._load_history(
+            self._context, session_id, branch_id=branch_id
+        )
+        user_turn = self._message_to_chat(msg)
+        await self._log_user_message(ctx, msg, user_turn)
+        messages: list[ChatMessage] = history_messages + [user_turn]
+        n_loaded = len(history_messages)
+
+        tools = self._build_tools()
+        options = GenerationOptions(
+            system_instructions=self._system_instructions,
+            tools=tools or None,
+        )
+
+        for _ in range(self._max_iterations):
+            ctx.check()
+            resp = await ctx.llm(messages, options=options)
+
+            messages.append(ChatMessage(role=Role.ASSISTANT, content=resp.content))
+
+            dispatches = [b for b in resp.content if isinstance(b, ToolUseBlock)]
+            if not dispatches:
+                break
+
+            results: list[ToolResultBlock] = []
+            for dispatch in dispatches:
+                ctx.check()
+                cfg = self._find_sub_agent_config(dispatch.tool_name)
+                if cfg is None:
+                    results.append(
+                        ToolResultBlock(
+                            call_id=dispatch.call_id,
+                            content=[
+                                TextBlock(
+                                    text=f"Unknown sub-agent: {dispatch.tool_name}"
+                                )
+                            ],
+                            is_error=True,
+                        )
+                    )
+                    continue
+
+                spawn_tracker.acquire(cfg.agent.id, priority=cfg.priority)
+                task_text = dispatch.arguments.get("task", str(dispatch.arguments))
+                # Surface subagent lifecycle on the orchestrator's own run log so
+                # console / UIs can render a live subagent progress tree. The
+                # subagent itself runs under a separate run_id we don't tail here.
+                await ctx.log(
+                    RunLogKind.SUBAGENT_START,
+                    {
+                        "agent": cfg.agent.id.type,
+                        "parent": self.id.type,
+                        "task": str(task_text)[:200],
+                    },
+                )
+                boot_msg = Message(
+                    target=cfg.agent.id,
+                    sender=self.id,
+                    payload=ChatPayload(
+                        message=ChatMessage(
+                            role=Role.USER,
+                            content=[TextBlock(text=str(task_text))],
+                        )
+                    ),
+                    correlation_id=session_id,
+                    # The child is its own run: it inherits tenant, user and
+                    # branch (so its files resolve to the caller's workspace and
+                    # branch) and nests its board under this agent's.
+                    metadata=ctx.scope.child_metadata(),
+                )
+                try:
+                    handle = await ctx.spawn(cfg.agent.id, boot=boot_msg)
+                    outcome = await ctx.ask(handle, boot_msg, timeout=cfg.ask_timeout)
+                finally:
+                    spawn_tracker.release(cfg.agent.id)
+
+                await ctx.log(
+                    RunLogKind.SUBAGENT_DONE,
+                    {
+                        "agent": cfg.agent.id.type,
+                        "parent": self.id.type,
+                        "ok": outcome.kind == "replied",
+                    },
+                )
+
+                if outcome.kind == "replied" and outcome.result:
+                    out = outcome.result.output
+                    text = (
+                        out.data.get("text", str(out.data))
+                        if isinstance(out, DataPayload)
+                        else str(out)
+                    )
+                    results.append(
+                        ToolResultBlock(
+                            call_id=dispatch.call_id,
+                            content=[TextBlock(text=text)],
+                            is_error=False,
+                        )
+                    )
+                else:
+                    results.append(
+                        ToolResultBlock(
+                            call_id=dispatch.call_id,
+                            content=[
+                                TextBlock(
+                                    text=f"Sub-agent {dispatch.tool_name}: {outcome.kind}"
+                                )
+                            ],
+                            is_error=True,
+                        )
+                    )
+
+            messages.append(ChatMessage(role=Role.TOOL, content=results))  # type: ignore[arg-type]
+        else:
+            from substrate.types.errors import BudgetExhaustedError
+
+            raise BudgetExhaustedError(
+                f"Agent reached max iterations limit ({self._max_iterations})"
+            )
+
+        new_turns = messages[n_loaded:]
+        await self._persist_turns(
+            self._context,
+            session_id,
+            ctx.run_id,
+            new_turns,
+            branch_id=branch_id,
+            workspace_snapshot_id=ctx.latest_workspace_snapshot_id,
+        )
+
+        ans = self._final_text(messages)
+        await self._deliver(ctx, msg, {"text": ans}, sender=self.id)
+
+    def _build_tools(self) -> list[AnyTool]:
+        tools: list[AnyTool] = [
+            _DelegateTool(
+                name=f"handoff_{cfg.agent.id.type}",
+                description=cfg.description
+                or f"Delegate to the {cfg.agent.id.type} sub-agent",
+            )
+            for cfg in self._sub_agents
+        ]
+        return tools
+
+    def _find_sub_agent_config(self, name: str) -> SubAgentConfig | None:
+        for cfg in self._sub_agents:
+            if f"handoff_{cfg.agent.id.type}" == name or cfg.agent.id.type == name:
+                return cfg
+        return None
+
+
+__all__ = ["SubAgentConfig", "OrchestratorAgent"]

@@ -1,0 +1,40 @@
+"""Shared API contracts for artifact/file service."""
+
+from __future__ import annotations
+
+import uuid
+from typing import Optional
+
+from pydantic import BaseModel
+
+
+class FileUploadResponse(BaseModel):
+    id: uuid.UUID
+    thread_id: Optional[uuid.UUID] = None
+    name: str
+    mime: Optional[str] = None
+    size: Optional[int] = None
+    document_type: Optional[str] = None
+    document_class: Optional[str] = None
+    # Workspace-relative path — see routes/files.py::upload_file and
+    # routes/chat_context.py::_session_relative_path, which derive it the
+    # same way. Lets the UI open this file in the read-only artifact
+    # viewer right after upload, not just after a reload.
+    session_path: Optional[str] = None
+    model_config = {"from_attributes": True}
+
+
+class FileOut(BaseModel):
+    id: uuid.UUID
+    thread_id: Optional[uuid.UUID] = None
+    name: str
+    mime: Optional[str] = None
+    size: Optional[int] = None
+    document_type: Optional[str] = None
+    document_class: Optional[str] = None
+    model_config = {"from_attributes": True}
+
+
+class FileUrlResponse(BaseModel):
+    url: str
+    expires_in: int = 3600

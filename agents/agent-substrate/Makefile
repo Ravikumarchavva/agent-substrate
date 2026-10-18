@@ -1,0 +1,175 @@
+PYTHON_VERSION ?= $(shell cat .python-version)
+TEST_DATABASE_URL ?= postgresql+asyncpg://postgres:postgres@localhost:5432/agentdb
+TEST_REDIS_URL ?= redis://localhost:6379/0
+TEST_OPENAI_API_KEY ?= sk-test-placeholder
+TEST_JWT_SECRET ?= test-jwt-secret-not-for-production-use-0000000000
+
+ifeq ($(OS),Windows_NT)
+RUN_TEST_CI = cmd /C "set VIRTUAL_ENV=&&set DATABASE_URL=$(TEST_DATABASE_URL)&&set REDIS_URL=$(TEST_REDIS_URL)&&set OPENAI_API_KEY=$(TEST_OPENAI_API_KEY)&&set JWT_SECRET=$(TEST_JWT_SECRET)&&uv run python -m pytest -m \"\" --tb=short -q --junitxml=test-results.xml"
+else
+RUN_TEST_CI = DATABASE_URL=$(TEST_DATABASE_URL) REDIS_URL=$(TEST_REDIS_URL) OPENAI_API_KEY=$(TEST_OPENAI_API_KEY) JWT_SECRET=$(TEST_JWT_SECRET) uv run pytest -m '' --tb=short -q --junitxml=test-results.xml
+endif
+
+.PHONY: sync lint lint-apply lint-imports protocol-schema format-check typecheck typecheck-soft test test-ci build security security-soft ci help start start-reload infra-up infra-up-all infra-up-document-intelligence infra-up-embedding-reranker infra-up-onlyoffice infra-down infra-down-all docker-up docker-down observability-up observability-down
+
+help:
+	@echo "Available targets:"
+	@echo "  make sync         - install project dependencies"
+	@echo "  make start        - start the backend in foreground via substrate-cloud start --foreground"
+	@echo "  make start-reload - start the backend with auto-reload (requires make infra-up)"
+	@echo "  make infra-up     - start host-dev support services (Postgres, Redis, SeaweedFS, Loki, Promtail, Grafana, Tempo, MCP server)"
+	@echo "  make infra-up-all - infra-up + ONLYOFFICE (everything for file editing; excludes the opt-in document-intelligence/embedding-reranker services)"
+	@echo "  make infra-up-document-intelligence - build and start the document-intelligence service (opt-in, CPU-only, ~1GB image)"
+	@echo "  make infra-up-embedding-reranker - build and start the embedding-reranker service (opt-in, thin proxy, needs llama-embed/llama-rerank)"
+	@echo "  make infra-up-onlyoffice - start the ONLYOFFICE Document Server for editable Office files (opt-in, ~2GB)"
+	@echo "  make infra-down   - stop the host-dev support services"
+	@echo "  make infra-down-all - stop the core services plus ONLYOFFICE"
+	@echo "  make docker-up    - build and start the Docker backend plus core infra and storage"
+	@echo "  make docker-down  - stop the full agent-framework Docker stack"
+	@echo "  make observability-up   - start Tempo and Grafana via Docker Compose"
+	@echo "  make observability-down - stop Tempo and Grafana"
+	@echo "  make lint         - run Ruff lint and format checks"
+	@echo "  make lint-imports - run import-linter (kernel independence + layer contracts)"
+	@echo "  make audit-dead-symbols - scan for module-level functions/classes with no real usage (manual, not in ci)"
+	@echo "  make typecheck    - run Pyright (hard fail)"
+	@echo "  make test         - run pytest"
+	@echo "  make build        - build the backend Docker image manually"
+	@echo "  make security     - run pip-audit (hard fail; see Makefile for the documented ignore-list)"
+	@echo "  make ci           - run the same preflight used by CI (lint, lint-imports, typecheck, test, security — all blocking)"
+
+start:
+	uv run --project apps/substrate-cloud substrate-cloud start --host 0.0.0.0 --foreground
+
+start-reload:
+	uv run --project apps/substrate-cloud substrate-cloud start --host 0.0.0.0 --reload
+
+infra-up:
+	docker compose --env-file .env -f ./deployment/docker/docker-compose.yml --profile runtime up -d --remove-orphans postgres redis seaweedfs loki promtail tempo grafana mcp-server
+
+infra-up-all: infra-up infra-up-onlyoffice
+
+infra-up-document-intelligence:
+	docker compose --env-file .env -f ./deployment/docker/docker-compose.yml --profile document-intelligence up -d --build document-intelligence
+
+infra-up-embedding-reranker:
+	docker compose --env-file .env -f ./deployment/docker/docker-compose.yml --profile embedding-reranker up -d --build embedding-reranker
+
+infra-up-onlyoffice:
+	docker compose --env-file .env -f ./deployment/docker/docker-compose.yml --profile onlyoffice up -d onlyoffice
+
+infra-down:
+	docker compose --env-file .env -f ./deployment/docker/docker-compose.yml --profile runtime stop postgres redis seaweedfs loki promtail tempo grafana mcp-server
+
+infra-down-all:
+	docker compose --env-file .env -f ./deployment/docker/docker-compose.yml --profile runtime --profile onlyoffice stop postgres redis seaweedfs loki promtail tempo grafana mcp-server onlyoffice
+
+docker-up:
+	docker compose --env-file .env -f ./deployment/docker/docker-compose.yml --profile runtime up -d --build --remove-orphans backend postgres redis seaweedfs loki promtail tempo grafana mcp-server
+
+docker-down:
+	docker compose --env-file .env -f ./deployment/docker/docker-compose.yml down --remove-orphans
+
+observability-up:
+	docker compose --env-file .env -f ./deployment/docker/docker-compose.yml up -d tempo grafana
+
+observability-down:
+	docker compose --env-file .env -f ./deployment/docker/docker-compose.yml stop tempo grafana
+
+sync:
+	uv python install $(PYTHON_VERSION)
+	uv sync --all-extras --no-extra sentence-transformers
+
+lint-apply:
+	uv run ruff check . --fix
+
+protocol-schema:
+	uv run python -m substrate.server.protocol.export
+
+lint:
+	uv run ruff check .
+	uv run ruff format --check .
+
+format-check:
+	uv run ruff format --check .
+
+lint-imports:
+	uv run lint-imports
+
+audit-dead-symbols:
+	uv run python scripts/find_dead_symbols.py
+
+typecheck:
+	uv run --with pyright pyright src/
+
+typecheck-soft:
+	@$(MAKE) typecheck || echo "Non-blocking: typecheck failures ignored by ci target"
+
+test:
+	uv run pytest --tb=short -q
+
+test-ci:
+	$(RUN_TEST_CI)
+
+# The acceptance project: a separate project that installs the library into a fresh environment (engine + its
+# `testing` extra only — no vendor SDK, no driver, no web framework) and runs an agent with a tool, a ThreadStore and a
+# ChatModel of its own. Passing means a downstream project needs nothing that is not in the package.
+test-child:
+	rm -rf examples/child-project/.venv-acceptance
+	uv venv -q examples/child-project/.venv-acceptance
+	uv pip install -q --python examples/child-project/.venv-acceptance/bin/python -e "examples/child-project[test]"
+	cd examples/child-project && .venv-acceptance/bin/python -m pytest -q
+
+# The services and the pool are projects of their own (apps/, packages/): each is installed into a fresh environment
+# with only its own dependencies and runs its own tests there. Nothing heavy — PaddleOCR is the `paddle` extra and its
+# tests skip without it.
+APPS = packages/inference-pool apps/embedding-reranker apps/document-intelligence apps/substrate-cloud
+test-apps:
+	@for p in $(APPS); do \
+		echo "== $$p"; rm -rf $$p/.venv-test; uv venv -q $$p/.venv-test && \
+		uv pip install -q --python $$p/.venv-test/bin/python -e "$$p[test]" && \
+		(cd $$p && .venv-test/bin/python -m pytest -q -p no:cacheprovider) || exit 1; \
+	done
+
+build:
+	docker build -f ./deployment/docker/backend.Dockerfile .
+
+# Ignored CVEs below are all confirmed blocked by a hard version pin in an
+# upstream dependency we can't override without dropping the feature that
+# needs it (verified via `uv lock` with a forcing constraint — each fails
+# with an explicit "X depends on Y<Z" resolution error). Re-check by removing
+# an entry and running `make security` after bumping the blocking package.
+# (paddleocr[all] was removed entirely — it was an unused dependency and the
+# sole reason the langchain/langchain-openai/langchain-text-splitters CVEs
+# were in the tree at all.)
+#   PYSEC-2026-282 (apscheduler, RCE via unmarshal_object) — no fix version
+#     exists upstream yet. Not reachable today: we only ever construct
+#     AsyncScheduler(data_store=MemoryDataStore()) (integrations/triggers/
+#     scheduler.py) — no persistent data store, so the vulnerable
+#     serialize/deserialize round-trip never runs. Re-audit if the data
+#     store is ever changed to a persistent backend.
+#   PYSEC-2026-597 (nltk, path traversal in url2pathname) — no fix version
+#     exists upstream yet. Pulled in transitively via crawl4ai only; we
+#     never import nltk directly or call its data-download helpers.
+#   PYSEC-2026-3740 (nltk) — same package, same reasoning as PYSEC-2026-597: no fix version exists upstream, transitive
+#     via crawl4ai only, never imported here. Re-audit when nltk > 3.10.3 exists.
+SECURITY_IGNORES = \
+	--ignore-vuln PYSEC-2026-282 \
+	--ignore-vuln PYSEC-2026-597 \
+	--ignore-vuln PYSEC-2026-3740
+
+security:
+	uv run --with pip-audit pip-audit --skip-editable $(SECURITY_IGNORES)
+
+security-soft:
+	@$(MAKE) security || echo "Non-blocking: security findings ignored by ci target"
+
+ci:
+	$(MAKE) sync
+	$(MAKE) lint-apply
+	$(MAKE) lint
+	$(MAKE) lint-imports
+	$(MAKE) typecheck
+	$(MAKE) test-ci
+	$(MAKE) test-child
+	$(MAKE) test-apps
+	$(MAKE) security

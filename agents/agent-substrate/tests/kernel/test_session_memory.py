@@ -1,0 +1,217 @@
+"""Tests for session-scoped history — cross-turn memory via the Runtime."""
+
+from __future__ import annotations
+
+from tests._stores import fs_history
+
+from substrate.models import ModelCapabilities
+from typing import AsyncIterator
+
+from substrate.context import project_messages
+from substrate.context import ContextConfig
+from substrate.context import SlidingWindowCompaction
+from substrate.context import CompactionPipeline
+from substrate.agents import ReActAgent
+from substrate.runtime import Runtime
+from substrate.types import ChatMessage, ContentBlock, TextBlock
+from substrate.types import Role
+from substrate.types import Actor
+from substrate.models import GenerationOptions, LLMResponse
+from substrate.types import Usage
+from substrate.runtime import ChatPayload, Message
+from substrate.types import CompletionEvent, TextDelta
+from substrate.testing.runtime import ephemeral_runtime
+
+
+# ---------------------------------------------------------------------------
+# Mock LLM
+# ---------------------------------------------------------------------------
+
+
+class MockChatModel:
+    def __init__(self, responses: list[list[ContentBlock]]) -> None:
+        self._queue = list(responses)
+        self.model = "mock-model"
+        self.capabilities = ModelCapabilities(model_id="mock-model")
+
+    async def generate(
+        self,
+        messages: list[ChatMessage],
+        *,
+        options: GenerationOptions = GenerationOptions(),
+    ) -> LLMResponse:
+        assert self._queue, "MockChatModel: no more scripted responses"
+        return LLMResponse(content=self._queue.pop(0), usage=Usage())
+
+    def generate_stream(
+        self,
+        messages: list[ChatMessage],
+        *,
+        options: GenerationOptions = GenerationOptions(),
+        ctx: object = None,
+    ) -> AsyncIterator[TextDelta | CompletionEvent]:
+        return self._do_stream(messages, options=options)
+
+    async def _do_stream(
+        self,
+        messages: list[ChatMessage],
+        *,
+        options: GenerationOptions,
+    ) -> AsyncIterator[TextDelta | CompletionEvent]:
+        resp = await self.generate(messages, options=options)
+        text = " ".join(
+            b.text for b in resp.content if isinstance(b, TextBlock) and b.text
+        )
+        if text:
+            yield TextDelta(text=text)
+        yield CompletionEvent(content=resp.content, usage=resp.usage)
+
+
+# ---------------------------------------------------------------------------
+# Helper
+# ---------------------------------------------------------------------------
+
+
+async def run_agent(
+    rt: Runtime,
+    agent: ReActAgent,
+    text: str,
+    *,
+    session_id: str | None = None,
+) -> dict:
+    """Submit one message and block until the run completes."""
+    await rt.register(agent)
+    sid = session_id or agent.id.type
+    msg = Message(
+        target=agent.id,
+        sender=Actor(type="proxy", key="proxy"),
+        payload=ChatPayload(
+            message=ChatMessage(role=Role.USER, content=[TextBlock(text=text)])
+        ),
+        correlation_id=sid,
+    )
+    run_id = await rt.submit(agent.id, msg)
+
+    status = "success"
+    error = None
+    async for entry in rt.tail(run_id):
+        if entry.kind == "run.completed":
+            break
+        elif entry.kind == "run.failed":
+            status = entry.payload.get("status", "error")
+            error = entry.payload.get("error")
+            break
+        elif entry.kind == "run.cancelled":
+            status = "cancelled"
+            break
+
+    output = ""
+    history_msgs = await project_messages(agent.history, sid)
+    for m in reversed(history_msgs):
+        if m.role == Role.ASSISTANT:
+            output = " ".join(
+                b.text for b in m.content if isinstance(b, TextBlock) and b.text
+            )
+            break
+    if error and not output:
+        output = error
+
+    return {"status": status, "output": output, "run_id": run_id}
+
+
+# ---------------------------------------------------------------------------
+# Tests
+# ---------------------------------------------------------------------------
+
+
+async def test_standalone_session_accumulates_across_runs():
+    """History accumulates across multiple submissions with the same session_id."""
+    shared_history = fs_history()
+    async with ephemeral_runtime() as rt:
+        agent = ReActAgent(
+            "bot",
+            model=MockChatModel(
+                [
+                    [TextBlock(text="I am fine.")],
+                    [TextBlock(text="You said hi earlier.")],
+                ]
+            ),
+            context=ContextConfig(
+                shared_history,
+                pipeline=CompactionPipeline([SlidingWindowCompaction(max_messages=20)]),
+            ),
+            max_iterations=5,
+        )
+
+        r1 = await run_agent(rt, agent, "Hi!")
+        assert r1["status"] == "success"
+
+        r2 = await run_agent(rt, agent, "What did I say?")
+        assert r2["status"] == "success"
+        assert r2["output"] == "You said hi earlier."
+
+        # 2 user + 2 assistant = 4 messages in the session
+        msgs = await project_messages(shared_history, agent.id.type)
+        assert len(msgs) == 4
+
+
+async def test_session_isolation_across_different_sessions():
+    """Two sessions of the same agent don't bleed into each other."""
+    shared_history = fs_history()
+    async with ephemeral_runtime() as rt:
+        agent = ReActAgent(
+            "agent",
+            model=MockChatModel(
+                [
+                    [TextBlock(text="Session A response.")],
+                    [TextBlock(text="Session B response.")],
+                ]
+            ),
+            context=ContextConfig(
+                shared_history,
+                pipeline=CompactionPipeline([SlidingWindowCompaction(max_messages=20)]),
+            ),
+            max_iterations=5,
+        )
+
+        r_a = await run_agent(rt, agent, "Hello A.", session_id="session-A")
+        assert r_a["status"] == "success"
+
+        r_b = await run_agent(rt, agent, "Hello B.", session_id="session-B")
+        assert r_b["status"] == "success"
+
+        msgs_a = await project_messages(shared_history, "session-A")
+        msgs_b = await project_messages(shared_history, "session-B")
+        assert len(msgs_a) == 2
+        assert len(msgs_b) == 2
+
+
+async def test_cross_run_memory_same_session():
+    """Agent sees prior turns when submitted with the same correlation_id."""
+    shared_history = fs_history()
+    async with ephemeral_runtime() as rt:
+        agent = ReActAgent(
+            "mem-bot",
+            model=MockChatModel(
+                [
+                    [TextBlock(text="Stored.")],
+                    [TextBlock(text="The answer was 42.")],
+                ]
+            ),
+            context=ContextConfig(
+                shared_history,
+                pipeline=CompactionPipeline([SlidingWindowCompaction(max_messages=40)]),
+            ),
+            max_iterations=3,
+        )
+
+        sid = "cross-run-session"
+        r1 = await run_agent(rt, agent, "Remember 42.", session_id=sid)
+        assert r1["status"] == "success"
+
+        r2 = await run_agent(rt, agent, "What was the answer?", session_id=sid)
+        assert r2["status"] == "success"
+        assert "42" in r2["output"]
+
+        all_msgs = await project_messages(shared_history, sid)
+        assert len(all_msgs) == 4  # 2 user + 2 assistant

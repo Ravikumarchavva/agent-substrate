@@ -1,0 +1,61 @@
+name: Publish embedding-reranker service images
+
+# Real, robust distribution for the embedding-reranker service — a thin
+# httpx proxy to the llama-embed/llama-rerank sidecars, no local model, no
+# heavy dependencies of its own (see pyproject.toml: no dedicated extra
+# needed). Single variant only (unlike document-intelligence's CPU/GPU
+# split) — there's no local inference here to split on.
+#
+# Fires on the same GitHub Release event as publish.yml (PyPI), so a
+# release always ships both the library and the runnable service images
+# for that version; workflow_dispatch is available for a manual rebuild
+# (e.g. to pick up an upstream base-image security patch) without cutting
+# a new release.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  # Hardcoded lowercase — GHCR image paths must be lowercase even though
+  # the GitHub org/user (Ravikumarchavva) isn't; ${{ github.actor }} is
+  # only used for registry auth below, not the image path.
+  IMAGE_BASE: ghcr.io/ravikumarchavva/agent-substrate-embedding-reranker
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Derive tags
+        id: tags
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          if [ "${{ github.event_name }}" != "release" ]; then
+            VERSION="dev-${GITHUB_SHA::12}"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deployment/docker/embedding-reranker.Dockerfile
+          push: true
+          tags: |
+            ${{ env.IMAGE_BASE }}:latest
+            ${{ env.IMAGE_BASE }}:${{ steps.tags.outputs.version }}
+          cache-from: type=gha,scope=embedding-reranker
+          cache-to: type=gha,mode=max,scope=embedding-reranker

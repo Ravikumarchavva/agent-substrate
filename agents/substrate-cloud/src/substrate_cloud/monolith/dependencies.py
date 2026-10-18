@@ -41,7 +41,10 @@ class ServerDependencies:
     mcp_servers: dict[str, dict] = field(default_factory=dict)
     session_factory: Any = None
     ci_client: Optional[Any] = None
+    # The process-wide store for consumers built once (documents, artifacts, the sandbox's blobs). Request code uses ``files_for``.
     file_store: Optional[Any] = None
+    # Which store a caller gets, and as whom (substrate_cloud.file_access.FileAccess); set whenever there is a file store.
+    file_access: Optional[Any] = None
     trigger_scheduler: Optional[Any] = None
     short_term_memory: Optional[Any] = None
     long_term_memory: Optional[Any] = None
@@ -57,11 +60,6 @@ class ServerDependencies:
     # Writes descriptions for documents in the background after they are added (documents_library.EnrichmentQueue); `None` when disabled
     # or there is no model key for it.
     enrichment: Optional[Any] = None
-    # Local disk store for not-yet-sent attachments — see
-    # integrations/storage/pending.py. Never SeaweedFS/S3 directly; routes
-    # promote a file from here into `file_store` only once the message
-    # carrying it is actually sent (routes/chat_context.py).
-    pending_file_store: Optional[Any] = None
     # Curated OKF bundles (integrations/artifacts/) at session and global
     # scope. Shares `file_store`'s bucket but a different key prefix — the
     # sandbox never mounts it, so nothing lands here without an explicit
@@ -72,28 +70,33 @@ class ServerDependencies:
     # not file_store.copy_prefix.
     workspace_store: Optional[Any] = None
 
-    # -- tenant-fenced object stores -------------------------------------------------------------
-    # Request code never touches ``file_store`` / ``pending_file_store`` directly: these return them fenced
-    # to one tenant's ``tenants/<tenant>/`` subtree (stores/scoped.py), so a key built from a
-    # database row or a request cannot reach another tenant's objects. The unfenced stores stay for the
-    # admin routes, which are tenant-wide by design.
+    # -- the file store for one caller ------------------------------------------------------------
+    # Request code never touches ``file_store`` directly. ``files_for`` hands it the store for that caller: in the data service
+    # the caller's own delegated token (so the ownership rule is enforced there), locally the shared folder fenced to
+    # ``tenants/<tenant>/`` (stores/scoped.py). ``user_id`` is whose files these are: the caller's, or for an admin reading a
+    # conversation, its owner's.
 
-    def files_for(self, tenant_id: str | None) -> Any | None:
-        return _fence(self.file_store, tenant_id)
+    def files_for(
+        self, tenant_id: str | None, user_id: str | None = None
+    ) -> Any | None:
+        if self.file_store is None and self.file_access is None:
+            return None
+        if not tenant_id:
+            raise ValueError("an object store can only be used on behalf of a tenant")
+        if self.file_access is not None:
+            return self.file_access.for_user(tenant_id, user_id)
+        from substrate.types import Scope
+        from substrate.stores import fence_objects
 
-    def pending_for(self, tenant_id: str | None) -> Any | None:
-        return _fence(self.pending_file_store, tenant_id)
+        return fence_objects(self.file_store, Scope(tenant_id=tenant_id))
 
-
-def _fence(store: Any, tenant_id: str | None) -> Any | None:
-    if store is None:
-        return None
-    if not tenant_id:
-        raise ValueError("an object store can only be used on behalf of a tenant")
-    from substrate.types import Scope
-    from substrate.stores import fence_objects
-
-    return fence_objects(store, Scope(tenant_id=tenant_id))
+    def direct_files_for(self, tenant_id: str, user_id: str) -> Any | None:
+        """The caller's store with direct-upload tickets, versions and quotas; None when files are a local folder."""
+        return (
+            self.file_access.direct(tenant_id, user_id)
+            if self.file_access is not None
+            else None
+        )
 
 
 def get_ctx(request: Request) -> ServerDependencies:

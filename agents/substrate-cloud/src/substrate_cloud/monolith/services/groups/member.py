@@ -71,7 +71,7 @@ def _attention(deps: Any, busy_elsewhere: list[Actor]) -> dict[str, Any]:
 
 def _senses(deps: Any, sandbox: Sandbox) -> dict[str, Any]:
     """How the member opens a picture shared in the group and shares a file it made: both through the owner's own storage."""
-    files = deps.files_for(sandbox.tenant_id)
+    files = deps.files_for(sandbox.tenant_id, sandbox.user_id)
     if files is None:
         return {}
 

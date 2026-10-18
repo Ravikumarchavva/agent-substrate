@@ -115,7 +115,7 @@ forbidden_modules = [
     "substrate.integrations.knowledge",
     "substrate.integrations.memory",
     "substrate.integrations.history",
-    "substrate.integrations.storage",
+    "substrate.integrations.data",
     "substrate.integrations.pipeline",
     "substrate.integrations.triggers",
     "substrate.integrations.safety",

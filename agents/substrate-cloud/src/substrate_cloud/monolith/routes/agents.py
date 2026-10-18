@@ -306,7 +306,7 @@ async def set_avatar(
     agent = await get_owned_agent(db, agent_id, user)
     if agent is None:
         raise HTTPException(status_code=404, detail="Agent not found")
-    store = ctx.files_for(user.tenant_id)
+    store = ctx.files_for(user.tenant_id, user.sub)
     if store is None:
         raise HTTPException(503, "File storage is not configured.")
     try:
@@ -334,7 +334,7 @@ async def clear_avatar(
     agent = await get_owned_agent(db, agent_id, user)
     if agent is None:
         raise HTTPException(status_code=404, detail="Agent not found")
-    store = ctx.files_for(user.tenant_id)
+    store = ctx.files_for(user.tenant_id, user.sub)
     if store is not None:
         await avatar.remove(store, agent.avatar_key)
     agent.avatar_key = None
@@ -384,7 +384,7 @@ async def delete_agent(
     agent = await get_owned_agent(db, agent_id, user)
     if agent is None:
         raise HTTPException(status_code=404, detail="Agent not found")
-    files = ctx.files_for(user.tenant_id)
+    files = ctx.files_for(user.tenant_id, user.sub)
     if files is not None:
         await delete_workspace_files(
             files, user.tenant_id or "default", user.sub, agent.workspace_id

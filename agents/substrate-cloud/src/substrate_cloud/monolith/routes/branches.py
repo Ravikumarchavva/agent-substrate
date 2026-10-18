@@ -299,7 +299,7 @@ async def delete_branch_endpoint(
 
         try:
             await delete_branch_workspace(
-                ctx.files_for(user.tenant_id),
+                ctx.files_for(user.tenant_id, user.sub),
                 tenant_id=user.tenant_id,
                 user_id=user.sub,
                 conversation_id=session_id,

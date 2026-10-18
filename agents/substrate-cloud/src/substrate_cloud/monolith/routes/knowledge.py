@@ -40,7 +40,7 @@ async def upload_document(
     prefix = knowledge_document_prefix(claims.tenant_id, knowledge_base_id, document_id)
     storage_key = f"{prefix}/original/{name}"
     content_type = file.content_type or "application/octet-stream"
-    await ctx.files_for(claims.tenant_id).upload(
+    await ctx.files_for(claims.tenant_id, claims.sub).upload(
         storage_key, data, content_type=content_type
     )
     checksum = hashlib.sha256(data).hexdigest()

@@ -7,8 +7,7 @@ default superuser connection this is a no-op every policy already tolerates
 never applies to a superuser).
 
 Use this instead of plain ``Depends(get_db)`` in routes that read/write
-tenant-scoped tables (threads, elements, feedbacks, file_metadata,
-file_versions, scheduled_tasks/runs, workspace_quotas) and need the DB-level
+tenant-scoped tables (threads, elements, feedbacks, scheduled_tasks/runs) and need the DB-level
 backstop, not just the route's own ownership check.
 """
 

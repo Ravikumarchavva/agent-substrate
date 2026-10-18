@@ -13,7 +13,10 @@ from unittest.mock import AsyncMock, MagicMock
 
 from PIL import Image
 
+from tests._stores import fs_files
+
 from substrate.documents import ExtractedPage, ExtractionResult
+from substrate_cloud.file_records import FileIndex
 from substrate_cloud.monolith.routes.files import get_doc_quota_status, upload_file
 
 _PDF_CONTENT_TYPE = "application/pdf"
@@ -66,39 +69,18 @@ def _upload_file_mock(
 
 
 def _db_mock() -> MagicMock:
-    """No existing object_key collision, and add/commit/refresh no-ops."""
-    db = MagicMock()
-    scalar_result = MagicMock()
-    scalar_result.scalar_one_or_none.return_value = None
-    db.execute = AsyncMock(return_value=scalar_result)
-    db.add = MagicMock()
-    db.commit = AsyncMock()
-
-    async def _refresh(meta):
-        import uuid
-
-        if meta.id is None:
-            meta.id = uuid.uuid4()
-
-    db.refresh = AsyncMock(side_effect=_refresh)
-    return db
+    """Threads are looked up through ``get_owned_thread`` (patched where it matters); nothing here writes a row."""
+    return MagicMock()
 
 
 def _ctx_mock(*, library=None, redis=None) -> MagicMock:
     ctx = MagicMock()
-    # Request code reaches the stores through the tenant fence; the fake hands back the same fakes.
-    ctx.files_for = lambda _tenant, ctx=ctx: ctx.file_store
-    ctx.pending_for = lambda _tenant, ctx=ctx: ctx.pending_file_store
-    ctx.file_store = MagicMock()
-    ctx.file_store.upload = AsyncMock()
-    # Uploads write here first, not ctx.file_store directly — see
-    # integrations/storage/pending.py; promotion into ctx.file_store only
-    # happens at send time (routes/chat_context.py).
-    ctx.pending_file_store = MagicMock()
-    ctx.pending_file_store.upload = AsyncMock()
-    ctx.pending_file_store.exists = AsyncMock(return_value=False)
+    # The caller's store: a real folder store, so what the route wrote can be read back.
+    store = fs_files()
+    ctx.file_store = store
+    ctx.files_for = lambda _tenant, _user=None, store=store: store
+    ctx.direct_files_for = lambda _tenant, _user: None
     ctx.library = library
-    ctx.session_factory = MagicMock()
     return ctx
 
 
@@ -172,6 +154,36 @@ async def test_upload_allows_pdf_at_page_limit(monkeypatch):
         ctx=_ctx_mock(library=library),
     )
     assert result.name == "doc.pdf"
+
+
+async def test_upload_leaves_the_bytes_and_a_record_in_the_owners_folder():
+    ctx = _ctx_mock(library=None)
+    result = await upload_file(
+        request=_request_mock(_FakeRedis()),
+        file=_upload_file_mock(b"hello", "text/plain", filename="note.txt"),
+        thread_id=None,
+        claims=_claims_mock(),
+        db=_db_mock(),
+        ctx=ctx,
+    )
+    key = "tenants/test-tenant/users/test-user/uploads/note.txt"
+    assert await ctx.file_store.download(key) == b"hello"
+    record = await FileIndex(ctx.file_store, "test-tenant", "test-user").live(result.id)
+    assert record is not None and record.object_key == key and record.size_bytes == 5
+    # A second upload of the same name never overwrites the first.
+    second = await upload_file(
+        request=_request_mock(_FakeRedis()),
+        file=_upload_file_mock(b"other", "text/plain", filename="note.txt"),
+        thread_id=None,
+        claims=_claims_mock(),
+        db=_db_mock(),
+        ctx=ctx,
+    )
+    assert await ctx.file_store.download(key) == b"hello"
+    assert (
+        await ctx.file_store.download(key.replace("note.txt", "note-1.txt")) == b"other"
+    )
+    assert second.id != result.id
 
 
 async def test_upload_rejects_doc_over_size_limit(monkeypatch):
@@ -363,24 +375,17 @@ async def test_upload_writes_extracted_sidecar_for_pdf(monkeypatch):
     assert len(captured_coros) == 1
     await captured_coros[0]  # run the staging task synchronously
 
-    sidecar_calls = [
-        call
-        for call in ctx.pending_file_store.upload.call_args_list
-        if call.args[0]
-        == (
-            f"tenants/test-tenant/users/test-user/conversations/{_THREAD_ID}"
-            "/branches/main/workspace/shared/uploads/doc.pdf.extracted.md"
-        )
-    ]
-    assert len(sidecar_calls) == 1
-    sidecar_text = sidecar_calls[0].args[1].decode("utf-8")
+    sidecar_key = (
+        f"tenants/test-tenant/users/test-user/conversations/{_THREAD_ID}"
+        "/branches/main/workspace/shared/uploads/doc.pdf.extracted.md"
+    )
+    sidecar_text = (await ctx.file_store.download(sidecar_key)).decode("utf-8")
     # Page boundaries are metadata (an HTML comment, invisible when rendered), never a Markdown heading — a heading here was
     # indistinguishable from real document structure, and a model asked to convert the file reproduced "Page 1" / "Page 2"
     # headings that were never in the source.
     assert "<!-- page 1 -->" in sidecar_text
     assert "<!-- page 2 -->" in sidecar_text
     assert "## Page" not in sidecar_text
-    assert sidecar_calls[0].kwargs["content_type"] == "text/markdown"
 
 
 async def test_upload_sidecar_write_failure_does_not_fail_staging(monkeypatch):
@@ -402,11 +407,14 @@ async def test_upload_sidecar_write_failure_does_not_fail_staging(monkeypatch):
     data = _pdf_bytes(1)
     ctx = _ctx_mock(library=library)
 
-    async def _upload_side_effect(key, *_args, **_kwargs):
+    real_upload = ctx.file_store.upload
+
+    async def _upload_side_effect(key, *args, **kwargs):
         if key.endswith(".extracted.md"):
             raise RuntimeError("boom")
+        return await real_upload(key, *args, **kwargs)
 
-    ctx.pending_file_store.upload = AsyncMock(side_effect=_upload_side_effect)
+    ctx.file_store.upload = _upload_side_effect
 
     await upload_file(
         request=_request_mock(_FakeRedis()),
@@ -488,147 +496,3 @@ async def test_doc_quota_status_disabled_without_redis():
         request=_request_mock(None), claims=_claims_mock()
     )
     assert status["enabled"] is False
-
-
-# ── sweep_stuck_staging_uploads (phase-6 reconciliation sweep) ─────────────
-
-
-def _stuck_file_metadata(**overrides):
-    from datetime import datetime, timedelta, timezone
-
-    from substrate_cloud.monolith.models import FileMetadata
-
-    defaults = dict(
-        id=uuid.uuid4(),
-        object_key="tenant/user/uploads/stuck.pdf",
-        original_name="stuck.pdf",
-        content_type="application/pdf",
-        org_id="test-tenant",
-        user_id=uuid.uuid4(),
-        thread_id=_THREAD_ID,
-        staged_at=None,
-        staging_error=None,
-        deleted_at=None,
-        promoted_at=None,
-        created_at=datetime.now(timezone.utc) - timedelta(minutes=30),
-    )
-    defaults.update(overrides)
-    return FileMetadata(**defaults)
-
-
-def _session_ctx_mock(rows: list) -> MagicMock:
-    """A ctx whose session_factory() async-context-manager yields a session
-    whose execute().scalars().all() returns *rows* -- the exact shape
-    sweep_stuck_staging_uploads reads."""
-    session = MagicMock()
-    # AsyncMock().return_value auto-vivifies as ANOTHER AsyncMock unless
-    # explicitly overridden -- session.execute()'s real result is a plain
-    # (sync) SQLAlchemy Result, so .return_value must be a plain MagicMock
-    # or .scalars() below returns an unawaited coroutine instead of the
-    # fake ScalarResult.
-    execute_result = MagicMock()
-    scalars_result = MagicMock()
-    scalars_result.all.return_value = rows
-    execute_result.scalars.return_value = scalars_result
-    session.execute = AsyncMock(return_value=execute_result)
-    # The re-dispatched _stage_uploaded_doc also opens its own
-    # session_factory() session to mark staged_at/staging_error -- give it
-    # a real awaitable .get() too (None is fine: it just means that
-    # bookkeeping update silently no-ops, matching "if row is not None").
-    session.get = AsyncMock(return_value=None)
-    session.commit = AsyncMock()
-
-    session_cm = MagicMock()
-    session_cm.__aenter__ = AsyncMock(return_value=session)
-    session_cm.__aexit__ = AsyncMock(return_value=False)
-
-    ctx = MagicMock()
-
-    # Request code reaches the stores through the tenant fence; the fake hands back the same fakes.
-
-    ctx.files_for = lambda _tenant, ctx=ctx: ctx.file_store
-
-    ctx.pending_for = lambda _tenant, ctx=ctx: ctx.pending_file_store
-    ctx.session_factory = MagicMock(return_value=session_cm)
-    ctx.library = _library()
-    ctx.pending_file_store = MagicMock()
-    ctx.pending_file_store.download = AsyncMock(return_value=b"%PDF-1.4 stuck bytes")
-    ctx.file_store = MagicMock()
-    ctx.file_store.download = AsyncMock(return_value=b"%PDF-1.4 promoted bytes")
-    return ctx
-
-
-async def test_sweep_redispatches_a_genuinely_stuck_upload(monkeypatch):
-    from substrate_cloud.monolith.routes import files as files_module
-
-    row = _stuck_file_metadata()
-    ctx = _session_ctx_mock([row])
-    _read_as(monkeypatch, pages=1)
-
-    captured_coros = []
-    monkeypatch.setattr(
-        files_module.asyncio, "create_task", lambda coro: captured_coros.append(coro)
-    )
-
-    dispatched = await files_module.sweep_stuck_staging_uploads(ctx)
-    assert dispatched == 1
-    assert len(captured_coros) == 1
-    await captured_coros[0]  # run the re-dispatched staging task
-
-    ctx.pending_file_store.download.assert_awaited_once_with(row.object_key)
-    ctx.library.add.assert_awaited_once()
-    kwargs = ctx.library.add.await_args.kwargs
-    assert (
-        kwargs["collection"]
-        == f"tenants/test-tenant/users/{row.user_id}/conversations/{_THREAD_ID}/documents"
-    )
-
-
-async def test_sweep_reads_from_file_store_when_already_promoted(monkeypatch):
-    """promoted_at set -> bytes live in the permanent file_store, not the
-    pending store (promotion already moved them)."""
-    from datetime import datetime, timezone
-
-    from substrate_cloud.monolith.routes import files as files_module
-
-    row = _stuck_file_metadata(promoted_at=datetime.now(timezone.utc))
-    ctx = _session_ctx_mock([row])
-    monkeypatch.setattr(files_module.asyncio, "create_task", lambda coro: coro.close())
-
-    dispatched = await files_module.sweep_stuck_staging_uploads(ctx)
-
-    assert dispatched == 1
-    ctx.file_store.download.assert_awaited_once_with(row.object_key)
-    ctx.pending_file_store.download.assert_not_awaited()
-
-
-async def test_sweep_skips_row_when_bytes_cannot_be_read(monkeypatch):
-    from substrate_cloud.monolith.routes import files as files_module
-
-    row = _stuck_file_metadata()
-    ctx = _session_ctx_mock([row])
-    ctx.pending_file_store.download = AsyncMock(side_effect=FileNotFoundError("gone"))
-    monkeypatch.setattr(
-        files_module.asyncio,
-        "create_task",
-        lambda coro: (_ for _ in ()).throw(
-            AssertionError("must not dispatch when bytes can't be read")
-        ),
-    )
-
-    dispatched = await files_module.sweep_stuck_staging_uploads(ctx)
-
-    assert dispatched == 0
-
-
-async def test_sweep_ignores_no_session_factory_or_library():
-    ctx = MagicMock()
-    # Request code reaches the stores through the tenant fence; the fake hands back the same fakes.
-    ctx.files_for = lambda _tenant, ctx=ctx: ctx.file_store
-    ctx.pending_for = lambda _tenant, ctx=ctx: ctx.pending_file_store
-    ctx.session_factory = None
-    ctx.library = _library()
-
-    from substrate_cloud.monolith.routes import files as files_module
-
-    assert await files_module.sweep_stuck_staging_uploads(ctx) == 0

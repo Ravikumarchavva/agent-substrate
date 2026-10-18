@@ -32,7 +32,12 @@ from typing import Any, List, Optional, cast
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from substrate_cloud.config import SubstrateConfig
-from substrate_cloud.data_access import PlatformDataAccess, build_data_access
+from substrate_cloud.data_access import (
+    PlatformDataAccess,
+    build_data_access,
+    build_file_connection,
+)
+from substrate_cloud.file_access import FileAccess
 from substrate.types import Actor
 from substrate.models import ChatModel
 from substrate.stores import FileStore, ThreadStore
@@ -49,8 +54,8 @@ CHANNEL_PASS = _PASS
 # ── Return containers ─────────────────────────────────────────────────────────
 
 FileStoreProvider = Callable[[RunScope], FileStore]
-"""The object store one run reads and writes. Locally it is always the one shared store (callers fence it by key prefix); the seam lets a
-deployment hand each run a store of its own — bound to the run's scope — without a caller changing."""
+"""The object store one run reads and writes. Locally it is always the one shared store (callers fence it by key prefix); with a data
+service each run gets a ``DataFileStore`` bound to its scope, carrying that run's delegated token."""
 
 
 def shared_file_store(file_store: FileStore) -> FileStoreProvider:
@@ -80,7 +85,10 @@ class Infrastructure:
     bridge_registry: Any
     skill_manager: Any
     file_store: Any
-    pending_file_store: Any = None
+    file_access: Any = None
+    """``file_access.FileAccess``: which store a request or run gets, and as whom."""
+    data_minter: Any = None
+    """The ``DataTokenMinter`` when a data service is configured (its public keys are served for the service to fetch)."""
     file_store_provider: FileStoreProvider | None = None
     """Which object store a run uses (``shared_file_store`` locally)."""
     artifact_store: Any = None
@@ -210,32 +218,28 @@ async def init_runtime(store: Any) -> tuple[Any, AsyncExitStack | None]:
 # ── Infrastructure ────────────────────────────────────────────────────────────
 
 
-async def _init_file_store(cfg: SubstrateConfig, store: Any) -> Any:
-    """The ``FileStore``: S3-compatible object storage when ``FILE_STORE_BACKEND=s3``, else the store's own ``files``."""
-    if cfg.FILE_STORE_BACKEND == "s3":
-        from substrate.integrations.storage.s3 import S3FileStore
+def _init_file_access(cfg: SubstrateConfig, store: Any) -> tuple[FileAccess, Any]:
+    """Where files live: Substrate Data's Files domain when ``DATA_SERVICE_URL`` is set, else the store's own ``files`` folder.
 
-        s3 = S3FileStore(
-            endpoint_url=cfg.FILE_STORE_ENDPOINT or "",
-            access_key=cfg.FILE_STORE_ACCESS_KEY or "",
-            secret_key=cfg.FILE_STORE_SECRET_KEY or "",
-            bucket=cfg.FILE_STORE_BUCKET,
-            region=cfg.FILE_STORE_REGION,
-            user_quota_bytes=cfg.WORKSPACE_USER_QUOTA_BYTES,
-        )
-        await s3.connect()
-        return s3
-    return store.files
-
-
-def _init_pending_file_store(cfg: SubstrateConfig) -> Any:
-    """Local-disk store for attachments not yet promoted into the real
-    file_store — see integrations/storage/pending.py. Deliberately never
-    S3/SeaweedFS-backed, regardless of FILE_STORE_BACKEND: an unsent
-    attachment must not touch permanent storage at all."""
-    from substrate.integrations.storage.pending import PendingFileStore
-
-    return PendingFileStore(cfg.PENDING_UPLOAD_LOCAL_PATH)
+    Returns the access object and, with a data service, the minter whose public keys it must fetch (served at the JWKS route).
+    """
+    if not cfg.DATA_SERVICE_URL:
+        return FileAccess(local=store.files), None
+    connection, minter, admin = build_file_connection(
+        service_url=cfg.DATA_SERVICE_URL,
+        data_dir=cfg.DATA_DIR,
+        key_file=cfg.DATA_TOKEN_KEY_FILE,
+        issuer=cfg.DATA_TOKEN_ISSUER,
+        files_issuer=cfg.DATA_FILES_TOKEN_ISSUER,
+        audience=cfg.DATA_TOKEN_AUDIENCE,
+        ca_file=cfg.DATA_SERVICE_CA_FILE,
+        client_cert_file=cfg.DATA_CLIENT_CERT_FILE,
+        client_key_file=cfg.DATA_CLIENT_KEY_FILE,
+        admin_issuer=cfg.DATA_ADMIN_OIDC_ISSUER,
+        admin_client_id=cfg.DATA_ADMIN_CLIENT_ID,
+        admin_client_secret=cfg.DATA_ADMIN_CLIENT_SECRET,
+    )
+    return FileAccess(connection=connection, admin=admin), minter
 
 
 async def init_infrastructure(
@@ -279,27 +283,14 @@ async def init_infrastructure(
 
     task_store: Any = store.tasks
 
-    file_store = await _init_file_store(cfg, store)
-    pending_file_store = _init_pending_file_store(cfg)
+    file_access, data_minter = _init_file_access(cfg, store)
+    file_store = file_access.shared
     # Curated OKF bundles ride on the same object store as files (one
     # bucket, one erasure path, one quota) but under their own key prefix,
     # which the sandbox never mounts — see integrations/artifacts/store.py.
     from substrate.integrations.artifacts import ArtifactStore
 
     artifact_store = ArtifactStore(file_store)
-    if hasattr(file_store, "set_quota_override"):
-        # Per-tenant quota overrides (admin storage API) are held in-memory
-        # on the store (see Files.set_quota_override) — seed
-        # them from their durable copy on every startup. WorkspaceQuota.user_id
-        # actually holds a tenant_id (see that model's docstring).
-        from sqlalchemy import select
-
-        from substrate_cloud.monolith.models import WorkspaceQuota
-
-        async with session_factory() as session:
-            rows = (await session.execute(select(WorkspaceQuota))).scalars().all()
-        for row in rows:
-            file_store.set_quota_override(row.user_id, row.quota_bytes)
     data_store = DataRefStore(redis_url=cfg.REDIS_URL)
     await data_store.connect()
 
@@ -318,8 +309,11 @@ async def init_infrastructure(
         bridge_registry=bridge_registry,
         skill_manager=skill_manager,
         file_store=file_store,
-        pending_file_store=pending_file_store,
-        file_store_provider=shared_file_store(file_store),
+        file_access=file_access,
+        data_minter=data_minter,
+        file_store_provider=file_access.for_run
+        if file_access.data_backed
+        else shared_file_store(file_store),
         artifact_store=artifact_store,
         workspace_store=workspace_store,
         short_term_memory=short_term_memory,

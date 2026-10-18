@@ -40,6 +40,8 @@ import jwt
 import uvicorn
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from substrate.integrations.data import DataFilesConnection
+from substrate_data_client import AsyncDataClient, ClientCredentials
 from substrate.integrations.tools.code_interpreter.code_interpreter.runtimes.base import (
     DataMount,
 )
@@ -107,8 +109,11 @@ class DataTokenMinter:
         issuer: str,
         audience: str,
         previous: Ed25519PrivateKey | None = None,
+        files_issuer: str = "",
     ):
         self.key, self.issuer, self.audience = key, issuer, audience
+        # The same key under a second issuer name: the data service trusts that name to change files, and `issuer` only to read.
+        self.files_issuer = files_issuer or issuer
         self.previous = previous
         self.kid = _kid(key)
 
@@ -123,12 +128,26 @@ class DataTokenMinter:
 
     def mint(self, scope: RunScope, ttl_seconds: int) -> str | None:
         """A read-only token for this run's user, or None when the run has no user or tenant."""
+        return self._mint(scope, ttl_seconds, self.issuer, "data:read")
+
+    def mint_files(self, scope: RunScope, ttl_seconds: int = 300) -> str:
+        """A delegated token that may read and write the user's own files (``files:write``): what ``DataFileStore`` sends.
+
+        Raises ``ValueError`` without a user and a tenant: files belong to someone, so there is nothing to act for."""
+        token = self._mint(scope, ttl_seconds, self.files_issuer, "files:write")
+        if token is None:
+            raise ValueError("a files token needs a user and a tenant")
+        return token
+
+    def _mint(
+        self, scope: RunScope, ttl_seconds: int, issuer: str, scopes: str
+    ) -> str | None:
         if not scope.user_id or not scope.tenant_id:
             return None
         now = int(time.time())
         agent = scope.agent_id or "primary"
         claims = {
-            "iss": self.issuer,
+            "iss": issuer,
             "aud": self.audience,
             "sub": scope.user_id,
             "iat": now,
@@ -136,9 +155,10 @@ class DataTokenMinter:
             "exp": now + max(MIN_TOKEN_SECONDS, min(ttl_seconds, MAX_TOKEN_SECONDS)),
             # A unique id the data service records with every statement it runs for this token.
             "jti": uuid.uuid4().hex,
-            # Tenant-wide grants in the data service are made to this group.
-            "groups": [f"tenant-{scope.tenant_id}"],
-            "scope": "data:read",
+            # Tenant-wide grants in the data service are made to these groups: `tenant-<id>` for hand-made grants and `org:<id>`,
+            # the group `POST /api/v1/tenants` grants a tenant's workspace volume to.
+            "groups": [f"tenant-{scope.tenant_id}", f"org:{scope.tenant_id}"],
+            "scope": scopes,
             "act": {"sub": f"agent-substrate:{agent}"},
             "tenant_id": scope.tenant_id,
             "thread_id": scope.thread_id,
@@ -530,3 +550,87 @@ def build_data_access(
     return PlatformDataAccess(
         service_url=service_url, relay_dir=directory, minter=minter, gateway=gateway
     )
+
+
+def build_file_connection(
+    *,
+    service_url: str,
+    data_dir: str,
+    key_file: str,
+    issuer: str,
+    files_issuer: str,
+    audience: str,
+    ca_file: str = "",
+    client_cert_file: str = "",
+    client_key_file: str = "",
+    admin_issuer: str = "",
+    admin_client_id: str = "",
+    admin_client_secret: str = "",
+) -> tuple[DataFilesConnection, DataTokenMinter, AsyncDataClient | None]:
+    """The pooled connection every file operation goes through, and the minter whose public keys the data service must fetch.
+
+    Same address rules and TLS as the sandbox gateway: https:// unless the service is on this machine, a private CA and a client
+    certificate when configured, no ambient proxy, no redirects.
+    """
+    parts = urlsplit(service_url)
+    if (
+        parts.scheme not in {"http", "https"}
+        or not parts.hostname
+        or parts.username
+        or parts.query
+        or parts.fragment
+    ):
+        raise ValueError("The data service URL must be http(s)://host[:port]")
+    if parts.scheme == "http" and parts.hostname not in LOOPBACK:
+        raise ValueError(
+            "The data service is on another machine: its URL must be https:// "
+            "(plain http is only allowed to localhost)."
+        )
+    if bool(client_cert_file) != bool(client_key_file):
+        raise ValueError("DATA_CLIENT_CERT_FILE and DATA_CLIENT_KEY_FILE go together")
+    context: ssl.SSLContext | bool = True
+    if parts.scheme == "https":
+        context = ssl.create_default_context(cafile=ca_file or None)
+        context.minimum_version = ssl.TLSVersion.TLSv1_2
+        if client_cert_file and client_key_file:
+            context.load_cert_chain(client_cert_file, client_key_file)
+    key_path = Path(key_file or f"{data_dir.rstrip('/')}/keys/data-token.pem").resolve()
+    current, previous = load_keys(key_path)
+    minter = DataTokenMinter(
+        current,
+        issuer=issuer,
+        audience=audience,
+        previous=previous,
+        files_issuer=files_issuer,
+    )
+
+    def transport() -> httpx.AsyncHTTPTransport:
+        return httpx.AsyncHTTPTransport(
+            verify=context,
+            limits=httpx.Limits(
+                max_connections=64, max_keepalive_connections=16, keepalive_expiry=30
+            ),
+            trust_env=False,
+        )
+
+    connection = DataFilesConnection(
+        service_url, tokens=minter.mint_files, transport=transport()
+    )
+    admin: AsyncDataClient | None = None
+    if admin_client_id and admin_client_secret and admin_issuer:
+        # The administrator is an OIDC client of its own (data-admins group): its token is never a user's, and never delegated.
+        admin = AsyncDataClient(
+            service_url,
+            token=ClientCredentials(admin_issuer, admin_client_id, admin_client_secret),
+            transport=transport(),
+        )
+    logger.info(
+        "Files go through the data service at %s. Tell it to trust this platform to change files: "
+        'SUBSTRATE_DATA_TRUSTED_ISSUERS=[{"issuer": "%s", "audience": "%s", "read_only": false, '
+        '"jwks_uri": "https://<this backend\'s public address>%s"}]',
+        service_url,
+        files_issuer,
+        audience,
+        JWKS_PATH,
+    )
+    return connection, minter, admin

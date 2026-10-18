@@ -7,6 +7,7 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from substrate.documents import ExtractionResult
+from tests._file_rows import rows_db
 from substrate_cloud.monolith.routes.chat_context import _build_file_context
 
 
@@ -25,14 +26,7 @@ def _pdf_meta(file_id: str, name: str, object_key: str, size: int) -> MagicMock:
 
 
 async def _run(meta) -> tuple[str, list, list, list]:
-    scalars_result = MagicMock()
-    scalars_result.all.return_value = [meta]
-    execute_result = MagicMock()
-    execute_result.scalars.return_value = scalars_result
-
-    db = MagicMock()
-    db.execute = AsyncMock(return_value=execute_result)
-    db.commit = AsyncMock()
+    db = rows_db([meta])
 
     file_store = MagicMock()
     file_store.download = AsyncMock(return_value=b"pdf bytes")
@@ -41,9 +35,8 @@ async def _run(meta) -> tuple[str, list, list, list]:
 
     # Request code reaches the stores through the tenant fence; the fake hands back the same fakes.
 
-    ctx.files_for = lambda _tenant, ctx=ctx: ctx.file_store
+    ctx.files_for = lambda _tenant, _user=None, ctx=ctx: ctx.file_store
 
-    ctx.pending_for = lambda _tenant, ctx=ctx: ctx.pending_file_store
     ctx.file_store = file_store
     ctx.rag_backend = None  # exercises the inline-extraction path
     ctx.library = None

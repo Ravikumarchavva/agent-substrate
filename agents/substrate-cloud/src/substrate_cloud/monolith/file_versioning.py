@@ -1,69 +1,62 @@
 """Workspace file versioning — one snapshot lineage shared by both writers.
 
-A workspace file (e.g. a code-interpreter-generated report) can change two
-ways: the human edits it in the side panel (author="user", via the PUT
-save-back) or the agent rewrites it via code_interpreter (author="agent",
-captured lazily the next time the file is served). Every state becomes a recoverable ``FileVersion`` snapshot, so the two
-never silently clobber each other and any version can be restored.
+A workspace file (e.g. a code-interpreter-generated report) can change two ways: the human edits it in the side panel (author="user",
+via the PUT save-back) or the agent rewrites it via code_interpreter (author="agent", captured lazily the next time the file is
+served). Every state becomes a recoverable snapshot, so the two never silently clobber each other and any version can be restored.
 
-The canonical working file (``object_key``) always mirrors the latest version;
-snapshots are copies under a sibling ``users/{uid}/versions/...`` prefix.
+The canonical working file (``object_key``) always mirrors the latest version. A snapshot is a copy of its bytes in the same file
+store, and the lineage (who wrote each, its hash, what it restored) is one ``index.json`` beside the snapshots. There is no versions
+table: the history lives where the file lives, whatever the store (the data service in production, a folder locally).
 
-Snapshots deliberately live *outside* the working tree rather than in a hidden
-directory beside the file. They are system-managed data, not the user's files,
-and keeping them in their own prefix makes that separation structural instead of
-a naming convention every component has to remember:
-
-* The code interpreter mounts only ``users/{uid}/sessions/{tid}``, so a snapshot
-  is physically unreachable from a sandbox run — it cannot be read, clobbered,
-  or re-reported as a generated output. Previously only a leading dot (which
-  ``runtimes/_files.py`` happens to prune) kept that from happening.
-* Object stores are not filesystems: SeaweedFS omits keys nested under a
-  dot-directory from S3 ``LIST`` entirely, which silently excluded snapshots
-  from per-user usage totals while they still consumed space.
+Snapshots deliberately live *outside* the working tree rather than in a hidden directory beside the file. They are system-managed
+data, not the user's files, and keeping them in their own prefix makes that separation structural instead of a naming convention
+every component has to remember: ``workspace/shared/`` is what the code interpreter mounts and what is listed as the user's files,
+so a snapshot written under it would be sandbox-reachable and show up as a "file".
 """
 
 from __future__ import annotations
 
 import hashlib
+import json
+from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
 from pathlib import PurePosixPath
 from typing import Any
 
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-
+from substrate.types.errors import ObjectNotFoundError
 from substrate.workspace.layout import conversation_version_key
-from substrate_cloud.monolith.models import FileVersion
 
-# Per-user snapshot prefix, a sibling of `sessions/` and `uploads/` rather than
-# a directory inside them. routes/workspace.py::list_files hides it from the
-# Storage browser — a presentation choice now, not a correctness requirement.
+# The directory snapshots live in, a sibling of ``shared/`` (routes/workspace.py::list_files hides it from the Storage browser).
 VERSIONS_DIR = "versions"
+MANIFEST = "index.json"
 
 
 def sha256_hex(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def _version_key(object_key: str, seq: int) -> str:
-    """``tenants/{tid}/users/{uid}/conversations/{cid}/branches/{bid}/workspace/shared/{path}``
-    → ``.../branches/{bid}/workspace/versions/{path}/{seq}.ext``
-    — a sibling of ``shared/`` (see ``agents/workspace/layout.py``'s
-    ``conversation_version_key``), never nested inside it: ``shared/`` is
-    bind-mounted into the code-interpreter sandbox and enumerated as the
-    user's files (``routes/workspace.py::list_files``), so a snapshot
-    written under it would be sandbox-reachable and show up as a "file".
+@dataclass
+class VersionEntry:
+    seq: int
+    author: str  # initial | user | agent | restore
+    checksum_sha256: str
+    size_bytes: int
+    created_at: float
+    version_key: str
+    # When author == "restore", the seq this snapshot was restored from.
+    restored_from_seq: int | None = None
 
-    The whole relative path below ``shared/`` is preserved as a directory
-    under ``versions/``, holding one numbered file per snapshot — so the
-    mapping is total and reversible by inspection. Keys that don't match
-    the canonical conversation-workspace shape (e.g. a knowledge-base
-    document) are left versioned next to themselves — there's no per-user
-    prefix to hang the snapshot off.
+
+def _version_dir(object_key: str) -> str:
+    """``tenants/{tid}/users/{uid}/conversations/{cid}/branches/{bid}/workspace/shared/{path}``
+    → ``.../branches/{bid}/workspace/versions/{path}`` — a sibling of ``shared/`` (see ``workspace/layout.py``'s
+    ``conversation_version_key``), holding one numbered file per snapshot plus the manifest.
+
+    Keys that don't match the canonical conversation-workspace shape (e.g. a knowledge-base document) are versioned next to
+    themselves — there's no per-user prefix to hang the snapshot off.
     """
     p = PurePosixPath(object_key)
     parts = p.parts
-    # tenants/<tenant>/users/<user>/conversations/<thread>/branches/<branch>/workspace/shared/<path>
     if (
         len(parts) >= 11
         and parts[0] == "tenants"
@@ -80,110 +73,84 @@ def _version_key(object_key: str, seq: int) -> str:
             parts[7],
         )
         rel_path = str(PurePosixPath(*parts[10:]))
-        base = conversation_version_key(
+        return conversation_version_key(
             tenant_id, user_id, conversation_id, rel_path, branch_id
         )
-        return f"{base}/{seq}{p.suffix}"
-    return str(p.parent / VERSIONS_DIR / p.name / f"{seq}{p.suffix}")
+    return str(p.parent / VERSIONS_DIR / p.name)
 
 
-async def latest_version(db: AsyncSession, object_key: str) -> FileVersion | None:
-    return (
-        await db.execute(
-            select(FileVersion)
-            .where(FileVersion.object_key == object_key)
-            .order_by(FileVersion.seq.desc())
-            .limit(1)
-        )
-    ).scalar_one_or_none()
+def _version_key(object_key: str, seq: int) -> str:
+    return f"{_version_dir(object_key)}/{seq}{PurePosixPath(object_key).suffix}"
 
 
-async def list_versions(db: AsyncSession, object_key: str) -> list[FileVersion]:
-    return list(
-        (
-            await db.execute(
-                select(FileVersion)
-                .where(FileVersion.object_key == object_key)
-                .order_by(FileVersion.seq.asc())
-            )
-        )
-        .scalars()
-        .all()
-    )
+def _manifest_key(object_key: str) -> str:
+    return f"{_version_dir(object_key)}/{MANIFEST}"
+
+
+async def list_versions(store: Any, object_key: str) -> list[VersionEntry]:
+    """Every snapshot of *object_key*, oldest first."""
+    try:
+        raw = await store.download(_manifest_key(object_key))
+    except (ObjectNotFoundError, FileNotFoundError, KeyError):
+        return []
+    try:
+        return [VersionEntry(**e) for e in json.loads(raw)]
+    except (ValueError, TypeError):
+        return []
+
+
+async def latest_version(store: Any, object_key: str) -> VersionEntry | None:
+    versions = await list_versions(store, object_key)
+    return versions[-1] if versions else None
 
 
 async def record_version(
-    db: AsyncSession,
     store: Any,
     *,
     object_key: str,
     data: bytes,
     author: str,
-    user_id: str | None = None,
-    thread_id: str | None = None,
-    tenant_id: str | None = None,
     restored_from_seq: int | None = None,
-) -> FileVersion:
-    """Snapshot ``data`` as the next version of ``object_key`` and commit."""
-    latest = await latest_version(db, object_key)
-    seq = (latest.seq + 1) if latest else 1
-    version_key = _version_key(object_key, seq)
-    await store.upload(version_key, data)
-    fv = FileVersion(
-        object_key=object_key,
+) -> VersionEntry:
+    """Snapshot ``data`` as the next version of ``object_key``."""
+    versions = await list_versions(store, object_key)
+    seq = (versions[-1].seq + 1) if versions else 1
+    entry = VersionEntry(
         seq=seq,
-        version_key=version_key,
         author=author,
-        restored_from_seq=restored_from_seq,
         checksum_sha256=sha256_hex(data),
         size_bytes=len(data),
-        user_id=user_id,
-        thread_id=thread_id,
-        tenant_id=tenant_id,
+        created_at=datetime.now(timezone.utc).timestamp(),
+        version_key=_version_key(object_key, seq),
+        restored_from_seq=restored_from_seq,
     )
-    db.add(fv)
-    await db.commit()
-    return fv
+    await store.upload(entry.version_key, data)
+    await store.upload(
+        _manifest_key(object_key),
+        json.dumps([asdict(v) for v in [*versions, entry]]).encode(),
+        content_type="application/json",
+    )
+    return entry
 
 
 async def capture_bytes(
-    db: AsyncSession,
     store: Any,
     *,
     object_key: str,
     data: bytes,
-    user_id: str | None = None,
-    thread_id: str | None = None,
-    tenant_id: str | None = None,
     change_author: str = "agent",
-) -> FileVersion | None:
-    """Ensure the current canonical bytes are versioned. Records ``"initial"``
-    when there's no history yet, or ``change_author`` (default ``"agent"``)
-    when the content changed outside our save endpoints. No-op when already up
-    to date. Callers that already hold the bytes (e.g. serve_file) pass them in
-    to avoid a re-download."""
+) -> VersionEntry | None:
+    """Ensure the current canonical bytes are versioned. Records ``"initial"`` when there's no history yet, or ``change_author``
+    (default ``"agent"``) when the content changed outside our save endpoints. No-op when already up to date. Callers that already
+    hold the bytes (e.g. serve_file) pass them in to avoid a re-download."""
     checksum = sha256_hex(data)
-    latest = await latest_version(db, object_key)
+    latest = await latest_version(store, object_key)
     if latest is None:
         return await record_version(
-            db,
-            store,
-            object_key=object_key,
-            data=data,
-            author="initial",
-            user_id=user_id,
-            thread_id=thread_id,
-            tenant_id=tenant_id,
+            store, object_key=object_key, data=data, author="initial"
         )
     if latest.checksum_sha256 != checksum:
         return await record_version(
-            db,
-            store,
-            object_key=object_key,
-            data=data,
-            author=change_author,
-            user_id=user_id,
-            thread_id=thread_id,
-            tenant_id=tenant_id,
+            store, object_key=object_key, data=data, author=change_author
         )
     return None

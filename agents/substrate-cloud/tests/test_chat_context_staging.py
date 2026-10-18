@@ -5,10 +5,12 @@ documents) needs no further work; one staged under a different thread gets filed
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock
 
 from fastapi import HTTPException
 
+from tests._file_rows import rows_db
 from substrate_cloud.monolith.routes.chat_context import _build_file_context
 
 
@@ -57,17 +59,12 @@ def _staged_meta(
     # Pass thread_id=None or a different value to exercise the "needs
     # (re-)ingestion" branch instead.
     meta.thread_id = thread_id
+    meta.created_at = datetime.now(timezone.utc)
     return meta
 
 
 def _db_with_rows(rows: list) -> MagicMock:
-    scalars_result = MagicMock()
-    scalars_result.all.return_value = rows
-    execute_result = MagicMock()
-    execute_result.scalars.return_value = scalars_result
-    db = MagicMock()
-    db.execute = AsyncMock(return_value=execute_result)
-    db.commit = AsyncMock()
+    db = rows_db(rows)
     return db
 
 
@@ -85,8 +82,7 @@ def _ctx(*, download: bytes | None = None) -> MagicMock:
     """A ctx whose documents library is a stub: ``add`` records, ``outline`` says the document is not (yet) there."""
     ctx = MagicMock()
     # Request code reaches the stores through the tenant fence; the fake hands back the same fakes.
-    ctx.files_for = lambda _tenant, ctx=ctx: ctx.file_store
-    ctx.pending_for = lambda _tenant, ctx=ctx: ctx.pending_file_store
+    ctx.files_for = lambda _tenant, _user=None, ctx=ctx: ctx.file_store
     ctx.file_store = MagicMock()
     if download is not None:
         ctx.file_store.download = AsyncMock(return_value=download)
@@ -272,3 +268,18 @@ async def test_send_skips_pre_validation_when_no_new_commits():
 
     ctx.library.add.assert_not_awaited()
     assert len(attachments) == 1
+
+
+async def test_staging_that_never_finished_is_redone_by_the_message_that_needs_it():
+    """Eager staging runs on an in-process task a restart takes with it. Past the reconciliation age the send files the document itself
+    (under this message's thread) instead of blocking on "still processing" for ever."""
+    meta = _staged_meta("f1", staged_at=None, thread_id="thread-1")
+    meta.created_at = datetime.now(timezone.utc) - timedelta(hours=1)
+    db = _db_with_rows([meta])
+    ctx = _ctx(download=b"%PDF-1.4 bytes")
+
+    await _build_file_context(
+        db, _body("f1"), _request_with_redis(None), ctx, _claims()
+    )
+
+    ctx.library.add.assert_awaited_once()

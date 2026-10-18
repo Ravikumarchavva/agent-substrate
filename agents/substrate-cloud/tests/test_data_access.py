@@ -62,13 +62,47 @@ def test_a_token_names_the_user_tenant_and_agent_and_can_only_read():
     m = minter()
     claims = verify(m, m.mint(SCOPE, 90))
     assert claims["sub"] == "user-1" and claims["tenant_id"] == "acme"
-    assert claims["groups"] == ["tenant-acme"] and claims["scope"] == "data:read"
+    assert (
+        claims["groups"] == ["tenant-acme", "org:acme"]
+        and claims["scope"] == "data:read"
+    )
     assert (
         claims["act"] == {"sub": "agent-substrate:analyst"}
         and claims["thread_id"] == "thread-1"
     )
     assert claims["exp"] - claims["iat"] == 90
     assert jwt.get_unverified_header(m.mint(SCOPE, 90))["kid"] == m.kid
+
+
+def test_a_files_token_is_delegated_writable_and_under_the_files_issuer():
+    m = DataTokenMinter(
+        Ed25519PrivateKey.generate(),
+        issuer="agent-substrate",
+        audience="substrate-data",
+        files_issuer="agent-substrate-files",
+    )
+    public = jwt.PyJWK(m.jwks()["keys"][0]).key
+    claims = jwt.decode(
+        m.mint_files(SCOPE),
+        public,
+        algorithms=["EdDSA"],
+        audience="substrate-data",
+        issuer="agent-substrate-files",
+    )
+    # The same key signs both; only the issuer name differs, because the data service trusts that name to write (or only to read).
+    assert claims["scope"] == "files:write" and claims["sub"] == "user-1"
+    assert (
+        claims["act"] == {"sub": "agent-substrate:analyst"}
+        and "org:acme" in claims["groups"]
+    )
+    assert verify(m, m.mint(SCOPE, 90))["scope"] == "data:read"
+
+
+def test_a_files_token_needs_a_user_and_a_tenant():
+    with pytest.raises(ValueError):
+        minter().mint_files(RunScope(tenant_id="acme"))
+    with pytest.raises(ValueError):
+        minter().mint_files(RunScope(user_id="u"))
 
 
 def test_a_token_lives_about_as_long_as_the_run_and_never_longer_than_the_cap():

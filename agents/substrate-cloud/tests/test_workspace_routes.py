@@ -40,7 +40,7 @@ async def _bypass_session():
 
 @asynccontextmanager
 async def _registered_user():
-    """Create a real User row (file_metadata.user_id is a real FK) and
+    """Create a real User row and
     clean it up afterwards, regardless of test outcome."""
     user_id = uuid.uuid4()
     async with _bypass_session() as db:
@@ -58,7 +58,7 @@ async def _registered_user():
 
 @asynccontextmanager
 async def _registered_thread(thread_id: str, *, owner: str, tenant_id: str = TENANT):
-    """Create a real Thread row (file_metadata.thread_id is a real FK),
+    """Create a real Thread row
     owned by *owner* within *tenant_id* — ownership (``list_files``,
     ``delete_file``, ``_may_access_key``) is resolved through these columns,
     not the storage key."""
@@ -83,22 +83,6 @@ async def _registered_thread(thread_id: str, *, owner: str, tenant_id: str = TEN
                 await db.commit()
 
 
-async def _promote_file(file_id: str) -> None:
-    """Simulate "the message carrying this attachment was sent" — a
-    composer upload (real thread_id) only reaches the real file_store at
-    that point (see routes/files.py::promote_pending_file), and these
-    tests exercise /workspace/file's own substrate_cloud/caching behavior against
-    an already-permanent file, not the pending-upload mechanics."""
-    from substrate_cloud.monolith.models import FileMetadata
-    from substrate_cloud.monolith.routes.files import promote_pending_file
-
-    async with _bypass_session() as db:
-        meta = await db.get(FileMetadata, uuid.UUID(file_id))
-        assert meta is not None
-        await promote_pending_file(app.state.ctx, meta)
-        await db.commit()
-
-
 @pytest.mark.requires_postgres
 async def test_upload_scoped_key_and_workspace_management(tmp_path) -> None:
     async with app.router.lifespan_context(app):
@@ -106,6 +90,7 @@ async def test_upload_scoped_key_and_workspace_management(tmp_path) -> None:
         # test never touches real disk under FILE_STORE_ROOT, and give
         # the tenant a small quota to exercise the 413 path.
         app.state.ctx.file_store = Store.at(tmp_path, file_quota_bytes=1000).files
+        app.state.ctx.file_access = None
         app.state.ctx.workspace_user_quota_bytes = 1000
         app.state.ctx.workspace_user_delete_allowed = True
 
@@ -132,7 +117,12 @@ async def test_upload_scoped_key_and_workspace_management(tmp_path) -> None:
                     # user — a conversation-scoped upload carries no user
                     # segment in its key at all).
                     usage = (await client.get("/workspace/usage")).json()
-                    assert usage["used_bytes"] == len(b"hello world")
+                    # the file, and the small record kept beside it in the same folder
+                    assert (
+                        len(b"hello world")
+                        < usage["used_bytes"]
+                        < len(b"hello world") + 600
+                    )
                     assert usage["quota_bytes"] == 1000
 
                     # Quota is enforced on the next upload.
@@ -155,22 +145,18 @@ async def test_upload_scoped_key_and_workspace_management(tmp_path) -> None:
                     )
                     assert del_resp.status_code == 204
                     usage_after = (await client.get("/workspace/usage")).json()
-                    assert usage_after["used_bytes"] == 0
+                    assert usage_after["used_bytes"] < usage["used_bytes"]
             finally:
                 app.dependency_overrides.pop(get_current_user, None)
 
 
 @pytest.mark.requires_postgres
-async def test_upload_auto_creates_missing_user_row(tmp_path) -> None:
-    """A caller whose JWT `sub` is a valid UUID but has no matching `users`
-    row yet (e.g. a frontend minting per-user tokens straight from its own
-    user store, like substrate-ui's Google-OAuth Prisma id) must not hit an
-    IntegrityError on the FileMetadata.user_id FK — the row is
-    get-or-created (see routes/files.py::_ensure_user)."""
-    from substrate_cloud.monolith.models import User
-
+async def test_upload_needs_no_registered_user(tmp_path) -> None:
+    """A caller whose JWT `sub` has no row in the platform's `users` table (a frontend minting per-user tokens straight from its own user
+    store) uploads and reads back like anyone else: a file is its bytes plus a record in the caller's own folder, with no foreign key."""
     async with app.router.lifespan_context(app):
         app.state.ctx.file_store = Store.at(tmp_path, file_quota_bytes=10_000).files
+        app.state.ctx.file_access = None
         app.state.ctx.workspace_user_quota_bytes = 10_000
 
         user_id = str(uuid.uuid4())
@@ -183,29 +169,20 @@ async def test_upload_auto_creates_missing_user_row(tmp_path) -> None:
             ) as client:
                 resp = await client.post(
                     "/files/upload",
-                    files={"file": ("hello.txt", b"hi", "text/plain")},
+                    files={"file": ("a.txt", b"hello", "text/plain")},
                 )
                 assert resp.status_code == 201
-
-            session_factory = app.state.session_factory
-            async with session_factory() as db:
-                row = await db.get(User, uuid.UUID(user_id))
-                assert row is not None
-                assert row.identifier == f"{user_id}@example.com"
+                dl = await client.get(f"/files/{resp.json()['id']}/download")
+                assert dl.content == b"hello"
         finally:
             app.dependency_overrides.pop(get_current_user, None)
-            session_factory = app.state.session_factory
-            async with session_factory() as db:
-                row = await db.get(User, uuid.UUID(user_id))
-                if row is not None:
-                    await db.delete(row)
-                    await db.commit()
 
 
 @pytest.mark.requires_postgres
 async def test_thread_scoped_upload_and_cross_user_isolation(tmp_path) -> None:
     async with app.router.lifespan_context(app):
         app.state.ctx.file_store = Store.at(tmp_path, file_quota_bytes=10_000).files
+        app.state.ctx.file_access = None
         app.state.ctx.workspace_user_quota_bytes = 10_000
         app.state.ctx.workspace_user_delete_allowed = True
 
@@ -266,6 +243,7 @@ async def test_serve_and_save_file_deny_a_same_tenant_stranger(tmp_path) -> None
     now go through the same ownership predicate as get_owned_thread."""
     async with app.router.lifespan_context(app):
         app.state.ctx.file_store = Store.at(tmp_path, file_quota_bytes=10_000).files
+        app.state.ctx.file_access = None
         app.state.ctx.workspace_user_quota_bytes = 10_000
         app.state.ctx.workspace_user_delete_allowed = True
 
@@ -280,14 +258,13 @@ async def test_serve_and_save_file_deny_a_same_tenant_stranger(tmp_path) -> None
                     async with AsyncClient(
                         transport=ASGITransport(app=app), base_url="http://test"
                     ) as client:
-                        upload_resp = await client.post(
+                        await client.post(
                             "/files/upload",
                             data={"thread_id": thread_id},
                             files={
                                 "file": ("secret.txt", b"user-1-secret", "text/plain")
                             },
                         )
-                        await _promote_file(upload_resp.json()["id"])
                 finally:
                     app.dependency_overrides.pop(get_current_user, None)
 
@@ -352,12 +329,11 @@ async def test_delete_file_locks_the_owners_own_thread(tmp_path) -> None:
                     async with AsyncClient(
                         transport=ASGITransport(app=app), base_url="http://test"
                     ) as client:
-                        upload_resp = await client.post(
+                        await client.post(
                             "/files/upload",
                             data={"thread_id": thread_id},
                             files={"file": ("report.txt", b"data", "text/plain")},
                         )
-                        await _promote_file(upload_resp.json()["id"])
 
                         key = conversation_shared_key(
                             TENANT, user_id, thread_id, "uploads/report.txt"
@@ -406,8 +382,7 @@ async def test_list_files_lists_each_conversation_file_once(tmp_path) -> None:
                                 "file": ("notes.txt", b"secret notes", "text/plain")
                             },
                         )
-                        file_id = resp.json()["id"]
-                        await _promote_file(file_id)
+                        resp.json()["id"]
 
                         # Non-file prefixes under the same user — must never
                         # show up as "files" in the listing.
@@ -444,6 +419,7 @@ async def test_serve_file_sets_etag_and_honors_if_none_match(tmp_path) -> None:
     file must now round-trip as a cheap 304 with no body."""
     async with app.router.lifespan_context(app):
         app.state.ctx.file_store = Store.at(tmp_path, file_quota_bytes=10_000).files
+        app.state.ctx.file_access = None
         app.state.ctx.workspace_user_quota_bytes = 10_000
 
         async with _registered_user() as user_id:
@@ -456,14 +432,13 @@ async def test_serve_file_sets_etag_and_honors_if_none_match(tmp_path) -> None:
                     async with AsyncClient(
                         transport=ASGITransport(app=app), base_url="http://test"
                     ) as client:
-                        upload_resp = await client.post(
+                        await client.post(
                             "/files/upload",
                             data={"thread_id": thread_id},
                             files={
                                 "file": ("chart.png", b"fake-png-bytes", "image/png")
                             },
                         )
-                        await _promote_file(upload_resp.json()["id"])
 
                         first = await client.get(
                             "/workspace/file",
@@ -502,6 +477,7 @@ async def test_serve_file_pinned_version_is_cached_immutable(tmp_path) -> None:
     cache aggressively, unlike the mutable "latest" file."""
     async with app.router.lifespan_context(app):
         app.state.ctx.file_store = Store.at(tmp_path, file_quota_bytes=10_000).files
+        app.state.ctx.file_access = None
         app.state.ctx.workspace_user_quota_bytes = 10_000
 
         async with _registered_user() as user_id:
@@ -514,12 +490,11 @@ async def test_serve_file_pinned_version_is_cached_immutable(tmp_path) -> None:
                     async with AsyncClient(
                         transport=ASGITransport(app=app), base_url="http://test"
                     ) as client:
-                        upload_resp = await client.post(
+                        await client.post(
                             "/files/upload",
                             data={"thread_id": thread_id},
                             files={"file": ("notes.txt", b"v1", "text/plain")},
                         )
-                        await _promote_file(upload_resp.json()["id"])
                         # serve_file lazily captures a FileVersion on its first
                         # (unpinned) read (see its docstring) — a version row
                         # doesn't exist purely from the upload itself.

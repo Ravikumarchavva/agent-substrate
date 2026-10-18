@@ -1,47 +1,38 @@
-"""Job Controller — HTTP routes.
+"""Job Controller: HTTP routes (internal; the gateway calls them with the caller's own token).
 
-Routes:
-  POST /jobs/runs          – start a new job run
-  GET  /jobs/runs/{run_id} – get run status
-  POST /jobs/runs/{id}/cancel – cancel a running job
-  POST /jobs/runs/{id}/retry  – retry a failed job
+POST /api/v1/jobs/runs                       start a run on a thread the caller owns
+GET  /api/v1/jobs/runs/{run_id}              a run's status
+POST /api/v1/jobs/runs/{run_id}/cancel       cancel a running job
+POST /api/v1/jobs/threads/{thread_id}/cancel cancel whatever is running on a thread
 """
 
 from __future__ import annotations
 
 import logging
-
-import asyncio  # used by create_task in create_run_endpoint
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from substrate_cloud.services.job_controller import service
+from substrate_cloud.services.job_controller.models import JobRun
+from substrate_cloud.shared.auth.claims import AuthClaims
+from substrate_cloud.shared.auth.middleware import get_current_user
 from substrate_cloud.shared.database.dependency import get_db_session
-from substrate_cloud.shared.events.types import job_cancel_requested
-
-from substrate_cloud.services.job_controller.service import (
-    cancel_run,
-    create_run,
-    dispatch_run,
-    get_active_run_for_thread,
-    get_run,
-)
+from substrate_cloud.shared.events import types as events
+from substrate_cloud.shared.problem import Problem
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
 
-# ── Request/Response schemas ─────────────────────────────────────────────────
-
-
 class RunCreateBody(BaseModel):
-    thread_id: str
+    thread_id: uuid.UUID
     user_content: str = ""
     system_instructions: str | None = None
-    file_ids: list[str] | None = None
+    file_ids: list[uuid.UUID] | None = None
     client_request_id: str | None = None
 
 
@@ -49,6 +40,7 @@ class RunOut(BaseModel):
     run_id: str
     thread_id: str
     status: str
+    runtime_run_id: str | None
     user_content: str | None
     error_message: str | None
     steps_count: int
@@ -63,11 +55,12 @@ class CancelOut(BaseModel):
     thread_id: str
 
 
-def _run_to_out(run) -> RunOut:
+def _run_out(run: JobRun) -> RunOut:
     return RunOut(
         run_id=str(run.id),
         thread_id=str(run.thread_id),
         status=run.status,
+        runtime_run_id=run.runtime_run_id,
         user_content=run.user_content,
         error_message=run.error_message,
         steps_count=run.steps_count,
@@ -77,123 +70,152 @@ def _run_to_out(run) -> RunOut:
     )
 
 
-# ── Routes ───────────────────────────────────────────────────────────────────
+def _token(request: Request) -> str:
+    header = request.headers.get("authorization", "")
+    return header[7:] if header.lower().startswith("bearer ") else ""
 
 
 @router.post("/runs", status_code=201)
 async def create_run_endpoint(
     body: RunCreateBody,
     request: Request,
+    user: AuthClaims = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
-):
-    """Create and dispatch a workflow run.
+) -> RunOut:
+    """Start a run on a thread the caller owns and hand it to the agent runtime.
 
-    Single-flight: returns 409 if a run is already active for this thread.
+    Single-flight: 409 while a run is still going on the thread. The runtime has accepted the run (and has its own id for it) when
+    this answers, so the caller can stream it straight away.
     """
-    thread_id = uuid.UUID(body.thread_id)
+    token = _token(request)
+    # The conversation service answers 404 for a thread that is not the caller's, whoever else's it is.
+    await request.app.state.conversation_client.request(
+        "GET", f"/threads/{body.thread_id}", token
+    )
 
-    # Single-flight check
-    active = await get_active_run_for_thread(db, thread_id)
-    if active:
-        raise HTTPException(
-            status_code=409,
-            detail=f"A workflow run is already active for thread {body.thread_id}. "
-            f"Cancel it first via POST /workflows/runs/{active.id}/cancel.",
+    if body.client_request_id:  # the same key again is the same run, not a second one
+        again = await service.find_by_request_id(db, user, body.client_request_id)
+        if again is not None:
+            return _run_out(again)
+
+    if await service.get_active_run_for_thread(db, user, body.thread_id):
+        raise Problem(
+            409,
+            "conflict",
+            f"A run is already active on thread {body.thread_id}; cancel it first.",
         )
-
-    run = await create_run(
+    run = await service.create_run(
         db,
-        thread_id=thread_id,
+        user,
+        thread_id=body.thread_id,
         user_content=body.user_content,
         system_instructions=body.system_instructions,
-        file_ids=body.file_ids,
+        file_ids=[str(f) for f in body.file_ids or []],
         client_request_id=body.client_request_id,
     )
     await db.commit()
+    bus = request.app.state.event_bus
+    try:
+        accepted = await request.app.state.runtime_client.json(
+            "POST",
+            "/agent/runs",
+            token,
+            json={
+                "run_id": str(run.id),
+                "thread_id": str(run.thread_id),
+                "user_content": run.user_content or "",
+                "system_instructions": run.system_instructions,
+                "file_ids": run.file_ids or [],
+            },
+            timeout=30.0,
+        )
+    except Problem as problem:
+        logger.warning("Agent runtime refused run %s: %s", run.id, problem.detail)
+        await service.fail_run(db, run.id, error_message=problem.detail)
+        await db.commit()
+        await bus.publish(
+            events.workflow_failed(
+                str(run.id),
+                str(run.thread_id),
+                tenant_id=user.tenant_id,
+                user_id=user.sub,
+                error=problem.detail,
+            )
+        )
+        raise
 
-    # Dispatch run asynchronously
-    asyncio.create_task(
-        dispatch_run(
-            run=run,
-            event_bus=request.app.state.event_bus,
-            session_factory=request.app.state.session_factory,
-            redis_client=request.app.state.redis,
+    started = await service.start_run(
+        db, run.id, runtime_run_id=accepted["runtime_run_id"]
+    )
+    await db.commit()
+    await bus.publish(
+        events.workflow_started(
+            str(run.id), str(run.thread_id), tenant_id=user.tenant_id, user_id=user.sub
         )
     )
-
-    return _run_to_out(run)
+    return _run_out(started or run)
 
 
 @router.get("/runs/{run_id}")
 async def get_run_endpoint(
     run_id: uuid.UUID,
+    user: AuthClaims = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
-):
-    """Get the current status of a workflow run."""
-    run = await get_run(db, run_id)
-    if not run:
-        raise HTTPException(status_code=404, detail="Run not found")
-    return _run_to_out(run)
+) -> RunOut:
+    run = await service.get_run(db, user, run_id)
+    if run is None:
+        raise Problem(404, "not-found", "Run not found")
+    return _run_out(run)
+
+
+async def _cancel(
+    request: Request, db: AsyncSession, user: AuthClaims, run: JobRun
+) -> CancelOut:
+    await service.cancel_run(db, run.id)
+    await db.commit()
+    # The agent runtime stops the run itself; it is the one holding it.
+    await request.app.state.event_bus.publish(
+        events.job_cancel_requested(
+            str(run.id),
+            str(run.thread_id),
+            tenant_id=run.tenant_id,
+            user_id=run.user_id,
+            runtime_run_id=run.runtime_run_id or "",
+        )
+    )
+    return CancelOut(
+        status="cancelled", run_id=str(run.id), thread_id=str(run.thread_id)
+    )
 
 
 @router.post("/runs/{run_id}/cancel")
 async def cancel_run_endpoint(
     run_id: uuid.UUID,
     request: Request,
+    user: AuthClaims = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
-):
-    """Cancel an active workflow run."""
-    run = await get_run(db, run_id)
-    if not run:
-        raise HTTPException(status_code=404, detail="Run not found")
-    if run.status not in ("pending", "running"):
-        raise HTTPException(
-            status_code=409,
-            detail=f"Cannot cancel run in '{run.status}' state",
-        )
-
-    await cancel_run(db, run_id)
-
-    # Propagate cancellation cross-service via the event bus
-    await request.app.state.event_bus.publish(
-        job_cancel_requested(run_id=str(run_id), thread_id=str(run.thread_id))
-    )
-
-    return CancelOut(
-        status="cancelled",
-        run_id=str(run_id),
-        thread_id=str(run.thread_id),
-    )
+) -> CancelOut:
+    run = await service.get_run(db, user, run_id)
+    if run is None:
+        raise Problem(404, "not-found", "Run not found")
+    if run.status not in service.ACTIVE:
+        raise Problem(409, "conflict", f"Cannot cancel a run that is {run.status}")
+    return await _cancel(request, db, user, run)
 
 
 @router.post("/threads/{thread_id}/cancel")
 async def cancel_by_thread_endpoint(
     thread_id: uuid.UUID,
     request: Request,
+    user: AuthClaims = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
-):
-    """Cancel the active workflow run for a thread (convenience for Gateway).
-
-    Uses a distinct path (/threads/{thread_id}/cancel) to avoid ambiguity
-    with /runs/{run_id}/cancel which has the same URL template pattern.
-    """
-    active = await get_active_run_for_thread(db, thread_id)
-    if not active:
-        return CancelOut(
-            status="not_found",
-            run_id="",
-            thread_id=str(thread_id),
-        )
-
-    await cancel_run(db, active.id)
-
-    # Propagate cancellation cross-service via the event bus
-    await request.app.state.event_bus.publish(
-        job_cancel_requested(run_id=str(active.id), thread_id=str(thread_id))
+) -> CancelOut:
+    """Cancel the run going on a thread (the public ``POST /chat/{thread_id}/cancel``)."""
+    # 404 for a thread that is not the caller's, as everywhere else.
+    await request.app.state.conversation_client.request(
+        "GET", f"/threads/{thread_id}", _token(request)
     )
-
-    return CancelOut(
-        status="cancelled",
-        run_id=str(active.id),
-        thread_id=str(thread_id),
-    )
+    run = await service.get_active_run_for_thread(db, user, thread_id)
+    if run is None:
+        return CancelOut(status="not_found", run_id="", thread_id=str(thread_id))
+    return await _cancel(request, db, user, run)

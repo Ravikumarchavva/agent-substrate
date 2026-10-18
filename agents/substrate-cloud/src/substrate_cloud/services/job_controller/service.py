@@ -1,28 +1,32 @@
-"""Job Controller — business logic.
+"""Job Controller: business logic.
 
-Manages job run lifecycle: creation, start, completion, cancellation.
-The Job Controller coordinates between Conversation Service, Agent Runtime,
-and Stream services via events and direct calls.
+A run's lifecycle is pending -> running -> completed | failed | cancelled. The controller creates and starts it; the agent runtime
+announces how it ended (``workflow.run_*`` events) and ``consume_outcomes`` records that. Every lookup is under the caller's
+tenant and, unless the caller administers the tenant, under the caller's user: someone else's run is simply not found.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
-
-import os
 import uuid
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Optional
 
-import httpx2 as httpx
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from substrate_cloud.services.job_controller.models import JobRun
-from substrate.integrations.events import EventBus
-from substrate_cloud.shared.events.types import workflow_failed, workflow_started
+from substrate_cloud.shared.auth.claims import AuthClaims
+from substrate_cloud.shared.events import types as events
 
 logger = logging.getLogger(__name__)
+
+ACTIVE = ("pending", "running")
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 # ── Run CRUD ─────────────────────────────────────────────────────────────────
@@ -30,27 +34,19 @@ logger = logging.getLogger(__name__)
 
 async def create_run(
     db: AsyncSession,
+    claims: AuthClaims,
     *,
     thread_id: uuid.UUID,
-    user_id: Optional[uuid.UUID] = None,
     user_content: str = "",
     system_instructions: Optional[str] = None,
     file_ids: Optional[list] = None,
     client_request_id: Optional[str] = None,
 ) -> JobRun:
-    """Create a new job run in pending state."""
-    # Idempotency: if a client_request_id is provided and already exists, return the existing run
-    if client_request_id:
-        result = await db.execute(
-            select(JobRun).where(JobRun.client_request_id == client_request_id)
-        )
-        existing = result.scalar_one_or_none()
-        if existing:
-            return existing
-
+    """A new run in pending state for the caller."""
     run = JobRun(
         thread_id=thread_id,
-        user_id=user_id,
+        tenant_id=claims.tenant_id,
+        user_id=claims.sub,
         user_content=user_content,
         system_instructions=system_instructions,
         file_ids=file_ids or [],
@@ -62,181 +58,136 @@ async def create_run(
     return run
 
 
-async def get_run(db: AsyncSession, run_id: uuid.UUID) -> Optional[JobRun]:
-    result = await db.execute(select(JobRun).where(JobRun.id == run_id))
-    return result.scalar_one_or_none()
+def _visible(claims: AuthClaims):
+    """The WHERE clauses of what the caller may see: their tenant, and their own runs unless they administer it."""
+    clauses = [JobRun.tenant_id == claims.tenant_id]
+    if not claims.is_admin:
+        clauses.append(JobRun.user_id == claims.sub)
+    return clauses
+
+
+async def find_by_request_id(
+    db: AsyncSession, claims: AuthClaims, client_request_id: str
+) -> Optional[JobRun]:
+    """The run this caller already started under an idempotency key, if any."""
+    return (
+        await db.execute(
+            select(JobRun).where(
+                JobRun.tenant_id == claims.tenant_id,
+                JobRun.user_id == claims.sub,
+                JobRun.client_request_id == client_request_id,
+            )
+        )
+    ).scalar_one_or_none()
+
+
+async def get_run(
+    db: AsyncSession, claims: AuthClaims, run_id: uuid.UUID
+) -> Optional[JobRun]:
+    return (
+        await db.execute(select(JobRun).where(JobRun.id == run_id, *_visible(claims)))
+    ).scalar_one_or_none()
 
 
 async def get_active_run_for_thread(
-    db: AsyncSession,
-    thread_id: uuid.UUID,
+    db: AsyncSession, claims: AuthClaims, thread_id: uuid.UUID
 ) -> Optional[JobRun]:
-    """Get any currently running job for a thread (single-flight check)."""
-    result = await db.execute(
-        select(JobRun)
-        .where(
-            JobRun.thread_id == thread_id,
-            JobRun.status.in_(["pending", "running"]),
+    """The run still going on a thread (the single-flight check)."""
+    return (
+        await db.execute(
+            select(JobRun)
+            .where(
+                JobRun.thread_id == thread_id,
+                JobRun.status.in_(ACTIVE),
+                *_visible(claims),
+            )
+            .order_by(JobRun.created_at.desc())
+            .limit(1)
         )
-        .order_by(JobRun.created_at.desc())
-        .limit(1)
+    ).scalar_one_or_none()
+
+
+async def _settle(
+    db: AsyncSession, run_id: uuid.UUID, **values: Any
+) -> Optional[JobRun]:
+    """Move a run that is still going to its end state. A run that already ended stays as it ended."""
+    await db.execute(
+        update(JobRun)
+        .where(JobRun.id == run_id, JobRun.status.in_(ACTIVE))
+        .values(completed_at=_now(), **values)
     )
-    return result.scalar_one_or_none()
+    await db.flush()
+    return (
+        await db.execute(select(JobRun).where(JobRun.id == run_id))
+    ).scalar_one_or_none()
 
 
 async def start_run(
-    db: AsyncSession,
-    run_id: uuid.UUID,
+    db: AsyncSession, run_id: uuid.UUID, *, runtime_run_id: str
 ) -> Optional[JobRun]:
-    """Transition run from pending to running."""
-    now = datetime.now(timezone.utc)
+    """pending -> running, once the agent runtime has accepted the run."""
     await db.execute(
         update(JobRun)
         .where(JobRun.id == run_id, JobRun.status == "pending")
-        .values(status="running", started_at=now)
+        .values(status="running", started_at=_now(), runtime_run_id=runtime_run_id)
     )
     await db.flush()
-    return await get_run(db, run_id)
+    return (
+        await db.execute(select(JobRun).where(JobRun.id == run_id))
+    ).scalar_one_or_none()
 
 
 async def complete_run(
-    db: AsyncSession,
-    run_id: uuid.UUID,
-    *,
-    steps_count: int = 0,
+    db: AsyncSession, run_id: uuid.UUID, *, steps_count: int = 0
 ) -> Optional[JobRun]:
-    """Mark a run as completed."""
-    now = datetime.now(timezone.utc)
-    await db.execute(
-        update(JobRun)
-        .where(JobRun.id == run_id)
-        .values(
-            status="completed",
-            completed_at=now,
-            steps_count=steps_count,
-        )
-    )
-    await db.flush()
-    return await get_run(db, run_id)
+    return await _settle(db, run_id, status="completed", steps_count=steps_count)
 
 
 async def fail_run(
-    db: AsyncSession,
-    run_id: uuid.UUID,
-    *,
-    error_message: str = "",
+    db: AsyncSession, run_id: uuid.UUID, *, error_message: str = ""
 ) -> Optional[JobRun]:
-    """Mark a run as failed."""
-    now = datetime.now(timezone.utc)
-    await db.execute(
-        update(JobRun)
-        .where(JobRun.id == run_id)
-        .values(
-            status="failed",
-            completed_at=now,
-            error_message=error_message,
-        )
-    )
-    await db.flush()
-    return await get_run(db, run_id)
+    return await _settle(db, run_id, status="failed", error_message=error_message)
 
 
-async def cancel_run(
-    db: AsyncSession,
-    run_id: uuid.UUID,
-) -> Optional[JobRun]:
-    """Mark a run as cancelled."""
-    now = datetime.now(timezone.utc)
-    await db.execute(
-        update(JobRun)
-        .where(
-            JobRun.id == run_id,
-            JobRun.status.in_(["pending", "running"]),
-        )
-        .values(status="cancelled", completed_at=now)
-    )
-    await db.flush()
-    return await get_run(db, run_id)
+async def cancel_run(db: AsyncSession, run_id: uuid.UUID) -> Optional[JobRun]:
+    return await _settle(db, run_id, status="cancelled")
 
 
-# ── Orchestration ────────────────────────────────────────────────────────────
+# ── Consuming how runs ended ─────────────────────────────────────────────────
 
 
-async def dispatch_run(
-    *,
-    run: JobRun,
-    event_bus: EventBus,
-    session_factory,
-    redis_client,
-    agent_runtime_url: str = "",
-) -> None:
-    """Dispatch a job run to the Agent Runtime.
-
-    This is the core orchestration logic. It:
-    1. Transitions the run to 'running'
-    2. Publishes a workflow_started event
-    3. Sends the run command to the Agent Runtime via event bus
-    4. Monitors for completion or cancellation
-
-    The Agent Runtime subscribes to the run command event and
-    executes the agent, publishing progress events back.
-    """
-    run_id = str(run.id)
-    thread_id = str(run.thread_id)
-
+async def apply_outcome(session_factory: Any, envelope: Any) -> None:
+    """Record a ``workflow.run_*`` event on its run."""
+    payload = envelope.payload
     try:
-        # Transition to running
-        async with session_factory() as db:
-            started_run = await start_run(db, run.id)
-            if started_run is None:
-                raise RuntimeError(f"Run {run_id} could not be started")
-            run = started_run
-            await db.commit()
+        run_id = uuid.UUID(payload["run_id"])
+    except (KeyError, ValueError):
+        logger.warning("Outcome event without a usable run id: %s", envelope.event_id)
+        return
+    async with session_factory() as db:
+        if envelope.event_type == events.RUN_COMPLETED:
+            await complete_run(db, run_id, steps_count=int(payload.get("steps", 0)))
+        elif envelope.event_type == events.RUN_FAILED:
+            await fail_run(db, run_id, error_message=str(payload.get("error", "")))
+        elif envelope.event_type == events.RUN_CANCELLED:
+            await cancel_run(db, run_id)
+        await db.commit()
 
-        # Publish start event
-        event = workflow_started(
-            run_id=run_id,
-            thread_id=thread_id,
-            user_content=run.user_content or "",
-            correlation_id=run_id,
-        )
-        await event_bus.publish(event)
 
-        # Dispatch to Agent Runtime via HTTP
-        runtime_url = agent_runtime_url or os.environ.get(
-            "AGENT_RUNTIME_SERVICE_URL",
-            os.environ.get("AGENT_RUNTIME_URL", "http://localhost:8014"),
-        )
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.post(
-                f"{runtime_url}/agent/run",
-                json={
-                    "run_id": run_id,
-                    "thread_id": thread_id,
-                    "user_content": run.user_content or "",
-                    "system_instructions": run.system_instructions or "",
-                    "file_ids": run.file_ids or [],
-                },
-            )
-            resp.raise_for_status()
-            logger.info(
-                "Agent Runtime accepted run %s (status %s)",
-                run_id,
-                resp.status_code,
-            )
+async def consume_outcomes(app: Any) -> None:
+    """Background task: finish the runs the agent runtime reports on (completed, failed or cancelled)."""
 
-        logger.info("Dispatched job run %s for thread %s", run_id, thread_id)
+    async def follow(event_type: str) -> None:
+        async for envelope in app.state.event_bus.subscribe(
+            event_type, group="job-controller"
+        ):
+            try:
+                await apply_outcome(app.state.session_factory, envelope)
+            except Exception:
+                logger.exception("Could not apply %s", envelope.event_type)
 
-    except Exception as exc:
-        logger.exception("Failed to dispatch job run %s", run_id)
-        async with session_factory() as db:
-            await fail_run(db, run.id, error_message=str(exc))
-            await db.commit()
-
-        error_event = workflow_failed(
-            run_id=run_id,
-            thread_id=thread_id,
-            error=str(exc),
-            correlation_id=run_id,
-        )
-        await event_bus.publish(error_event)
+    await asyncio.gather(
+        follow(events.RUN_COMPLETED),
+        follow(events.RUN_FAILED),
+        follow(events.RUN_CANCELLED),
+    )

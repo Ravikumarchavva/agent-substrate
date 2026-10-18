@@ -231,7 +231,7 @@ def _membership(cfg: SubstrateConfig) -> KeycloakMembership | None:
     return None
 
 
-def _init_file_access(cfg: SubstrateConfig, store: Any) -> tuple[FileAccess, Any]:
+def init_file_access(cfg: SubstrateConfig, store: Any) -> tuple[FileAccess, Any]:
     """Where files live: Substrate Data's Files domain when ``DATA_SERVICE_URL`` is set, else the store's own ``files`` folder.
 
     Returns the access object and, with a data service, the minter whose public keys it must fetch (served at the JWKS route).
@@ -297,7 +297,7 @@ async def init_infrastructure(
 
     task_store: Any = store.tasks
 
-    file_access, data_minter = _init_file_access(cfg, store)
+    file_access, data_minter = init_file_access(cfg, store)
     file_store = file_access.shared
     # Curated OKF bundles ride on the same object store as files (one
     # bucket, one erasure path, one quota) but under their own key prefix,
@@ -1024,21 +1024,6 @@ def build_safety_middleware(cfg: SubstrateConfig) -> Any:
     )
 
 
-async def build_cached_history_for_thread(
-    thread_id: str,
-    *,
-    system_instructions: str,
-    history: Any,
-    conversation_service_url: str,
-) -> Any:
-    """Return the history provider for this thread."""
-    if history is not None:
-        return history
-    from substrate.stores import Store
-
-    return Store.at().threads
-
-
 def build_memory_tool(
     session_id: str,
     short_term_memory: Any,
@@ -1146,21 +1131,27 @@ def build_agent_for_run(
     model_client: Any,
     tools: list[Any],
     system_instructions: str,
-    memory: Any,
+    history: Any,
+    tenant_id: str,
     session_id: str | None = None,
     model_context_window: int = 40,
     max_iterations: int = 30,
 ) -> Any:
-    """Create a stateless agent for a microservice agent_runtime run."""
+    """Create a stateless agent for a microservice agent_runtime run.
+
+    The conversation is read and written through the tenant's bound handle on ``history``, as in the monolith.
+    """
     from substrate.context import CompactionPipeline
     from substrate.context import SlidingWindowCompaction
     from substrate.agents.factory import create_assistant_agent
+    from substrate.stores import bind_threads
+    from substrate.types import Scope
 
     return create_assistant_agent(
         model_client=model_client,
         tools=tools,
         system_instructions=system_instructions,
-        memory=memory,
+        memory=bind_threads(history, Scope(tenant_id=tenant_id or "default")),
         model_context=CompactionPipeline(
             [SlidingWindowCompaction(max_messages=model_context_window)]
         ),

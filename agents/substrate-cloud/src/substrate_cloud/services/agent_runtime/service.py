@@ -1,174 +1,132 @@
-"""Agent Runtime service logic."""
+"""Agent Runtime service logic.
+
+The runtime runs the agent and journals everything it does in the shared store (the record ``live_stream`` serves and
+``conversation`` projects). What this module adds is the platform's side: the run belongs to the token's tenant and user, and its end is
+announced as a ``workflow.run_*`` event for the job controller and the audit trail.
+"""
 
 from __future__ import annotations
 
 import logging
+from typing import Any
 
-from substrate.types import RunLogKind
-
-from substrate_cloud.factory import (
-    build_agent_for_run,
-    build_cached_history_for_thread,
-)
-from substrate.integrations.events import EventBus
-from substrate.integrations.events.envelope import EventEnvelope
-from substrate.types import ChatMessage, Role
-from substrate.types import Actor
 from substrate.runtime import ChatPayload, Message
-from substrate.stores import ThreadStore
-from substrate.types import TextBlock
+from substrate.types import (
+    Actor,
+    ChatMessage,
+    Role,
+    RunLogKind,
+    TextBlock,
+    ThreadBusyError,
+)
+
+from substrate_cloud.factory import build_agent_for_run
+from substrate_cloud.shared.auth.claims import AuthClaims
+from substrate_cloud.shared.events import types as events
+from substrate_cloud.shared.problem import Problem
 
 logger = logging.getLogger(__name__)
 
 
-async def load_memory_for_thread(
+async def submit_run(
     *,
-    thread_id: str,
-    system_instructions: str,
-    history: ThreadStore | None,
-    conversation_service_url: str,
-) -> object:
-    """Wrap the shared history cache so it self-heals from the conversation
-    service (the cold store for this microservice) on a cold session."""
-    return await build_cached_history_for_thread(
-        thread_id,
-        system_instructions=system_instructions,
-        history=history,
-        conversation_service_url=conversation_service_url,
-    )
-
-
-def create_agent(
-    *,
-    model_client: object,
+    runtime: Any,
+    model_client: Any,
     tools: list,
+    history: Any,
     system_instructions: str,
-    memory: object,
-    session_id: str | None = None,
-    model_context_window: int = 40,
-    max_iterations: int = 30,
-) -> object:
-    """Create the agent used by the runtime service."""
-    return build_agent_for_run(
+    user: AuthClaims,
+    thread_id: str,
+    user_content: str,
+) -> str:
+    """Build the thread's agent, register it and hand the run to the runtime. Returns the runtime's id for the run.
+
+    Tenant and user come from the verified token and travel with the run (its scope), exactly as in the monolith's chat route. A
+    thread has one active run at a time, enforced by the runtime across every replica: a second submit is a 409.
+    """
+    agent = build_agent_for_run(
         model_client=model_client,
         tools=tools,
         system_instructions=system_instructions,
-        memory=memory,
-        session_id=session_id,
-        model_context_window=model_context_window,
-        max_iterations=max_iterations,
+        history=history,
+        tenant_id=user.tenant_id,
+        session_id=thread_id,
     )
-
-
-async def execute_agent_run(
-    *,
-    agent: object,
-    user_content: str,
-    run_id: str,
-    thread_id: str,
-    event_bus: EventBus,
-    runtime: object,
-) -> None:
-    """Execute an agent run and publish distributed runtime events via the EventBus."""
-    await runtime.register(agent)  # type: ignore[union-attr]
-
-    msg = Message(
-        target=agent.id,  # type: ignore[union-attr]
-        sender=Actor(type="job_proxy"),
+    await runtime.register(agent, pinned=False)
+    message = Message(
+        target=agent.id,
+        sender=Actor(type="http_proxy"),
         payload=ChatPayload(
             message=ChatMessage(role=Role.USER, content=[TextBlock(text=user_content)])
         ),
         correlation_id=thread_id,
+        metadata={
+            "display_text": user_content,
+            "attachments": [],
+            "user_id": user.sub,
+            "tenant_id": user.tenant_id,
+            "branch_id": "main",
+        },
     )
-    actual_run_id = await runtime.submit(agent.id, msg)  # type: ignore[union-attr]
+    try:
+        return str(
+            await runtime.submit(
+                agent.id,
+                message,
+                max_retries=0,
+                thread_id=thread_id,
+                tenant=user.tenant_id,
+            )
+        )
+    except ThreadBusyError as exc:
+        raise Problem(
+            409, "conflict", f"A run is already active on thread {thread_id}"
+        ) from exc
 
-    async for entry in runtime.tail(actual_run_id):  # type: ignore[union-attr]
+
+async def announce_outcome(
+    *,
+    runtime: Any,
+    event_bus: Any,
+    job_run_id: str,
+    runtime_run_id: str,
+    thread_id: str,
+    tenant_id: str,
+    user_id: str,
+) -> None:
+    """Follow the run's journal to its end and publish how it ended (``workflow.run_completed|failed|cancelled``)."""
+    ids = {"tenant_id": tenant_id, "user_id": user_id}
+    steps = 0
+    async for entry in runtime.tail(runtime_run_id):
         kind = entry.kind
-        p = entry.payload or {}
-
-        if kind == RunLogKind.TEXT_DELTA:
-            await event_bus.publish(
-                EventEnvelope(
-                    event_type="agent.text_delta",
-                    payload={
-                        "type": "text_delta",
-                        "run_id": run_id,
-                        "thread_id": thread_id,
-                        "content": p.get("text", ""),
-                        "partial": True,
-                    },
-                )
-            )
-
-        elif kind == RunLogKind.REASONING_DELTA:
-            await event_bus.publish(
-                EventEnvelope(
-                    event_type="agent.reasoning_delta",
-                    payload={
-                        "type": "reasoning_delta",
-                        "run_id": run_id,
-                        "thread_id": thread_id,
-                        "content": p.get("text", ""),
-                        "partial": True,
-                    },
-                )
-            )
-
-        elif kind == RunLogKind.TOOL_CALL:
-            await event_bus.publish(
-                EventEnvelope(
-                    event_type="agent.tool_call",
-                    payload={
-                        "type": "tool_call",
-                        "run_id": run_id,
-                        "thread_id": thread_id,
-                        "name": p.get("tool_name", ""),
-                    },
-                )
-            )
-
-        elif kind == RunLogKind.TOOL_RESULT:
-            await event_bus.publish(
-                EventEnvelope(
-                    event_type="agent.tool_result",
-                    payload={
-                        "type": "tool_result",
-                        "run_id": run_id,
-                        "thread_id": thread_id,
-                        "name": p.get("tool_name", ""),
-                        "ok": bool(p.get("ok", True)),
-                    },
-                )
-            )
-
+        if kind == RunLogKind.TOOL_RESULT:
+            steps += 1
         elif kind == RunLogKind.RUN_COMPLETED:
             await event_bus.publish(
-                EventEnvelope(
-                    event_type="agent.run_completed",
-                    payload={
-                        "type": "agent.run_completed",
-                        "run_id": run_id,
-                        "thread_id": thread_id,
-                    },
-                )
+                events.workflow_completed(job_run_id, thread_id, steps=steps, **ids)
             )
             return
-
         elif kind == RunLogKind.RUN_FAILED:
-            error = p.get("error", "Agent run failed")
-            logger.error("Agent run %s failed: %s", run_id, error)
+            error = (entry.payload or {}).get("error", "agent run failed")
+            logger.error("Run %s failed: %s", job_run_id, error)
             await event_bus.publish(
-                EventEnvelope(
-                    event_type="agent.run_failed",
-                    payload={
-                        "type": "agent.run_failed",
-                        "run_id": run_id,
-                        "thread_id": thread_id,
-                        "error": error,
-                    },
-                )
+                events.workflow_failed(job_run_id, thread_id, error=str(error), **ids)
+            )
+            return
+        elif kind == RunLogKind.RUN_CANCELLED:
+            await event_bus.publish(
+                events.workflow_cancelled(job_run_id, thread_id, **ids)
             )
             return
 
-        elif kind == RunLogKind.RUN_CANCELLED:
-            return
+
+async def cancel_requested(runtime: Any, envelope: Any) -> None:
+    """Stop the run a ``job.cancel_requested`` event names (this replica or, via the durable flag, whichever one holds it)."""
+    payload = envelope.payload
+    run_id = payload.get("runtime_run_id") or ""
+    if not run_id:
+        found = await runtime.active_run_for_thread(payload.get("thread_id", ""))
+        run_id = found.run_id if found else ""
+    if run_id:
+        logger.info("Cancelling run %s", run_id)
+        await runtime.cancel(run_id, reason="user_requested")

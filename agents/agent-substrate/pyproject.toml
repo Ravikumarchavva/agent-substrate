@@ -47,7 +47,7 @@ redis = ["redis[hiredis]>=5.0.0"]
 # scheduled/cron triggers
 scheduler = ["apscheduler>=4.0.0a5"]
 # MCP tools
-mcp = ["mcp>=1.0.0"]
+mcp = ["mcp>=2.3.0"]
 # text-to-speech
 tts = ["kokoro>=0.9.4", "soundfile>=0.12.1"]
 # skills and curated artifacts (YAML front matter)

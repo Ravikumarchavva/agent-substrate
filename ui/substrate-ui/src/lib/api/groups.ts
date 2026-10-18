@@ -1,0 +1,220 @@
+import { API_BASE, requestJson, requestVoid } from "./_client";
+
+/** How closely a member follows the group: every message, only what is addressed to it, or only what names it. */
+export type MemberMode = "all" | "mentions" | "muted";
+
+export interface GroupMember {
+  agent_id: string;
+  name: string;
+  role: string;
+  mode: MemberMode;
+  avatar: string | null;
+  /** What this agent has used in the group. */
+  tokens_used: number;
+  cost_usd: number;
+}
+
+export interface Group {
+  id: string;
+  name: string;
+  created_at: string;
+  updated_at: string;
+  members: GroupMember[];
+  last_message: string | null;
+  last_sender: string | null;
+  /** Messages from agents the user has not seen. */
+  unread: number;
+  /** Agents spoke a long time without a person; a message from the user resumes it. */
+  paused: boolean;
+  /** Members thinking about it right now. */
+  working: string[];
+  /** What the agents have used in this group, and the most they may. */
+  tokens_used: number;
+  token_cap: number;
+  /** The most the agents may spend here in dollars, or null for no limit; and what they have spent. */
+  budget_usd: number | null;
+  cost_usd: number;
+  /** How many messages in a row the agents may add without you before the group pauses. */
+  breaker: number;
+  avatar: string | null;
+  pinned_at: string | null;
+}
+
+/** A file in a group: shared by someone in it, or made by an agent there. */
+export interface GroupFile {
+  name: string;
+  size: number;
+  mime: string;
+  /** Storage key; the file is at `buildObjectUrl(key)`. */
+  key: string;
+  /** The start of its text, which the agents are shown. Absent for a picture or a file with no text. */
+  excerpt?: string | null;
+  truncated?: boolean;
+  /** A picture of the first page (a PDF), at `buildObjectUrl(preview_key)`, and how many pages there are. */
+  preview_key?: string | null;
+  pages?: number | null;
+  modified?: number | null;
+  /** What a recording says, which the agents read. */
+  transcript?: string | null;
+}
+
+/** One person's reaction to a message. */
+export interface Reaction {
+  emoji: string;
+  sender_id: string;
+  sender: string;
+  from_user: boolean;
+}
+
+export interface GroupEntry {
+  seq: number;
+  /** The same however the entry is reached. */
+  id: string;
+  sender_id: string;
+  sender: string;
+  from_user: boolean;
+  /**
+   * `message` is something someone said and `system` a note from the group itself (it paused). `edit`, `reaction` and `tombstone` are not shown:
+   * they say what happened to the entry in `reply_to` (the new text, the emoji, a delete), and `foldEntries` applies them to it.
+   */
+  kind: "message" | "system" | "edit" | "reaction" | "tombstone";
+  text: string;
+  /** Names of who it addresses (`everyone` for all). */
+  mentions: string[];
+  reply_to: number | null;
+  attachments: GroupFile[];
+  at: string;
+  edited_at?: string | null;
+  /** Set when its sender took it back: the text and files are gone. */
+  deleted_at?: string | null;
+  reactions?: Reaction[];
+}
+
+export interface GroupMessages {
+  entries: GroupEntry[];
+  latest: number;
+  /** Members thinking about it right now. */
+  working: string[];
+  /** The latest entry every agent has read: your messages up to here show as seen by all. */
+  read_by_all: number;
+}
+
+export interface Contact {
+  agent_id: string;
+  name: string;
+  role: string;
+  note: string;
+}
+
+export const groupsApi = {
+  async getGroups(): Promise<Group[]> {
+    return requestJson<Group[]>("/groups");
+  },
+
+  async createGroup(name: string, members: { agent_id: string; mode: MemberMode }[]): Promise<Group> {
+    return requestJson<Group>("/groups", { method: "POST", body: JSON.stringify({ name, members }) });
+  },
+
+  async renameGroup(id: string, name: string): Promise<Group> {
+    return requestJson<Group>(`/groups/${id}`, { method: "PATCH", body: JSON.stringify({ name }) });
+  },
+
+  async setGroupTokenCap(id: string, tokenCap: number): Promise<Group> {
+    return requestJson<Group>(`/groups/${id}`, { method: "PATCH", body: JSON.stringify({ token_cap: tokenCap }) });
+  },
+
+  /** `budget_usd: 0` removes the dollar limit. */
+  async setGroupLimits(id: string, limits: { budget_usd?: number; breaker?: number }): Promise<Group> {
+    return requestJson<Group>(`/groups/${id}`, { method: "PATCH", body: JSON.stringify(limits) });
+  },
+
+  async deleteGroup(id: string): Promise<void> {
+    await requestVoid(`/groups/${id}`, { method: "DELETE" });
+  },
+
+  /** What was said after `after` (the whole log when omitted). With `waitSeconds` the server holds the request until something is said. */
+  async getGroupMessages(id: string, after = -1, waitSeconds = 0): Promise<GroupMessages> {
+    return requestJson<GroupMessages>(`/groups/${id}/messages?after=${after}&wait=${waitSeconds}`);
+  },
+
+  async sendGroupMessage(id: string, text: string, replyTo: number | null, attachments: GroupFile[] = []): Promise<GroupEntry> {
+    return requestJson<GroupEntry>(`/groups/${id}/messages`, {
+      method: "POST",
+      body: JSON.stringify({ text, reply_to: replyTo, attachments: attachments.map(({ key, name, size, mime, excerpt, truncated, preview_key, pages }) => ({ key, name, size, mime, excerpt, truncated, preview_key, pages })) }),
+    });
+  },
+
+  /** Add a file to the group's shared files; send it with a message to attach it. */
+  async uploadGroupFile(id: string, file: File): Promise<GroupFile> {
+    const form = new FormData();
+    form.append("file", file);
+    return requestJson<GroupFile>(`/groups/${id}/files`, { method: "POST", body: form });
+  },
+
+  async getGroupFiles(id: string): Promise<GroupFile[]> {
+    return requestJson<GroupFile[]>(`/groups/${id}/files`);
+  },
+
+  async setGroupAvatar(id: string, file: File): Promise<Group> {
+    const form = new FormData();
+    form.append("file", file);
+    return requestJson<Group>(`/groups/${id}/avatar`, { method: "PUT", body: form });
+  },
+
+  async clearGroupAvatar(id: string): Promise<Group> {
+    return requestJson<Group>(`/groups/${id}/avatar`, { method: "DELETE" });
+  },
+
+  async setGroupPinned(id: string, pinned: boolean): Promise<Group> {
+    return requestJson<Group>(`/groups/${id}/pin`, { method: pinned ? "PUT" : "DELETE" });
+  },
+
+  /** Change what you said; the agents are not woken by it. Returns the entry that records the edit. */
+  async editGroupMessage(id: string, seq: number, text: string): Promise<GroupEntry> {
+    return requestJson<GroupEntry>(`/groups/${id}/messages/${seq}`, { method: "PATCH", body: JSON.stringify({ text }) });
+  },
+
+  /** Take back what you said, for everyone. */
+  async deleteGroupMessage(id: string, seq: number): Promise<GroupEntry> {
+    return requestJson<GroupEntry>(`/groups/${id}/messages/${seq}`, { method: "DELETE" });
+  },
+
+  /** Your one reaction to a message; an empty emoji takes it back. */
+  async reactToGroupMessage(id: string, seq: number, emoji: string): Promise<GroupEntry> {
+    return requestJson<GroupEntry>(`/groups/${id}/messages/${seq}/reaction`, { method: "PUT", body: JSON.stringify({ emoji }) });
+  },
+
+  /** The one stream with everything happening in your groups (see `lib/realtime.ts`): `since` is, per group, the last entry you hold. `watch` also follows an agent's pairs (its account, viewed). */
+  async openGroupFeed(since: Record<string, number>, signal: AbortSignal, watch?: string): Promise<Response> {
+    return fetch(`${API_BASE}/feed`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+      body: JSON.stringify({ since, ...(watch ? { watch } : {}) }),
+      signal,
+    });
+  },
+
+  async markGroupRead(id: string, upto: number): Promise<void> {
+    await requestVoid(`/groups/${id}/read`, { method: "POST", body: JSON.stringify({ upto }) });
+  },
+
+  async addGroupMember(id: string, agentId: string, mode: MemberMode = "mentions"): Promise<Group> {
+    return requestJson<Group>(`/groups/${id}/members`, { method: "POST", body: JSON.stringify({ agent_id: agentId, mode }) });
+  },
+
+  async setGroupMemberMode(id: string, agentId: string, mode: MemberMode): Promise<Group> {
+    return requestJson<Group>(`/groups/${id}/members/${agentId}`, { method: "PATCH", body: JSON.stringify({ mode }) });
+  },
+
+  async removeGroupMember(id: string, agentId: string): Promise<void> {
+    await requestVoid(`/groups/${id}/members/${agentId}`, { method: "DELETE" });
+  },
+
+  async getContacts(agentId: string): Promise<Contact[]> {
+    return requestJson<Contact[]>(`/agents/${agentId}/contacts`);
+  },
+
+  async setContacts(agentId: string, contacts: { agent_id: string; note: string }[]): Promise<Contact[]> {
+    return requestJson<Contact[]>(`/agents/${agentId}/contacts`, { method: "PUT", body: JSON.stringify({ contacts }) });
+  },
+};

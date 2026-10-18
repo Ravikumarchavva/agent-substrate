@@ -1,0 +1,324 @@
+@import "tailwindcss";
+
+/* ─── Shared design tokens ───────────────────────────────────────────────── */
+@import "../design/tokens.css";
+
+*, *::before, *::after { box-sizing: border-box; }
+html, body { height: 100%; }
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-text-size-adjust: 100%; /* Prevent iOS font size inflation */
+  text-size-adjust: 100%;
+  transition: background-color 0.15s, color 0.15s;
+  /* Ensure full-height layout on mobile (addresses iOS Safari address bar) */
+  min-height: 100dvh;
+}
+
+/* ─── Universal interactive element improvements ─────────────────────────── */
+button, a, [role="button"], summary, label[for] {
+  cursor: pointer;
+  /* Remove ugly iOS tap highlight */
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Minimum 44×44px touch target for accessibility (WCAG 2.5.5), on touch screens only and in the base layer, so a utility such as h-8
+   still sizes a button on desktop instead of losing to this rule. */
+@layer base {
+  @media (pointer: coarse) {
+    button, a, [role="button"] {
+      min-height: 44px;
+      min-width: 44px;
+    }
+  }
+}
+
+/* Inline/icon buttons override — they shouldn't force 44px box-model */
+.btn-icon {
+  min-height: unset;
+  min-width: unset;
+}
+
+/* Make standard select tags look like custom dropdowns */
+select {
+  appearance: none;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3E%3C/svg%3E");
+  background-position: right 1rem center;
+  background-repeat: no-repeat;
+  background-size: 1.5em 1.5em;
+  padding-right: 2.5rem;
+}
+
+[data-theme="dark"] select, .dark select {
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%239ca3af' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3E%3C/svg%3E");
+}
+
+/* Prevent long words/URLs from breaking layout on small screens */
+.prose-chat p, .prose-chat li {
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+::-webkit-scrollbar        { width: 5px; height: 5px; }
+::-webkit-scrollbar-track  { background: transparent; }
+::-webkit-scrollbar-thumb  { background: var(--border); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: var(--card-hover); }
+*                          { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+
+/* The one way a region scrolls: smooth, contained (no bounce into the page behind), and the bar never shifts the layout. */
+.scroll-area { overflow-y: auto; scroll-behavior: smooth; overscroll-behavior: contain; scrollbar-gutter: stable; }
+@media (prefers-reduced-motion: reduce) { .scroll-area { scroll-behavior: auto; } }
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
+/* ─── Attachment cards (MessageBubble file attachments) ──────────────────── */
+.attachment-card {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+  transition: background-color 150ms ease, border-color 150ms ease;
+}
+
+.attachment-card:hover {
+  background: var(--card-hover);
+}
+
+.attachment-card__preview {
+  position: relative;
+  flex-shrink: 0;
+  width: 56px;
+  height: 56px;
+  overflow: hidden;
+  border-radius: 10px;
+  background: var(--card-hover);
+}
+
+.attachment-meta-pill {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--muted);
+  background: var(--card);
+}
+
+/* ─── Prose ─────────────────────────────────────────────────────────────── */
+.prose-chat {
+  color: inherit;
+  max-width: none;
+  line-height: 1.7;
+  font-size: 0.9375rem;
+}
+.prose-chat h1,.prose-chat h2,.prose-chat h3 { font-weight:600; margin-top:1.25em; margin-bottom:0.5em; line-height:1.3; }
+.prose-chat h1 { font-size:1.35rem; }
+.prose-chat h2 { font-size:1.15rem; }
+.prose-chat h3 { font-size:1rem; }
+.prose-chat p  { margin-bottom:0.75em; }
+.prose-chat ul,.prose-chat ol { padding-left:1.5em; margin-bottom:0.75em; }
+.prose-chat ul { list-style: disc; }
+.prose-chat ol { list-style: decimal; }
+.prose-chat > :last-child { margin-bottom: 0; }
+.prose-chat li { margin-bottom:0.25em; }
+.prose-chat code:not(pre > code) {
+  background: var(--badge-bg); border: 1px solid var(--border); border-radius:6px;
+  padding:2px 6px; font-size:0.84em;
+  font-family: ui-monospace, Menlo, Monaco, "Cascadia Code", monospace;
+}
+.prose-chat pre {
+  background: var(--code-bg); border: 1px solid var(--border); border-radius:12px;
+  padding:1rem; overflow-x:auto; margin:0.75em 0;
+  color: var(--code-fg);
+}
+.prose-chat pre code { background:none; border:none; padding:0; font-size:0.84rem; color:inherit; font-family:ui-monospace,Menlo,Monaco,monospace; }
+.prose-chat blockquote { border-left:3px solid var(--muted); padding-left:1em; margin:0.75em 0; opacity:0.7; }
+.prose-chat table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+}
+.prose-chat th,
+.prose-chat td {
+  border: none;
+  border-bottom: 1px solid var(--border);
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  text-align: left;
+}
+.prose-chat th {
+  font-weight: 600;
+  color: var(--foreground);
+  background: transparent;
+}
+.prose-chat th:last-child,
+.prose-chat td:last-child {
+  padding-right: 3.5rem;
+}
+.prose-chat a  { text-decoration:underline; text-underline-offset: 2px; }
+
+/* ─── Chainlit shimmer for streaming text ────────────────────────────────── */
+.streaming-cursor::after {
+  content:"▋"; animation:blink 0.7s step-end infinite; opacity:0.7; font-size:0.75em; margin-left:1px;
+}
+@keyframes blink { 50%{ opacity:0; } }
+
+/* ─── Step highlight (task update blink) ─────────────────────────────────── */
+.task-highlight { animation: task-highlight-blink 0.6s linear 0s 2; }
+@keyframes task-highlight-blink {
+  0%,25%  { background-color: color-mix(in srgb, var(--accent) 15%, transparent); }
+  50%,100%{ background-color: transparent; }
+}
+
+.writing-mode-vertical { writing-mode:vertical-rl; text-orientation:mixed; }
+
+/* ═══════════════════════════════════════════════════════════════════════════ */
+/* ─── Substrate UI Motion System ────────────────────────────────────────── */
+/* Shared animation tokens, keyframes, and utility classes used across       */
+/* Substrate UI for a consistent, premium feel.                              */
+
+/* ─── Keyframes ──────────────────────────────────────────────────────────── */
+@keyframes substrate-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes substrate-fade-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes substrate-fade-down {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes substrate-slide-in-left {
+  from { transform: translateX(-100%); opacity: 0; }
+  to   { transform: translateX(0);     opacity: 1; }
+}
+
+@keyframes substrate-slide-in-right {
+  from { transform: translateX(24px); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+
+@keyframes substrate-slide-down {
+  from { transform: translateY(-6px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+@keyframes substrate-scale-in {
+  from { opacity: 0; transform: scale(0.95); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes substrate-pop-in {
+  from { opacity: 0; transform: scale(0.9) translateY(4px); }
+  to   { opacity: 1; transform: scale(1)   translateY(0); }
+}
+
+/* ─── Utility classes ────────────────────────────────────────────────────── */
+/* All support optional --stagger delay: set --stagger on the element.       */
+/* e.g. style="--stagger: 1" → 60ms delay (index × 60ms)                    */
+.substrate-fade-in {
+  animation: substrate-fade-in var(--duration-normal) var(--ease-out-expo) both;
+  animation-delay: calc(var(--stagger, 0) * 60ms);
+}
+
+.substrate-fade-up {
+  animation: substrate-fade-up var(--duration-slow) var(--ease-out-expo) both;
+  animation-delay: calc(var(--stagger, 0) * 60ms);
+}
+
+.substrate-fade-down {
+  animation: substrate-fade-down var(--duration-normal) var(--ease-out-expo) both;
+  animation-delay: calc(var(--stagger, 0) * 60ms);
+}
+
+.substrate-slide-in-left {
+  animation: substrate-slide-in-left var(--duration-normal) var(--ease-spring) both;
+}
+
+.substrate-slide-in-right {
+  animation: substrate-slide-in-right var(--duration-slow) var(--ease-out-expo) both;
+  animation-delay: calc(var(--stagger, 0) * 60ms);
+}
+
+.substrate-slide-down {
+  animation: substrate-slide-down var(--duration-normal) var(--ease-out-expo) both;
+  animation-delay: calc(var(--stagger, 0) * 40ms);
+}
+
+.substrate-scale-in {
+  animation: substrate-scale-in var(--duration-normal) var(--ease-out-back) both;
+}
+
+.substrate-pop-in {
+  animation: substrate-pop-in var(--duration-normal) var(--ease-out-back) both;
+  animation-delay: calc(var(--stagger, 0) * 50ms);
+}
+
+/* ─── Interaction helpers ────────────────────────────────────────────────── */
+.substrate-hover-lift {
+  transition: transform var(--duration-normal) var(--ease-out-expo),
+              box-shadow var(--duration-normal) var(--ease-out-expo);
+}
+.substrate-hover-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+.substrate-hover-lift:active {
+  transform: translateY(0);
+}
+
+.substrate-press {
+  transition: transform 120ms var(--ease-in-out);
+}
+.substrate-press:active {
+  transform: scale(0.97);
+}
+
+/* ─── Mermaid diagrams ───────────────────────────────────────────────────── */
+/* The SVG mermaid emits has a hardcoded background rect. Make it transparent
+   so the diagram blends with the chat instead of appearing as a floating box. */
+.mermaid-wrap svg > rect.background,
+.mermaid-wrap svg > g > rect.background {
+  fill: transparent !important;
+}
+.mermaid-wrap svg {
+  display: block !important;
+  margin: 0 auto !important;
+}
+
+/* ─── Prefers reduced motion ─────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+/* The same, chosen in Settings → General instead of by the operating system. */
+.reduce-motion *, .reduce-motion *::before, .reduce-motion *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+}
+.reduce-motion .scroll-area { scroll-behavior: auto; }
+/* The faint dotted wallpaper behind every conversation, in the border colour so it follows the theme. */
+.chat-wallpaper {
+  background-image: radial-gradient(var(--border) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+/* A conversation with one agent fills the pane like a group chat, instead of keeping the reading column. */
+.chat-wide { --chat-width: none; }

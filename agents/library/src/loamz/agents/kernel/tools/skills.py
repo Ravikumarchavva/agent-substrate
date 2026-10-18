@@ -1,0 +1,36 @@
+"""Skill contract — a named prompt package injected into an agent's system instructions."""
+
+from __future__ import annotations
+
+from pydantic import Field
+
+from loamz.agents.kernel.types.content import KernelModel
+
+
+class Skill(KernelModel):
+    """A prompt-skill that extends an agent's behaviour via injected instructions.
+
+    Skills are loaded from ``integrations/tools/skills/<name>/SKILL.md`` or
+    constructed inline.  When attached to an agent, ``instructions`` are
+    appended to the effective system prompt and ``allowed_tools`` names are
+    cross-referenced against the agent's tool registry at runtime.
+
+    Example::
+
+        from loamz.agents.kernel.types import Skill
+
+        summarise = Skill(
+            name="summarisation",
+            instructions="Always end your reply with a one-sentence TL;DR.",
+        )
+    """
+
+    name: str
+    instructions: str
+    description: str = ""
+    allowed_tools: tuple[str, ...] = Field(default_factory=tuple)
+    path: str | None = None
+    version: str = "1"
+
+
+__all__ = ["Skill"]

@@ -322,6 +322,15 @@ wheels = [
 ]
 
 [[package]]
+name = "aiosmtplib"
+version = "5.1.3"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/9b/5c/9cabc5db6d607616e81ba6d8f1f231cd5a75955807a308c1090a59072d6d/aiosmtplib-5.1.3.tar.gz", hash = "sha256:ac2b418d3260ba62d9cfd0fe7359726e9dc009a4e8e8d9909fdfae332f522a7c", size = 77010, upload-time = "2026-09-08T02:11:20.532Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/9c/0a/b56ab8163d54960337fdca475d3dfd56c8badf6172e79cf2ad00d5335dc1/aiosmtplib-5.1.3-py3-none-any.whl", hash = "sha256:f7d76ce3d4995a65a178c1f11e1bd1607706b921d00cb768e7a2c7f7ef5517a8", size = 30116, upload-time = "2026-09-08T02:11:19.352Z" },
+]
+
+[[package]]
 name = "aiosqlite"
 version = "0.22.1"
 source = { registry = "https://pypi.org/simple" }
@@ -2293,47 +2302,208 @@ name = "loamz-agents"
 version = "0.1.0"
 source = { editable = "agents/library" }
 dependencies = [
+    { name = "confusable-homoglyphs" },
     { name = "loamz-data-storage" },
     { name = "loamz-identity" },
+    { name = "opentelemetry-api" },
+    { name = "pydantic" },
 ]
 
 [package.optional-dependencies]
+anthropic = [
+    { name = "anthropic" },
+    { name = "pillow" },
+]
+code = [
+    { name = "fastapi" },
+    { name = "httpx" },
+    { name = "k8s-agent-sandbox" },
+]
+communication = [
+    { name = "aiosmtplib" },
+    { name = "httpx" },
+]
+console = [
+    { name = "prompt-toolkit" },
+    { name = "pydantic-settings" },
+    { name = "rich" },
+]
 data = [
     { name = "loamz-data-client" },
+]
+gemini = [
+    { name = "google-genai" },
+    { name = "pillow" },
+]
+logging = [
+    { name = "msgspec" },
+    { name = "python-json-logger" },
+]
+mcp = [
+    { name = "mcp" },
+]
+openai = [
+    { name = "httpx" },
+    { name = "openai" },
+    { name = "pillow" },
+    { name = "tiktoken" },
+]
+postgres = [
+    { name = "loamz-data-storage", extra = ["postgres"] },
+]
+redis = [
+    { name = "redis", extra = ["hiredis"] },
+]
+safety = [
+    { name = "huggingface-hub" },
+    { name = "onnxruntime" },
+    { name = "pillow" },
+    { name = "tokenizers" },
+]
+sandbox = [
+    { name = "matplotlib" },
+    { name = "openpyxl" },
+    { name = "pandas" },
+    { name = "pdfplumber" },
+    { name = "plotly" },
+    { name = "polars" },
+    { name = "python-docx" },
+    { name = "python-pptx" },
+    { name = "reportlab" },
+    { name = "scikit-learn" },
+    { name = "seaborn" },
+]
+sentence-transformers = [
+    { name = "sentence-transformers" },
 ]
 server = [
     { name = "fastapi" },
     { name = "loamz-identity", extra = ["fastapi"] },
+    { name = "msgspec" },
+    { name = "opentelemetry-sdk" },
     { name = "pydantic-settings" },
+    { name = "python-json-logger" },
     { name = "uvicorn" },
+]
+sql = [
+    { name = "asyncpg" },
+]
+testing = [
+    { name = "httpx" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+]
+tools = [
+    { name = "openpyxl" },
+    { name = "pyyaml" },
+]
+tts = [
+    { name = "kokoro" },
+    { name = "soundfile" },
+]
+web = [
+    { name = "crawl4ai" },
+    { name = "ddgs" },
+    { name = "exa-py" },
+    { name = "httpx" },
+    { name = "httpx2" },
+    { name = "playwright" },
+    { name = "tavily-python" },
 ]
 
 [package.dev-dependencies]
 dev = [
+    { name = "httpx" },
+    { name = "hypothesis" },
+    { name = "import-linter" },
+    { name = "opentelemetry-sdk" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-timeout" },
     { name = "pytest-xdist" },
+    { name = "pyyaml" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "aiosmtplib", marker = "extra == 'communication'", specifier = ">=3.0.0" },
+    { name = "anthropic", marker = "extra == 'anthropic'", specifier = ">=0.95.0" },
+    { name = "asyncpg", marker = "extra == 'sql'", specifier = ">=0.31.0" },
+    { name = "confusable-homoglyphs", specifier = ">=3.3.1" },
+    { name = "crawl4ai", marker = "extra == 'web'", specifier = ">=0.8.7" },
+    { name = "ddgs", marker = "extra == 'web'", specifier = ">=9.14.4" },
+    { name = "exa-py", marker = "extra == 'web'", specifier = ">=2.14.0" },
+    { name = "fastapi", marker = "extra == 'code'", specifier = ">=0.128.0" },
     { name = "fastapi", marker = "extra == 'server'", specifier = ">=0.128" },
+    { name = "google-genai", marker = "extra == 'gemini'", specifier = ">=1.73.0" },
+    { name = "httpx", marker = "extra == 'code'", specifier = ">=0.27.0" },
+    { name = "httpx", marker = "extra == 'communication'", specifier = ">=0.27.0" },
+    { name = "httpx", marker = "extra == 'openai'", specifier = ">=0.27.0" },
+    { name = "httpx", marker = "extra == 'testing'", specifier = ">=0.27.0" },
+    { name = "httpx", marker = "extra == 'web'", specifier = ">=0.27.0" },
+    { name = "httpx2", marker = "extra == 'web'", specifier = ">=2.7.0" },
+    { name = "huggingface-hub", marker = "extra == 'safety'", specifier = ">=0.25.0" },
+    { name = "k8s-agent-sandbox", marker = "extra == 'code'", specifier = ">=0.4.6" },
+    { name = "kokoro", marker = "extra == 'tts'", specifier = ">=0.9.4" },
+    { name = "loamz-agents", extras = ["logging"], marker = "extra == 'server'", editable = "agents/library" },
     { name = "loamz-data-client", marker = "extra == 'data'", editable = "data/client" },
     { name = "loamz-data-storage", editable = "data/storage" },
+    { name = "loamz-data-storage", extras = ["postgres"], marker = "extra == 'postgres'", editable = "data/storage" },
     { name = "loamz-identity", editable = "identity/python" },
     { name = "loamz-identity", extras = ["fastapi"], marker = "extra == 'server'", editable = "identity/python" },
+    { name = "matplotlib", marker = "extra == 'sandbox'", specifier = ">=3.9.0" },
+    { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.0.0" },
+    { name = "msgspec", marker = "extra == 'logging'", specifier = ">=0.21.1" },
+    { name = "onnxruntime", marker = "extra == 'safety'", specifier = ">=1.23.0" },
+    { name = "openai", marker = "extra == 'openai'", specifier = ">=2.15.0" },
+    { name = "openpyxl", marker = "extra == 'sandbox'", specifier = ">=3.1.0" },
+    { name = "openpyxl", marker = "extra == 'tools'", specifier = ">=3.1.0" },
+    { name = "opentelemetry-api", specifier = ">=1.20.0" },
+    { name = "opentelemetry-sdk", marker = "extra == 'server'", specifier = ">=1.20.0" },
+    { name = "pandas", marker = "extra == 'sandbox'", specifier = ">=2.2.0" },
+    { name = "pdfplumber", marker = "extra == 'sandbox'", specifier = ">=0.11.0" },
+    { name = "pillow", marker = "extra == 'anthropic'", specifier = ">=12.0.0" },
+    { name = "pillow", marker = "extra == 'gemini'", specifier = ">=12.0.0" },
+    { name = "pillow", marker = "extra == 'openai'", specifier = ">=12.0.0" },
+    { name = "pillow", marker = "extra == 'safety'", specifier = ">=12.0.0" },
+    { name = "playwright", marker = "extra == 'web'", specifier = ">=1.60.0" },
+    { name = "plotly", marker = "extra == 'sandbox'", specifier = ">=5.24.0" },
+    { name = "polars", marker = "extra == 'sandbox'", specifier = ">=1.0.0" },
+    { name = "prompt-toolkit", marker = "extra == 'console'", specifier = ">=3.0.0" },
+    { name = "pydantic", specifier = ">=2.12.5" },
+    { name = "pydantic-settings", marker = "extra == 'console'", specifier = ">=2.12" },
     { name = "pydantic-settings", marker = "extra == 'server'", specifier = ">=2.12" },
+    { name = "pytest", marker = "extra == 'testing'", specifier = ">=9.0.3" },
+    { name = "pytest-asyncio", marker = "extra == 'testing'", specifier = ">=1.4.0" },
+    { name = "python-docx", marker = "extra == 'sandbox'", specifier = ">=1.1.0" },
+    { name = "python-json-logger", marker = "extra == 'logging'", specifier = ">=2.0.7" },
+    { name = "python-pptx", marker = "extra == 'sandbox'", specifier = ">=1.0.0" },
+    { name = "pyyaml", marker = "extra == 'tools'", specifier = ">=6.0.3" },
+    { name = "redis", extras = ["hiredis"], marker = "extra == 'redis'", specifier = ">=5.0.0" },
+    { name = "reportlab", marker = "extra == 'sandbox'", specifier = ">=4.2.0" },
+    { name = "rich", marker = "extra == 'console'", specifier = ">=14.3.2" },
+    { name = "scikit-learn", marker = "extra == 'sandbox'", specifier = ">=1.5.0" },
+    { name = "seaborn", marker = "extra == 'sandbox'", specifier = ">=0.13.0" },
+    { name = "sentence-transformers", marker = "extra == 'sentence-transformers'", specifier = ">=3.0.0" },
+    { name = "soundfile", marker = "extra == 'tts'", specifier = ">=0.12.1" },
+    { name = "tavily-python", marker = "extra == 'web'", specifier = ">=0.7.26" },
+    { name = "tiktoken", marker = "extra == 'openai'", specifier = ">=0.12.0" },
+    { name = "tokenizers", marker = "extra == 'safety'", specifier = ">=0.20.0" },
     { name = "uvicorn", marker = "extra == 'server'", specifier = ">=0.34" },
 ]
-provides-extras = ["data", "server"]
+provides-extras = ["openai", "anthropic", "gemini", "sentence-transformers", "postgres", "redis", "mcp", "tts", "tools", "web", "communication", "sql", "code", "sandbox", "safety", "logging", "console", "server", "data", "testing"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "httpx", specifier = ">=0.27.0" },
+    { name = "hypothesis", specifier = ">=6.168.3" },
+    { name = "import-linter", specifier = ">=2.11" },
+    { name = "opentelemetry-sdk", specifier = ">=1.20.0" },
     { name = "pytest", specifier = ">=9" },
     { name = "pytest-asyncio", specifier = ">=1.4" },
     { name = "pytest-timeout", specifier = ">=2.3" },
     { name = "pytest-xdist", specifier = ">=3.6" },
+    { name = "pyyaml", specifier = ">=6.0.3" },
 ]
 
 [[package]]

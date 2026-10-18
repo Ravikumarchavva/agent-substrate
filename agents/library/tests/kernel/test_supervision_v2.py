@@ -1,0 +1,202 @@
+"""Supervision v2 — runtime enforcement tests.
+
+Covers:
+1. Unexpected agent crash is recorded as ``agent_crashed`` status (not silently swallowed).
+2. ``HistoryRetention.RUN`` on a ``ContextConfig`` triggers ``clear_run`` after the run
+   completes, leaving no run-scoped history behind.
+3. ``HistoryRetention.PERMANENT`` does NOT trigger ``delete_session`` — history survives.
+"""
+
+from __future__ import annotations
+
+import asyncio
+
+from tests._stores import fs_history
+
+from loamz.agents.kernel.context import project_messages
+from loamz.agents.kernel.runtime import DataPayload, Message
+from loamz.agents.kernel.types.identity import Actor
+from loamz.agents.kernel.types.supervision import HistoryRetention
+from loamz.agents.testing.runtime import ephemeral_runtime
+
+
+def _agent_id(name: str) -> Actor:
+    return Actor(type="agent", key=name)
+
+
+def _msg(target: Actor) -> Message:
+    return Message(target=target, sender=Actor.system("test"), payload=DataPayload(data={}))
+
+
+# ---------------------------------------------------------------------------
+# 1. Crash → ``agent_crashed`` status in EventLogProtocol
+# ---------------------------------------------------------------------------
+
+
+async def test_crash_records_agent_crashed_status() -> None:
+    """An unexpected exception inside agent.run() is surfaced as agent_crashed."""
+
+    class BombAgent:
+        id = _agent_id("bomb")
+
+        async def run(self, ctx: object, inbox: list[Message]) -> None:
+            raise RuntimeError("boom!")
+
+    bomb = BombAgent()
+    async with ephemeral_runtime() as rt:
+        await rt.register(bomb)
+        # max_retries=0: a bare RuntimeError is unclassified and therefore
+        # retryable by default (see worker.py's exception handler) — without
+        # this the run backs off and retries 3 times (5s/10s/20s exponential
+        # backoff) before finally recording run.failed, since BombAgent
+        # always raises the same way on every attempt. This test cares about
+        # crash classification, not retry behavior.
+        run_id = await rt.submit(bomb.id, _msg(bomb.id), max_retries=0)
+
+        async for entry in rt.tail(run_id):
+            if entry.kind in ("run.completed", "run.failed", "run.cancelled"):
+                assert entry.kind == "run.failed"
+                assert entry.payload.get("status") == "agent_crashed"
+                assert "boom!" in entry.payload.get("error", "")
+                break
+
+
+async def test_guardrail_trip_records_guardrail_tripped_status() -> None:
+    """MiddlewareTermination is recorded as guardrail_tripped, not agent_crashed."""
+    from loamz.agents.kernel.errors import MiddlewareTermination
+
+    class GuardrailAgent:
+        id = _agent_id("guardrail")
+
+        async def run(self, ctx: object, inbox: list[Message]) -> None:
+            raise MiddlewareTermination("blocked!")
+
+    agent = GuardrailAgent()
+    async with ephemeral_runtime() as rt:
+        await rt.register(agent)
+        run_id = await rt.submit(agent.id, _msg(agent.id))
+
+        async for entry in rt.tail(run_id):
+            if entry.kind in ("run.completed", "run.failed", "run.cancelled"):
+                assert entry.kind == "run.failed"
+                assert entry.payload.get("status") == "guardrail_tripped"
+                break
+
+
+async def test_budget_exhausted_records_budget_exhausted_status() -> None:
+    """BudgetExhaustedError is recorded as budget_exhausted."""
+    from loamz.agents.kernel.errors import BudgetExhaustedError
+
+    class BudgetAgent:
+        id = _agent_id("budgeter")
+
+        async def run(self, ctx: object, inbox: list[Message]) -> None:
+            raise BudgetExhaustedError("too many tokens")
+
+    agent = BudgetAgent()
+    async with ephemeral_runtime() as rt:
+        await rt.register(agent)
+        run_id = await rt.submit(agent.id, _msg(agent.id))
+
+        async for entry in rt.tail(run_id):
+            if entry.kind in ("run.completed", "run.failed", "run.cancelled"):
+                assert entry.kind == "run.failed"
+                assert entry.payload.get("status") == "budget_exhausted"
+                break
+
+
+# ---------------------------------------------------------------------------
+# 2. HistoryRetention.RUN → session deleted after completion
+# ---------------------------------------------------------------------------
+
+
+async def test_history_retention_run_clears_after_completion() -> None:
+    """Agents with HistoryRetention.RUN have run-scoped history cleared on completion."""
+    from loamz.agents.kernel.agents.base import persist_turns
+    from loamz.agents.kernel.context import ContextConfig
+    from loamz.agents.kernel.types.content import ChatMessage, Role, TextBlock
+
+    history = fs_history()
+    ctx_cfg = ContextConfig(history, retention=HistoryRetention.RUN)
+
+    written_session: list[str] = []
+    written_run: list[str] = []
+
+    class TransientAgent:
+        id = _agent_id("transient")
+        _context = ctx_cfg
+
+        async def run(self, ctx: object, inbox: list[Message]) -> None:
+            run_id: str = ctx.run_id  # type: ignore[attr-defined]
+            session_id = inbox[0].correlation_id or run_id
+            written_session.append(session_id)
+            written_run.append(run_id)
+            turn = ChatMessage(role=Role.USER, content=[TextBlock(text="hello")])
+            await persist_turns(ctx_cfg, session_id, run_id, [turn])
+
+    agent = TransientAgent()
+    async with ephemeral_runtime() as rt:
+        await rt.register(agent)
+        done = asyncio.Event()
+
+        msg = _msg(agent.id)
+        run_id = await rt.submit(agent.id, msg)
+
+        async for entry in rt.tail(run_id):
+            if entry.kind in ("run.completed", "run.failed", "run.cancelled"):
+                assert entry.kind == "run.completed"
+                done.set()
+                break
+
+        await asyncio.wait_for(done.wait(), timeout=3.0)
+
+    # After completion the Worker should have deleted the session.
+    # Verify: fetching history for the session returns nothing.
+    session_id = written_session[0] if written_session else run_id
+    remaining = await project_messages(history, session_id)
+    assert remaining == [], f"Expected empty history after RUN retention cleanup, got {remaining}"
+
+
+# ---------------------------------------------------------------------------
+# 3. HistoryRetention.PERMANENT — history survives run completion
+# ---------------------------------------------------------------------------
+
+
+async def test_history_retention_permanent_survives_completion() -> None:
+    """Agents with HistoryRetention.PERMANENT (default) keep history after run ends."""
+    from loamz.agents.kernel.agents.base import persist_turns
+    from loamz.agents.kernel.context import ContextConfig
+    from loamz.agents.kernel.types.content import ChatMessage, Role, TextBlock
+
+    history = fs_history()
+    ctx_cfg = ContextConfig(history, retention=HistoryRetention.PERMANENT)
+
+    captured_session: list[str] = []
+    captured_run: list[str] = []
+
+    class PermanentAgent:
+        id = _agent_id("permanent")
+        _context = ctx_cfg
+
+        async def run(self, ctx: object, inbox: list[Message]) -> None:
+            run_id: str = ctx.run_id  # type: ignore[attr-defined]
+            session_id = inbox[0].correlation_id or run_id
+            captured_session.append(session_id)
+            captured_run.append(run_id)
+            turn = ChatMessage(role=Role.USER, content=[TextBlock(text="remember me")])
+            await persist_turns(ctx_cfg, session_id, run_id, [turn])
+
+    agent = PermanentAgent()
+    async with ephemeral_runtime() as rt:
+        await rt.register(agent)
+        run_id = await rt.submit(agent.id, _msg(agent.id))
+
+        async for entry in rt.tail(run_id):
+            if entry.kind in ("run.completed", "run.failed", "run.cancelled"):
+                assert entry.kind == "run.completed"
+                break
+
+    session_id = captured_session[0] if captured_session else run_id
+    remaining = await project_messages(history, session_id)
+    assert len(remaining) == 1
+    assert remaining[0].role == Role.USER

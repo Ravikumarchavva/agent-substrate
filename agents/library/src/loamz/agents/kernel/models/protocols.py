@@ -1,0 +1,250 @@
+"""LLM client contracts — Protocol definitions only."""
+
+from __future__ import annotations
+
+from collections.abc import AsyncIterator, Sequence
+from dataclasses import dataclass, field
+from enum import StrEnum
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
+
+from loamz.agents.kernel.types.content import ChatMessage, ContentBlock, KernelModel, TextBlock
+from loamz.agents.kernel.types.finish_reason import FinishReason
+from loamz.agents.kernel.types.stream import CompletionEvent, ReasoningDelta, TextDelta
+from loamz.agents.kernel.types.usage import Usage
+
+if TYPE_CHECKING:
+    from pydantic import BaseModel
+
+    from loamz.agents.kernel.tools.protocols import AnyTool
+    from loamz.agents.kernel.types.run import RunMeta
+
+
+class Modality(StrEnum):
+    """A kind of content an LLM can accept as input or produce as output."""
+
+    TEXT = "text"
+    IMAGE = "image"
+    AUDIO = "audio"
+    VIDEO = "video"
+    DOCUMENT = "document"
+
+
+class ReasoningEffort(StrEnum):
+    """How hard a reasoning-capable model should think before answering.
+
+    ``None`` on ``GenerationOptions.reasoning`` means "provider default".
+    Each client maps a level onto its vendor's own control (OpenAI
+    ``reasoning.effort``, Anthropic ``thinking.budget_tokens``, Gemini
+    ``thinking_budget``) and ignores it for models that don't reason.
+    """
+
+    OFF = "off"
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+
+
+class ModelCapabilities(KernelModel):
+    """What a model can accept and what it costs — exposed by every
+    ``ChatModel`` as ``client.capabilities``.
+
+    ``input_modalities`` is what the model can actually *see*. Clients drop
+    content outside it (replacing it with a text note) before encoding, so
+    a text-only model is never sent an image it would reject or silently
+    ignore. How a provider transports a modality — e.g. an image inside a
+    tool result natively vs. in a follow-up user message — is an encoder
+    detail, not a capability.
+    """
+
+    model_id: str
+    context_window: int | None = None
+    max_output_tokens: int | None = None
+    input_modalities: frozenset[Modality] = frozenset({Modality.TEXT})
+    supports_tool_calling: bool = True
+    supports_reasoning: bool = False
+    input_cost_per_mtok: float = 0.0
+    # None -> cached input is billed at the full input rate (an overestimate,
+    # which is the safe direction for a budget).
+    cached_input_cost_per_mtok: float | None = None
+    # None -> cache writes are billed at the full input rate.
+    cache_write_cost_per_mtok: float | None = None
+    output_cost_per_mtok: float = 0.0
+
+    def accepts(self, modality: Modality) -> bool:
+        return modality in self.input_modalities
+
+    def cost_usd(self, usage: Usage) -> float:
+        cached_rate = (
+            self.cached_input_cost_per_mtok
+            if self.cached_input_cost_per_mtok is not None
+            else self.input_cost_per_mtok
+        )
+        write_rate = (
+            self.cache_write_cost_per_mtok
+            if self.cache_write_cost_per_mtok is not None
+            else self.input_cost_per_mtok
+        )
+        # Cache reads and writes are both inside input_tokens; each is billed at
+        # its own rate, and the remainder at the plain input rate.
+        special = min(usage.cached_tokens + usage.cache_write_tokens, usage.input_tokens)
+        uncached = max(usage.input_tokens - special, 0)
+        return (
+            uncached * self.input_cost_per_mtok
+            + usage.cached_tokens * cached_rate
+            + usage.cache_write_tokens * write_rate
+            + usage.output_tokens * self.output_cost_per_mtok
+        ) / 1_000_000
+
+
+@dataclass(frozen=True, slots=True)
+class LLMResponse:
+    """Return value of ``ChatModel.generate()``."""
+
+    content: list[ContentBlock]
+    usage: Usage
+    # Priced by the harness from ``ChatModel.capabilities`` — clients leave it 0.
+    cost_usd: float = 0.0
+    finish_reason: FinishReason = FinishReason.UNSPECIFIED
+    # The provider's own id for this response — what a support ticket needs.
+    response_id: str | None = None
+    # The model that actually served it (an alias resolves to a dated snapshot).
+    served_model: str | None = None
+
+    @property
+    def text(self) -> str:
+        """The concatenated text of every ``TextBlock`` in ``content``.
+
+        Mirrors ``ChatMessage.text``/``ToolResultBlock.text`` — the same
+        derived property on the kernel's other content-bearing types.
+        """
+        return "".join(b.text for b in self.content if isinstance(b, TextBlock))
+
+
+@dataclass(frozen=True, slots=True)
+class GenerationOptions:
+    """Typed options bag for LLM generation calls.
+
+    Replaces ``**kwargs`` in ``generate`` and ``generate_stream`` so that:
+    - Protocol conformance verifies all meaningful parameters
+    - Implementations cannot silently disagree on parameter names
+    - Callers get autocomplete and type errors instead of runtime surprises
+
+    ``tools`` is ``list[Tool]`` — the kernel contract. Each LLM client
+    converts them to its vendor wire-format internally.
+
+    ``system_instructions`` is the system prompt text.
+    """
+
+    tools: list[AnyTool] | None = None
+    system_instructions: str = ""
+    temperature: float | None = None
+    max_tokens: int | None = None
+    tool_choice: str | dict | None = None
+    response_format: type[BaseModel] | None = None
+    stop: list[str] | None = None
+    reasoning: ReasoningEffort | None = None
+    extra: dict = field(default_factory=dict)
+
+
+@runtime_checkable
+class ChatModel(Protocol):
+    """Contract every LLM provider adapter must satisfy.
+
+    ``capabilities`` describes what the model can see and what it costs. A
+    client must never send content outside ``capabilities.input_modalities``
+    to its provider.
+    """
+
+    model: str
+    capabilities: ModelCapabilities
+
+    async def generate(
+        self,
+        messages: list[ChatMessage],
+        *,
+        options: GenerationOptions = GenerationOptions(),
+        ctx: RunMeta | None = None,
+    ) -> LLMResponse: ...
+
+    def generate_stream(
+        self,
+        messages: list[ChatMessage],
+        *,
+        options: GenerationOptions = GenerationOptions(),
+        ctx: RunMeta | None = None,
+    ) -> AsyncIterator[TextDelta | ReasoningDelta | CompletionEvent]:
+        """Return an async iterator of token events.
+
+        ``ctx`` carries the cancellation token and deadline.  Implementations
+        should call ``ctx.check()`` before the first I/O call and honour
+        ``ctx.is_expired()`` between streamed chunks.
+
+        Implementations should be async generator functions (``async def … yield``),
+        which are synchronous callables that return an ``AsyncIterator``.  Callers
+        use ``async for event in model.generate_stream(messages, options=opts):``.
+        No ``await`` is needed before the ``async for``.
+        """
+        ...
+
+    async def count_tokens(self, messages: list[ChatMessage]) -> int: ...
+
+
+@dataclass(frozen=True, slots=True)
+class EmbeddingResult:
+    """Return value of ``EmbeddingModel.embed()``: one vector per input, in input order."""
+
+    embeddings: list[list[float]]
+    model: str
+    usage_tokens: int = 0
+
+
+@runtime_checkable
+class EmbeddingModel(Protocol):
+    """Contract every embedding provider adapter satisfies — one method, and four facts about the model.
+
+    ``dimensions`` is the vector width (``None`` until a remote model has said, or has been asked once); ``max_input_tokens`` is the
+    longest input it takes (a chunker sizes to it); ``modalities`` is what it can embed (``{TEXT}``, or ``{TEXT, IMAGE}``).
+
+    ``embed`` returns exactly one vector per input, in order, all the same width, and **raises** — ``ServiceUnavailableError`` for a
+    service that cannot be reached, ``AuthError``, ``RateLimitedError``, ``ContextLengthError`` — rather than returning ``None`` or a
+    partial answer. An input with a block the model cannot embed (an image, for a text-only model) raises ``UnsupportedContentError``;
+    it is never silently dropped. ``query=True`` says the inputs are search queries, for a model that embeds a query differently from a
+    passage (Qwen3 prepends an instruction to a query); models that do not care ignore it.
+    """
+
+    model: str
+    dimensions: int | None
+    max_input_tokens: int
+    modalities: frozenset[Modality]
+
+    async def embed(
+        self, inputs: Sequence[str | Sequence[ContentBlock]], *, query: bool = False
+    ) -> EmbeddingResult: ...
+
+
+@runtime_checkable
+class Reranker(Protocol):
+    """Contract for a reranker: how relevant each passage is to a query.
+
+    ``rerank`` returns one score per passage, in the passages' order, higher meaning more relevant; scores are comparable within a
+    call, not across calls. It **raises** a typed error for a service that cannot be reached, as ``EmbeddingModel.embed`` does.
+    """
+
+    model: str
+
+    async def rerank(self, query: str, passages: Sequence[str]) -> list[float]: ...
+
+
+__all__ = [
+    "GenerationOptions",
+    "ChatModel",
+    "LLMResponse",
+    "EmbeddingModel",
+    "EmbeddingResult",
+    "Reranker",
+    "Usage",
+    "Modality",
+    "ReasoningEffort",
+    "ModelCapabilities",
+    "FinishReason",
+]

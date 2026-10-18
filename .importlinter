@@ -3,6 +3,8 @@
 root_packages =
     loamz
 include_external_packages = False
+# An import made only for type checking never runs, so it cannot drag a layer along.
+exclude_type_checking_imports = True
 
 [importlinter:contract:storage-is-the-bottom]
 name = loamz.data.storage imports no other Loamz package
@@ -52,3 +54,35 @@ layers =
     loamz.agents.stores
     loamz.agents.kernel
 
+
+[importlinter:contract:kernel-concepts]
+name = the kernel's concepts only import downward
+type = layers
+layers =
+    loamz.agents.kernel.wire | loamz.agents.kernel.events
+    loamz.agents.kernel.agents
+    loamz.agents.kernel.runtime
+    loamz.agents.kernel.middleware
+    loamz.agents.kernel.context
+    loamz.agents.kernel.safety
+    loamz.agents.kernel.ports
+    loamz.agents.kernel.models
+    loamz.agents.kernel.tools
+    loamz.agents.kernel.telemetry
+    loamz.agents.kernel.types
+    loamz.agents.kernel.errors | loamz.agents.kernel.version | loamz.agents.kernel.caller
+
+[importlinter:contract:kernel-is-the-engine]
+name = the kernel imports nothing of loamz.agents outside it, and no vendor
+type = forbidden
+source_modules =
+    loamz.agents.kernel
+forbidden_modules =
+    loamz.agents.stores
+    loamz.agents.providers
+    loamz.agents.toolkit
+    loamz.agents.testing
+    loamz.agents.evals
+    loamz.agents.console
+    loamz.agents.cli
+    loamz.data.client

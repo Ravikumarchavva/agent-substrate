@@ -3,6 +3,6 @@
   "agents/substrate-cloud": "0.1.0",
   "agents/substrate-ui": "0.1.0",
   "data/substrate-data": "0.1.0",
-  "data/substrate-data-client": "0.1.0",
+  "data/substrate-data-client": "0.2.0",
   "data/substrate-data-web": "0.1.0"
 }

@@ -1,0 +1,15 @@
+[project]
+name = "substrate-data-client"
+version = "0.1.0"
+description = "Python client for Substrate Data: governed SQL as Arrow, Polars and pandas"
+readme = "README.md"
+requires-python = ">=3.13"
+# Deliberately small: this is what a code-interpreter sandbox installs.
+dependencies = ["httpx>=0.28,<1", "polars>=1.44.2,<2", "pyarrow>=22,<27"]
+
+[build-system]
+requires = ["uv_build>=0.10.11,<0.11.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "substrate_data_client"

@@ -1,0 +1,46 @@
+# Development infrastructure: object storage + Iceberg REST catalog, and an OIDC identity provider.
+# `make up` runs scripts/bootstrap.py first, which writes the private files mounted below.
+name: substrate-data-infra
+services:
+  seaweedfs:
+    image: chrislusf/seaweedfs:4.48@sha256:4e61d15fd35994cb1e43e1e553dff106794841fd9a99ade2fc8c8bfce4d7872d
+    command:
+      - server
+      - -dir=/data
+      - -ip=seaweedfs
+      - -ip.bind=0.0.0.0
+      - -filer
+      - -s3
+      - -s3.config=/config/s3.json
+      - -s3.port.iceberg=8181
+      - -s3.allowDeleteBucketNotEmpty=false
+      # Browsers upload straight to presigned URLs; only the workspace UI origin may.
+      - -s3.allowedOrigins=http://localhost:3011,http://127.0.0.1:3011
+      - -master.volumeSizeLimitMB=1024
+      - -volume.max=0
+      - -master.telemetry=false
+    ports:
+      - "127.0.0.1:18333:8333"
+      - "127.0.0.1:18181:8181"
+    volumes:
+      - seaweed-data:/data
+      - ../.workspace/infra/s3.json:/config/s3.json:ro
+    restart: unless-stopped
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.8.1
+    command: ["start-dev", "--import-realm", "--http-port=18080"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?run scripts/bootstrap.py}
+      # A fixed issuer: tokens carry the same `iss` for browsers, the UI server and the API.
+      KC_HOSTNAME: http://127.0.0.1:18080
+      KC_HEALTH_ENABLED: "true"
+    ports:
+      - "127.0.0.1:18080:18080"
+    volumes:
+      - ../.workspace/infra/substrate-realm.json:/opt/keycloak/data/import/substrate-realm.json:ro
+    restart: unless-stopped
+
+volumes:
+  seaweed-data:

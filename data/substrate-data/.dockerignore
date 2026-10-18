@@ -1,0 +1,9 @@
+**/node_modules
+web
+.workspace
+.env*
+.venv
+.git
+tests
+docs
+__pycache__

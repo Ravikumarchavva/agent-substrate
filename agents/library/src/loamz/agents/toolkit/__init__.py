@@ -10,7 +10,6 @@ Tools are grouped by domain:
   (root)        — memory, human_input
   task_manager/ — Kanban board
   code/         — sandboxed code execution (CodeInterpreterTool)
-  sql/          — queries against a user's own database (PostgresQueryTool)
   discovery     — the catalog scanner that finds every shipped tool
   chain/        — ToolChainTool (sandboxed code-mode tool chaining)
   skills/       — SKILL.md prompt-skill packages

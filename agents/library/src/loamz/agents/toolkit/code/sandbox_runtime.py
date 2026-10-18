@@ -1,3 +1,9 @@
+"""The code-interpreter sandbox's own HTTP server (``/ci/run``).
+
+It runs inside the sandbox image (``agent-sandbox/Dockerfile``), never in the agent server, so its settings are that
+container's environment (``CODE_INTERPRETER_WORKSPACE``, ``CODE_INTERPRETER_MAX_INLINE_FILE_BYTES``).
+"""
+
 from __future__ import annotations
 
 import base64

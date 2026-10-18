@@ -2385,9 +2385,6 @@ server = [
     { name = "python-json-logger" },
     { name = "uvicorn" },
 ]
-sql = [
-    { name = "asyncpg" },
-]
 testing = [
     { name = "httpx" },
     { name = "pytest" },
@@ -2428,7 +2425,6 @@ dev = [
 requires-dist = [
     { name = "aiosmtplib", marker = "extra == 'communication'", specifier = ">=3.0.0" },
     { name = "anthropic", marker = "extra == 'anthropic'", specifier = ">=0.95.0" },
-    { name = "asyncpg", marker = "extra == 'sql'", specifier = ">=0.31.0" },
     { name = "confusable-homoglyphs", specifier = ">=3.3.1" },
     { name = "crawl4ai", marker = "extra == 'web'", specifier = ">=0.8.7" },
     { name = "ddgs", marker = "extra == 'web'", specifier = ">=9.14.4" },
@@ -2491,7 +2487,7 @@ requires-dist = [
     { name = "tokenizers", marker = "extra == 'safety'", specifier = ">=0.20.0" },
     { name = "uvicorn", marker = "extra == 'server'", specifier = ">=0.34" },
 ]
-provides-extras = ["openai", "anthropic", "gemini", "sentence-transformers", "postgres", "redis", "mcp", "tts", "tools", "web", "communication", "sql", "code", "sandbox", "safety", "logging", "console", "server", "data", "testing"]
+provides-extras = ["openai", "anthropic", "gemini", "sentence-transformers", "postgres", "redis", "mcp", "tts", "tools", "web", "communication", "code", "sandbox", "safety", "logging", "console", "server", "data", "testing"]
 
 [package.metadata.requires-dev]
 dev = [

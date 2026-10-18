@@ -13,16 +13,14 @@ Default transport: control-channel (zero sandbox egress)
     the tool via ``ToolInvoker``, and injects the result as the next cell.
     No inbound network connection is needed from the sandbox.
 
-Optional: HTTP callback (behind NetworkPolicy + one-time token)
-    ``POST /internal/chain/{chain_id}/invoke`` with a per-chain bearer token
-    bound to the ``ToolInvoker`` session.  Token is single-use per chain and
-    invalidated when the chain ends.  Deploy only with a K8s NetworkPolicy
-    that allows the sandbox to reach exactly this endpoint.
+HTTP callback (not mounted by the server today)
+    A per-chain bearer token (``BridgeSession.token``) bound to the ``ToolInvoker``
+    session, invalidated when the chain ends: what a callback endpoint, deployed
+    behind a NetworkPolicy, would check.
 
 This module contains:
 - ``ChainBridgeRegistry`` — manages active chain sessions for HTTP transport
 - ``BridgeSession`` — per-chain state (token, invoker session)
-- ``build_bridge_router`` — FastAPI router factory for the HTTP endpoint
 """
 
 from __future__ import annotations
@@ -98,41 +96,4 @@ class ChainBridgeRegistry:
         return self._sessions.get(chain_id)
 
 
-def build_bridge_router(registry: ChainBridgeRegistry) -> Any:
-    """Build the FastAPI router for the HTTP bridge endpoint.
-
-    Mount via ``app.include_router(build_bridge_router(registry), prefix="/internal")``.
-    Protected by bearer token; only valid for the lifetime of the chain.
-    """
-    try:
-        from fastapi import APIRouter, HTTPException, Request
-    except ImportError:
-        return None
-
-    router = APIRouter()
-
-    @router.post("/chain/{chain_id}/invoke")
-    async def invoke_tool(chain_id: str, body: dict, request: Request) -> dict:
-        auth = request.headers.get("Authorization", "")
-        if not auth.startswith("Bearer "):
-            raise HTTPException(status_code=401, detail="Missing bearer token")
-        token = auth[7:]
-
-        session = registry.get(chain_id)
-        if session is None:
-            raise HTTPException(status_code=404, detail="Chain session not found")
-        if not secrets.compare_digest(token, session.token):
-            raise HTTPException(status_code=401, detail="Invalid chain token")
-
-        try:
-            call = ToolCallRequest(**body)
-        except Exception as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
-
-        result = await session.dispatch(call)
-        return result.model_dump()
-
-    return router
-
-
-__all__ = ["BridgeSession", "ChainBridgeRegistry", "build_bridge_router"]
+__all__ = ["BridgeSession", "ChainBridgeRegistry"]

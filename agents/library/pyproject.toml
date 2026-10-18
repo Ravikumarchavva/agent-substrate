@@ -45,8 +45,6 @@ web = [
 ]
 # HTTP and e-mail tools, image generation
 communication = ["httpx>=0.27.0", "aiosmtplib>=3.0.0"]
-# the SQL tool: queries against a user's own PostgreSQL
-sql = ["asyncpg>=0.31.0"]
 # code interpreter: the Kubernetes sandbox and the sandbox's own runtime service
 code = ["k8s-agent-sandbox>=0.4.6", "fastapi>=0.128.0", "httpx>=0.27.0"]
 # the data-science packages a code sandbox image installs

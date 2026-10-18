@@ -413,3 +413,118 @@ async def test_a_runtime_that_cannot_mount_says_so_rather_than_running_without(
         await InProcessRuntime(workspace).execute(
             spec(mounts=(_mount(),), code="print(1)")
         )
+
+
+# ── governed data: a socket and a token file, no network ─────────────────────
+
+
+def test_a_data_mount_must_be_an_absolute_path_that_cannot_add_a_mount_option(
+    tmp_path: Path,
+) -> None:
+    from substrate.integrations.tools.code_interpreter.code_interpreter.runtimes.base import (
+        DataMount,
+    )
+
+    DataMount(socket_dir=str(tmp_path), token="t")
+    for bad in ("relative/dir", f"{tmp_path}:/etc", ""):
+        with pytest.raises(ValueError):
+            DataMount(socket_dir=bad, token="t")
+    with pytest.raises(ValueError):
+        DataMount(socket_dir=str(tmp_path), token="")
+    assert "secret-token" not in repr(
+        DataMount(socket_dir=str(tmp_path), token="secret-token")
+    )
+
+
+def test_nsjail_shows_data_access_read_only_and_never_puts_the_token_in_argv(
+    workspace: Path, tmp_path: Path
+) -> None:
+    from substrate.integrations.tools.code_interpreter.code_interpreter.runtimes.base import (
+        DataMount,
+    )
+
+    runtime = NsjailRuntime(workspace)
+    token_file = tmp_path / "token"
+    base = runtime._nsjail_argv(spec(code="1"), tmp_path)
+    assert "/run/substrate-data" not in " ".join(base)  # nothing unless asked
+
+    mounted = runtime._nsjail_argv(
+        spec(code="1", data=DataMount(socket_dir=str(tmp_path), token="super-secret")),
+        tmp_path,
+        token_file,
+    )
+    joined = " ".join(mounted)
+    assert f"-R {tmp_path}:/run/substrate-data" in joined
+    assert f"-R {token_file}:/run/substrate-data/token" in joined
+    assert "super-secret" not in joined
+    assert "--disable_clone_newnet" not in mounted  # the network namespace stays closed
+    assert runtime.supports_data is True
+    assert getattr(InProcessRuntime(workspace), "supports_data", False) is False
+
+
+async def test_a_run_reaches_data_only_through_the_mounted_socket(
+    workspace: Path,
+) -> None:
+    """Real nsjail: a unix socket and a token file cross the closed network namespace; nothing else does."""
+    import asyncio
+    import tempfile
+
+    from substrate.integrations.tools.code_interpreter.code_interpreter.runtimes.base import (
+        DataMount,
+    )
+
+    runtime = _nsjail_or_skip(workspace)
+    socket_dir = Path(tempfile.mkdtemp(prefix="data-relay-", dir="/var/tmp"))
+
+    async def serve(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        await reader.read(1024)
+        writer.write(b"pong")
+        await writer.drain()
+        writer.close()
+
+    server = await asyncio.start_unix_server(serve, path=str(socket_dir / "api.sock"))
+    try:
+        result = await runtime.execute(
+            spec(
+                data=DataMount(socket_dir=str(socket_dir), token="run-token"),
+                code=(
+                    "import socket, pathlib\n"
+                    "print('token:', pathlib.Path('/run/substrate-data/token').read_text())\n"
+                    "s = socket.socket(socket.AF_UNIX); s.connect('/run/substrate-data/api.sock')\n"
+                    "s.sendall(b'ping'); print('reply:', s.recv(16).decode())\n"
+                    "try:\n"
+                    "    socket.create_connection(('1.1.1.1', 443), timeout=3); print('internet: OPEN')\n"
+                    "except OSError:\n"
+                    "    print('internet: closed')\n"
+                    "try:\n"
+                    "    open('/run/substrate-data/token', 'w').write('x'); print('token: WRITABLE')\n"
+                    "except OSError:\n"
+                    "    print('token: read-only')\n"
+                ),
+            )
+        )
+        assert result.ok, result.stderr
+        assert "token: run-token" in result.stdout
+        assert "reply: pong" in result.stdout
+        assert "internet: closed" in result.stdout
+        assert "token: read-only" in result.stdout
+    finally:
+        server.close()
+        await server.wait_closed()
+        import shutil as _shutil
+
+        _shutil.rmtree(socket_dir, ignore_errors=True)
+
+
+def test_the_sandbox_bounds_data_library_thread_pools_and_still_leaks_no_host_environment(
+    monkeypatch,
+) -> None:
+    from substrate.integrations.tools.code_interpreter.code_interpreter.runtimes.nsjail import (
+        _sandbox_env,
+    )
+
+    monkeypatch.setenv("DATABASE_URL", "postgresql://secret")
+    env = _sandbox_env()
+    assert "DATABASE_URL" not in env
+    assert int(env["POLARS_MAX_THREADS"]) <= 8 and int(env["OMP_NUM_THREADS"]) <= 8
+    assert "ARROW_IO_THREADS" in env

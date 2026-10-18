@@ -185,3 +185,74 @@ async def test_a_mount_that_is_not_a_home_or_a_drive_is_refused_before_anything_
         )
         assert result.is_error, mounts
         assert runtime.last_spec is None, mounts
+
+
+# ── governed data access ─────────────────────────────────────────────────────
+
+
+class _Data:
+    """A DataAccess that records what it was asked and hands out a fixed mount."""
+
+    def __init__(self, mount=None, fail: bool = False) -> None:
+        self.mount, self.fail, self.asked, self.stopped = mount, fail, [], False
+
+    async def grant(self, scope, *, timeout_s):
+        self.asked.append((scope, timeout_s))
+        if self.fail:
+            raise RuntimeError("relay down")
+        return self.mount
+
+    async def stop(self) -> None:
+        self.stopped = True
+
+
+class _DataRuntime(_FakeRuntime):
+    supports_data = True
+
+
+def _mount():
+    from substrate.integrations.tools.code_interpreter.code_interpreter.runtimes.base import (
+        DataMount,
+    )
+
+    return DataMount(socket_dir="/var/tmp/relay", token="tok")
+
+
+async def test_a_run_gets_data_access_for_its_own_scope_and_the_model_is_told_how_to_use_it():
+    data = _Data(_mount())
+    runtime = _DataRuntime(ExecResult(stdout="ok"))
+    tool = CodeInterpreterTool(runtime, data=data)
+
+    assert "substrate_data_client" in tool.description
+    await tool.execute(ctx=_FakeCtx(), code="print(1)", timeout=90)
+
+    assert runtime.last_spec.data == _mount()
+    scope, timeout_s = data.asked[0]
+    assert (scope.user_id, scope.tenant_id, timeout_s) == ("user-a", "tenant-a", 90)
+
+
+async def test_data_is_not_offered_where_the_runtime_cannot_keep_it_inside_the_sandbox():
+    data = _Data(_mount())
+    runtime = _FakeRuntime(ExecResult(stdout="ok"))  # no supports_data
+    tool = CodeInterpreterTool(runtime, data=data)
+
+    assert "substrate_data_client" not in tool.description
+    await tool.execute(ctx=_FakeCtx(), code="print(1)")
+    assert runtime.last_spec.data is None and data.asked == []
+
+
+async def test_a_failing_data_service_degrades_to_a_run_without_data():
+    runtime = _DataRuntime(ExecResult(stdout="ok"))
+    tool = CodeInterpreterTool(runtime, data=_Data(fail=True))
+
+    result = await tool.execute(ctx=_FakeCtx(), code="print(1)")
+
+    assert runtime.last_spec.data is None
+    assert not getattr(result, "is_error", False)
+
+
+async def test_stopping_the_tool_stops_data_access():
+    data = _Data(_mount())
+    tool = CodeInterpreterTool(_DataRuntime(ExecResult()), data=data)
+    await tool.stop()
+    assert data.stopped

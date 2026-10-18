@@ -72,6 +72,32 @@ class Mount:
             raise ValueError(f"invalid mount name: {self.label!r}")
 
 
+@dataclass(frozen=True, slots=True)
+class DataMount:
+    """Governed-data access for one run, with no network.
+
+    ``socket_dir`` is a host directory holding the platform's gateway socket (``api.sock``); it is
+    shown read-only at ``/run/substrate-data``. ``token`` is this run's short-lived credential, shown
+    as the read-only file ``/run/substrate-data/token`` and never placed in the environment or argv.
+    The socket exists on this host only; the platform's gateway behind it makes the one outbound connection to the
+    (remote) data service and forwards a short allow-list of read requests. The token decides what the code may read.
+    """
+
+    socket_dir: str
+    token: str = field(repr=False)
+
+    def __post_init__(self) -> None:
+        # ``:`` separates the two halves of a bind mount, so a path holding one could name a destination of its own.
+        if (
+            not self.socket_dir.startswith("/")
+            or ":" in self.socket_dir
+            or not self.token
+        ):
+            raise ValueError(
+                "DataMount needs an absolute socket_dir without ':' and a token"
+            )
+
+
 @dataclass(slots=True)
 class SandboxSpec:
     """One execution request.
@@ -99,6 +125,8 @@ class SandboxSpec:
     memory_bytes: int = 2 * 1024 * 1024 * 1024
     # Further workspaces to show beside the spec's own, each at ``/groups/<label>``.
     mounts: tuple[Mount, ...] = ()
+    # Access to the governed data service for this run (a gateway socket and a token); None for none.
+    data: DataMount | None = None
     # Extra runtime-specific hints (e.g. a venv path for PIP_ONLY). Kept opaque
     # so backends can differ without widening this dataclass.
     extra: dict[str, Any] = field(default_factory=dict)
@@ -169,6 +197,7 @@ class SandboxRuntime(Protocol):
 
 
 __all__ = [
+    "DataMount",
     "ExecResult",
     "Mount",
     "NetworkPolicy",

@@ -97,6 +97,11 @@ class StagedSandboxRuntime:
     def name(self) -> str:
         return f"staged({self._inner.name})"
 
+    @property
+    def supports_data(self) -> bool:
+        """Whether the wrapped runtime can give a run governed-data access (see ``DataMount``)."""
+        return bool(getattr(self._inner, "supports_data", False))
+
     def _lock_for(self, session_dir: str) -> asyncio.Lock:
         lock = self._locks.get(session_dir)
         if lock is None:

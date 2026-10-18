@@ -32,6 +32,7 @@ from substrate.tools import ToolExecutionResult
 from substrate.tools import ToolRisk
 
 from .code_risk import classify_and_summarize
+from .data_access import DATA_GUIDANCE, DataAccess
 from .runtimes.base import (
     Mount,
     NetworkPolicy,
@@ -67,6 +68,7 @@ class CodeInterpreterTool:
         default_timeout_s: int = 60,
         memory_bytes: int = 2 * 1024 * 1024 * 1024,
         model_client: Any | None = None,
+        data: DataAccess | None = None,
     ) -> None:
         self._runtime = runtime
         self._network = network
@@ -74,6 +76,8 @@ class CodeInterpreterTool:
         self._memory_bytes = memory_bytes
         # Only used to summarize dangerous code for the approval card.
         self._model_client = model_client
+        # Governed data for each run, only when the runtime can keep it inside the sandbox.
+        self._data = data if getattr(runtime, "supports_data", False) else None
         # Set by chain callers that have no ContextVar in scope.
         self.session_id: str = _DEFAULT_SESSION
 
@@ -87,7 +91,9 @@ class CodeInterpreterTool:
             "python-docx, python-pptx, reportlab, pdfplumber. "
             "Each execution runs in a fresh interpreter, so Python variables do NOT "
             "persist between calls — save anything you need later to a file. "
-            "Network access is disabled by default." + PRESENTATION_GUIDANCE
+            "Network access is disabled by default."
+            + (DATA_GUIDANCE if self._data is not None else "")
+            + PRESENTATION_GUIDANCE
         )
         self.input_schema: dict[str, Any] = {
             "type": "object",
@@ -182,6 +188,15 @@ class CodeInterpreterTool:
             else f".private/{scope.conversation_id}/{scope.branch_id}/{agent_id}"
         )
 
+        data = None
+        if self._data is not None:
+            try:
+                data = await self._data.grant(run_scope, timeout_s=timeout_s)
+            except Exception as exc:  # noqa: BLE001 - the run still works, just without data
+                logger.warning(
+                    "code_interpreter[%s]: data access unavailable: %s", session_id, exc
+                )
+
         spec = SandboxSpec(
             user_id=scope.user_id,
             thread_id=session_id,
@@ -194,6 +209,7 @@ class CodeInterpreterTool:
             network=self._network,
             memory_bytes=self._memory_bytes,
             mounts=mounts,
+            data=data,
         )
 
         logger.info(
@@ -222,6 +238,8 @@ class CodeInterpreterTool:
         """Release backend resources. Picked up automatically by the monolith's
         shutdown loop, which duck-types ``hasattr(tool, "stop")``."""
         await self._runtime.stop()
+        if self._data is not None:
+            await self._data.stop()
 
 
 def _mounts(

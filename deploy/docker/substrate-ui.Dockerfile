@@ -1,4 +1,5 @@
-# Frontend Dockerfile for Next.js
+# syntax=docker/dockerfile:1.7
+# substrate-ui (the agents console): Next.js standalone output, non-root.
 # Node 22 (LTS): pnpm 11.x imports node:sqlite, which requires Node >=22.13.
 FROM node:22-alpine AS base
 
@@ -12,12 +13,13 @@ WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@11.1.1 --activate
 
 # Copy workspace manifests (build context is the monorepo root:
-#   docker build -f agents/substrate-ui/Dockerfile .)
+#   docker build -f deploy/docker/substrate-ui.Dockerfile .)
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY agents/substrate-ui/package.json ./agents/substrate-ui/
 COPY agents/substrate-ui/prisma ./agents/substrate-ui/prisma/
 COPY data/substrate-data-web/package.json ./data/substrate-data-web/
 COPY data/substrate-data-web/scripts ./data/substrate-data-web/scripts/
+COPY identity/oidc-bff/package.json ./identity/oidc-bff/
 
 # Install dependencies for the UI only (runs its postinstall: prisma generate)
 RUN pnpm install --frozen-lockfile --filter ./agents/substrate-ui...
@@ -36,6 +38,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/agents/substrate-ui/node_modules ./agents/substrate-ui/node_modules
 COPY package.json pnpm-workspace.yaml ./
 COPY agents/substrate-ui ./agents/substrate-ui
+COPY identity/oidc-bff ./identity/oidc-bff
 WORKDIR /app/agents/substrate-ui
 
 
@@ -69,5 +72,8 @@ EXPOSE 3000
 
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+    CMD wget -q -O /dev/null http://127.0.0.1:3000/chat || exit 1
 
 CMD ["node", "agents/substrate-ui/server.js"]

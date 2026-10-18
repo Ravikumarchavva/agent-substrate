@@ -1,0 +1,26 @@
+# Build context is the monorepo root for every image in deploy/docker: keep it small and free of secrets.
+.git
+.github
+.claude
+.vscode
+.idea
+**/node_modules
+**/.next
+**/.venv
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.ruff_cache
+**/.mypy_cache
+**/.workspace
+**/.env
+**/.env.*
+!**/.env.example
+**/*.pem
+**/*.log
+**/test-results.xml
+**/dist
+docs
+deploy/terraform
+deploy/helm
+**/benchmarks

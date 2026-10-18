@@ -1,6 +1,6 @@
-# docker/document-intelligence.gpu.Dockerfile — Document intelligence service, GPU variant
+# deploy/docker/document-intelligence.gpu.Dockerfile — Document intelligence service, GPU variant
 #
-# Build:   docker build -f deployment/docker/document-intelligence.gpu.Dockerfile -t document-intelligence-gpu:latest .
+# Build:   docker build -f deploy/docker/document-intelligence.gpu.Dockerfile -t document-intelligence-gpu:latest .
 # Run:     docker compose --profile document-intelligence-gpu up
 #
 # Same service as document-intelligence.Dockerfile, but installs the CUDA
@@ -31,13 +31,12 @@ ENV PATH="/root/.local/bin:${PATH}"
 RUN uv python install 3.13
 
 WORKDIR /app
-COPY pyproject.toml README.md ./
-COPY src ./src
-COPY packages/inference-pool ./packages/inference-pool
-COPY apps/document-intelligence ./apps/document-intelligence
+COPY agents/agent-substrate ./agents/agent-substrate
+COPY data/inference-pool ./data/inference-pool
+COPY data/document-intelligence ./data/document-intelligence
 RUN uv venv --python 3.13 /opt/venv
 ENV PATH="/opt/venv/bin:${PATH}"
-RUN uv pip install --python /opt/venv/bin/python -e "./apps/document-intelligence[paddle-gpu]"
+RUN uv pip install --python /opt/venv/bin/python -e "./data/document-intelligence[paddle-gpu]"
 
 EXPOSE 8080
 

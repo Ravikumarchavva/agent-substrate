@@ -9,7 +9,7 @@
 # build earlier in that session; this containerized build/download path was
 # verified separately, after catching a real LLAMA_CURL=OFF/libgomp bug.
 #
-# Build:   docker build -f docker/llama-server.Dockerfile -t llama-server:latest .
+# Build:   docker build -f deploy/docker/llama-server.Dockerfile -t llama-server:latest .
 # Run:     docker run -e LLAMA_CACHE=/cache -v llama-cache:/cache llama-server:latest \
 #            -hf Rizwan313/Qwen3-VL-Embedding-2B-GGUF:Q4_K_M --embedding --pooling last
 

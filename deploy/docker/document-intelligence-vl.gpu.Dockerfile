@@ -1,4 +1,4 @@
-# docker/document-intelligence-vl.gpu.Dockerfile — Document intelligence
+# deploy/docker/document-intelligence-vl.gpu.Dockerfile — Document intelligence
 # service, NEW `vl_gpu` mode (PaddleOCR-VL-1.6 served over HTTP by a real
 # `llama-server` process; layout detection stays classic Paddle models run
 # locally — see engines/paddle_vl.py's module docstring).
@@ -10,7 +10,7 @@
 # service) — the six pinned ocr_classic replicas stay as the explicit
 # fallback path, not something this file replaces.
 #
-# Build:   docker build -f deployment/docker/document-intelligence-vl.gpu.Dockerfile -t document-intelligence-vl-gpu:latest .
+# Build:   docker build -f deploy/docker/document-intelligence-vl.gpu.Dockerfile -t document-intelligence-vl-gpu:latest .
 # Run:     docker compose --profile document-intelligence-vl-gpu up
 #
 # Requires the host's Docker to have the NVIDIA Container Toolkit configured
@@ -90,7 +90,7 @@ RUN cmake -B build -DGGML_NATIVE=ON -DGGML_CUDA=ON -DCMAKE_BUILD_TYPE=Release -D
 # ─────────────────────────────────────────────────────────────────────────
 # Stage 2: model-build — bakes the quantized PaddleOCR-VL-1.6 GGUF files
 # (main LM + mmproj vision encoder) into the image, using the real
-# ensure_models() from apps/document-intelligence/src/document_intelligence/
+# ensure_models() from data/document-intelligence/src/document_intelligence/
 # models.py rather than reimplementing its download/quantize/naming logic.
 # Reuses llama-build's own Ubuntu base (already has the CUDA driver stub
 # workaround and apt cache warmed) instead of pulling in a second distinct
@@ -116,7 +116,7 @@ ENV PATH="/opt/venv/bin:${PATH}"
 WORKDIR /app
 # Only the one module ensure_models() needs -- copying the whole service here would drag in modules this stage has no
 # interpreter support for anyway.
-COPY apps/document-intelligence/src/document_intelligence/models.py ./document_intelligence/models.py
+COPY data/document-intelligence/src/document_intelligence/models.py ./document_intelligence/models.py
 RUN touch ./document_intelligence/__init__.py
 
 ARG HF_TOKEN=""
@@ -156,13 +156,12 @@ ENV PATH="/root/.local/bin:${PATH}"
 RUN uv python install 3.13
 
 WORKDIR /app
-COPY pyproject.toml README.md ./
-COPY src ./src
-COPY packages/inference-pool ./packages/inference-pool
-COPY apps/document-intelligence ./apps/document-intelligence
+COPY agents/agent-substrate ./agents/agent-substrate
+COPY data/inference-pool ./data/inference-pool
+COPY data/document-intelligence ./data/document-intelligence
 RUN uv venv --python 3.13 /opt/venv
 ENV PATH="/opt/venv/bin:${PATH}"
-RUN uv pip install --python /opt/venv/bin/python -e "./apps/document-intelligence[paddle-gpu]"
+RUN uv pip install --python /opt/venv/bin/python -e "./data/document-intelligence[paddle-gpu]"
 
 COPY --from=llama-build /src/build/bin/llama-server /usr/local/bin/llama-server
 COPY --from=llama-build /src/build/bin/*.so /usr/local/lib/

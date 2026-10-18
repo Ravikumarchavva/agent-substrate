@@ -23,7 +23,7 @@
 # this file's research) — re-verify real image embeddings specifically,
 # not just text, after a build.
 #
-# Build:   docker build -f docker/llama-server.gpu.Dockerfile -t llama-server-gpu:latest .
+# Build:   docker build -f deploy/docker/llama-server.gpu.Dockerfile -t llama-server-gpu:latest .
 # Run:     docker run --gpus all -e LLAMA_CACHE=/cache -v llama-cache:/cache llama-server-gpu:latest \
 #            -hf Rizwan313/Qwen3-VL-Embedding-2B-GGUF:Q4_K_M --embedding --pooling last -ngl 99
 

@@ -166,6 +166,14 @@ class SyncCore:
     def close(self) -> None:
         self.http.close()
 
+    @staticmethod
+    def _transient(response: httpx.Response) -> bool:
+        """A 429 that says the quota is spent (a daily budget) will not pass in seconds: do not wait."""
+        if response.status_code != 429:
+            return True
+        response.read()
+        return problem_from(response).get("type", "").rsplit("/", 1)[-1] != "quota-exceeded"
+
     def headers(self, extra: dict[str, str] | None) -> dict[str, str]:
         headers = dict(extra or {})
         if self.api:
@@ -196,10 +204,13 @@ class SyncCore:
                     raise unreachable(exc) from exc
                 self.sleep(self.retry.delay(attempt - 1, None))  # type: ignore[union-attr]
                 continue
-            if response.status_code in (self.retry.statuses if self.retry else ()) and (
-                attempt < attempts
+            if (
+                self.retry
+                and attempt < attempts
+                and response.status_code in self.retry.statuses
+                and self._transient(response)
             ):
-                wait = self.retry.delay(  # type: ignore[union-attr]
+                wait = self.retry.delay(
                     attempt - 1, parse_retry_after(response.headers.get("retry-after"))
                 )
                 response.close()
@@ -252,6 +263,13 @@ class AsyncCore:
     async def close(self) -> None:
         await self.http.aclose()
 
+    @staticmethod
+    async def _transient(response: httpx.Response) -> bool:
+        if response.status_code != 429:
+            return True
+        await response.aread()
+        return problem_from(response).get("type", "").rsplit("/", 1)[-1] != "quota-exceeded"
+
     async def headers(self, extra: dict[str, str] | None) -> dict[str, str]:
         headers = dict(extra or {})
         if self.api:
@@ -283,10 +301,13 @@ class AsyncCore:
                     raise unreachable(exc) from exc
                 await self.sleep(self.retry.delay(attempt - 1, None))  # type: ignore[union-attr]
                 continue
-            if response.status_code in (self.retry.statuses if self.retry else ()) and (
-                attempt < attempts
+            if (
+                self.retry
+                and attempt < attempts
+                and response.status_code in self.retry.statuses
+                and await self._transient(response)
             ):
-                wait = self.retry.delay(  # type: ignore[union-attr]
+                wait = self.retry.delay(
                     attempt - 1, parse_retry_after(response.headers.get("retry-after"))
                 )
                 await response.aclose()

@@ -18,12 +18,14 @@
 - { name: SUBSTRATE_DATA_TICKET_PRIVATE_KEY_FILE, value: /keys/ticket.pem }
 - { name: SUBSTRATE_DATA_VOLUMES_PUBLIC_ENDPOINT_URL, value: %s }
 - { name: SUBSTRATE_DATA_SCRATCH, value: /var/lib/substrate-data/tmp }` $dataEnv (include "cell.pgUser" .) (include "cell.pgHost" .) (include "cell.pgPort" .) .Values.postgres.databases.data (include "cell.pgSslmode" .) (include "cell.secretRef" (dict "root" . "key" "controller-token")) (include "cell.secretRef" (dict "root" . "key" "control-s3-access-key-id")) (include "cell.secretRef" (dict "root" . "key" "control-s3-secret-access-key")) (include "cell.secretRef" (dict "root" . "key" "mask-salt")) (.Values.publicUrls.s3 | quote) }}
-{{- include "cell.workload" (dict "root" . "component" "data-api" "repo" "substrate-data" "override" $img "port" 8020 "probePath" "/readyz" "args" (list "serve" "--host" "0.0.0.0" "--port" "8020") "cfg" .Values.data.api "env" $apiEnv "writable" (list (dict "name" "state" "path" "/var/lib/substrate-data") (dict "name" "home" "path" "/opt/substrate/home-rw")) "volumes" (list (dict "name" "ticket" "secret" (dict "secretName" $tkName "items" (list (dict "key" "ticket.pem" "path" "ticket.pem"))))) "volumeMounts" (list (dict "name" "ticket" "mountPath" "/keys" "readOnly" true))) }}
+{{- include "cell.workload" (dict "root" . "component" "data-api" "repo" "substrate-data" "override" $img "port" 8020 "probePath" "/readyz" "args" (list "serve" "--host" "0.0.0.0" "--port" "8020") "cfg" .Values.data.api "env" $apiEnv "writable" (list (dict "name" "state" "path" "/var/lib/substrate-data") (dict "name" "home" "path" "/opt/substrate/home-rw")) "scheme" "HTTP" "volumes" (list (dict "name" "ticket" "secret" (dict "secretName" $tkName "items" (list (dict "key" "ticket.pem" "path" "ticket.pem")))) (dict "name" "tls" "secret" (dict "secretName" (printf "%s-internal-tls" $kc)))) "volumeMounts" (list (dict "name" "ticket" "mountPath" "/keys" "readOnly" true) (dict "name" "tls" "mountPath" "/tls" "readOnly" true))) }}
 
 {{- /* controller: one active, its queue in a PVC */}}
 {{- $ctrlEnv := printf `%s
 - name: SUBSTRATE_DATA_CONTROLLER_TOKEN
-  valueFrom: { %s }` $dataEnv (include "cell.secretRef" (dict "root" . "key" "controller-token")) }}
+  valueFrom: { %s }
+- { name: SUBSTRATE_DATA_TLS_CERT_FILE, value: /tls/tls.crt }
+- { name: SUBSTRATE_DATA_TLS_KEY_FILE, value: /tls/tls.key }` $dataEnv (include "cell.secretRef" (dict "root" . "key" "controller-token")) }}
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -36,7 +38,7 @@ spec:
   storageClassName: {{ . }}
   {{- end }}
   resources: { requests: { storage: {{ .Values.data.controller.storage }} } }
-{{ "\n" }}{{- include "cell.workload" (dict "root" . "component" "data-controller" "repo" "substrate-data" "override" $img "port" 8040 "probePath" "/readyz" "args" (list "controller" "--host" "0.0.0.0" "--port" "8040") "cfg" .Values.data.controller "env" $ctrlEnv "volumes" (list (dict "name" "state" "persistentVolumeClaim" (dict "claimName" (printf "%s-data-controller" $kc)))) "volumeMounts" (list (dict "name" "state" "mountPath" "/var/lib/substrate-data"))) }}
+{{ "\n" }}{{- include "cell.workload" (dict "root" . "component" "data-controller" "repo" "substrate-data" "override" $img "port" 8040 "probePath" "/readyz" "args" (list "controller" "--host" "0.0.0.0" "--port" "8040") "cfg" .Values.data.controller "env" $ctrlEnv "scheme" "HTTPS" "volumes" (list (dict "name" "state" "persistentVolumeClaim" (dict "claimName" (printf "%s-data-controller" $kc))) (dict "name" "tls" "secret" (dict "secretName" (printf "%s-internal-tls" $kc)))) "volumeMounts" (list (dict "name" "state" "mountPath" "/var/lib/substrate-data") (dict "name" "tls" "mountPath" "/tls" "readOnly" true))) }}
 
 {{- /* workers: SQL, jobs, RAG */}}
 {{- $ports := dict "sql" 8041 "jobs" 8042 "rag" 8043 }}
@@ -49,9 +51,11 @@ spec:
   valueFrom: { %s }
 - { name: SUBSTRATE_DATA_WORKER_BIND_HOST, value: 0.0.0.0 }
 - { name: SUBSTRATE_DATA_WORKER_MEMORY_LIMIT, value: %s }
-- { name: SUBSTRATE_DATA_TICKET_PUBLIC_KEY_FILE, value: /keys/ticket.pub.pem }` $dataEnv (include "cell.secretRef" (dict "root" . "key" "worker-token")) (include "cell.secretRef" (dict "root" . "key" "worker-s3-access-key-id")) (include "cell.secretRef" (dict "root" . "key" "worker-s3-secret-access-key")) (.Values.data.workers.memoryLimit | quote) }}
+- { name: SUBSTRATE_DATA_TICKET_PUBLIC_KEY_FILE, value: /keys/ticket.pub.pem }
+- { name: SUBSTRATE_DATA_TLS_CERT_FILE, value: /tls/tls.crt }
+- { name: SUBSTRATE_DATA_TLS_KEY_FILE, value: /tls/tls.key }` $dataEnv (include "cell.secretRef" (dict "root" . "key" "worker-token")) (include "cell.secretRef" (dict "root" . "key" "worker-s3-access-key-id")) (include "cell.secretRef" (dict "root" . "key" "worker-s3-secret-access-key")) (.Values.data.workers.memoryLimit | quote) }}
 {{- range $role, $port := $ports }}
-{{- include "cell.workload" (dict "root" $ "component" (printf "data-worker-%s" $role) "repo" "substrate-data" "override" $img "port" $port "probePath" "/readyz" "args" (list "worker" "--role" $role "--port" ($port | toString)) "cfg" (index $.Values.data.workers $role) "env" $workerEnv "writable" (list (dict "name" "state" "path" "/var/lib/substrate-data")) "volumes" (list (dict "name" "ticket" "secret" (dict "secretName" $tkName "items" (list (dict "key" "ticket.pub.pem" "path" "ticket.pub.pem"))))) "volumeMounts" (list (dict "name" "ticket" "mountPath" "/keys" "readOnly" true))) }}
+{{- include "cell.workload" (dict "root" $ "component" (printf "data-worker-%s" $role) "repo" "substrate-data" "override" $img "port" $port "probePath" "/readyz" "args" (list "worker" "--role" $role "--port" ($port | toString)) "cfg" (index $.Values.data.workers $role) "env" $workerEnv "writable" (list (dict "name" "state" "path" "/var/lib/substrate-data")) "scheme" "HTTPS" "volumes" (list (dict "name" "ticket" "secret" (dict "secretName" $tkName "items" (list (dict "key" "ticket.pub.pem" "path" "ticket.pub.pem")))) (dict "name" "tls" "secret" (dict "secretName" (printf "%s-internal-tls" $kc)))) "volumeMounts" (list (dict "name" "ticket" "mountPath" "/keys" "readOnly" true) (dict "name" "tls" "mountPath" "/tls" "readOnly" true))) }}
 {{- end }}
 
 {{- /* Ticket key pair: Helm cannot make Ed25519 keys, so a pre-install Job does (unless you bring data.ticketKeys.existingSecret). */}}
@@ -149,7 +153,7 @@ spec:
             - |
               for role in sql jobs rag; do
                 case $role in sql) port=8041;; jobs) port=8042;; rag) port=8043;; esac
-                substrate-data attach --name "$role" --role "$role" --url "http://{{ $kc }}-data-worker-$role:$port" --token-env SUBSTRATE_DATA_WORKER_TOKEN
+                substrate-data attach --name "$role" --role "$role" --url "https://{{ $kc }}-data-worker-$role:$port" --token-env SUBSTRATE_DATA_WORKER_TOKEN
               done
           env:
             {{- $dataEnv | nindent 12 }}
@@ -158,5 +162,30 @@ spec:
             - name: SUBSTRATE_DATA_WORKER_TOKEN
               valueFrom: { {{ include "cell.secretRef" (dict "root" . "key" "worker-token") }} }
           securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: [ALL] } }
-          volumeMounts: [ { name: tmp, mountPath: /tmp } ]
-      volumes: [ { name: tmp, emptyDir: {} } ]
+          volumeMounts: [ { name: tmp, mountPath: /tmp }, { name: tls, mountPath: /tls, readOnly: true } ]
+      volumes: [ { name: tmp, emptyDir: {} }, { name: tls, secret: { secretName: {{ $kc }}-internal-tls } } ]
+
+---
+{{- /* Private CA + one certificate for the controller and workers (substrate-data refuses plain HTTP between them). Kept across upgrades. */}}
+{{- $tlsName := printf "%s-internal-tls" $kc }}
+{{- $oldTls := lookup "v1" "Secret" .Release.Namespace $tlsName }}
+{{- $hosts := list "localhost" }}
+{{- range $c := list "data-controller" "data-worker-sql" "data-worker-jobs" "data-worker-rag" }}{{ $hosts = append $hosts (printf "%s-%s" $kc $c) }}{{ end }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $tlsName }}
+  labels: {{- include "cell.labels" . | nindent 4 }}
+type: Opaque
+data:
+  {{- if $oldTls }}
+  ca.crt: {{ index $oldTls.data "ca.crt" }}
+  tls.crt: {{ index $oldTls.data "tls.crt" }}
+  tls.key: {{ index $oldTls.data "tls.key" }}
+  {{- else }}
+  {{- $ca := genCA "substrate cell internal CA" 3650 }}
+  {{- $cert := genSignedCert "substrate-data internal" nil $hosts 825 $ca }}
+  ca.crt: {{ $ca.Cert | b64enc }}
+  tls.crt: {{ $cert.Cert | b64enc }}
+  tls.key: {{ $cert.Key | b64enc }}
+  {{- end }}

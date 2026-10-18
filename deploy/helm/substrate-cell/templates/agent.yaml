@@ -4,6 +4,7 @@
 - name: REDIS_PASSWORD
   valueFrom: { {{ include "cell.secretRef" (dict "root" . "key" "redis-password") }} }
 - { name: DATABASE_URL, value: "postgresql+asyncpg://{{ include "cell.pgUser" . }}:$(POSTGRES_PASSWORD)@{{ include "cell.pgHost" . }}:{{ include "cell.pgPort" . }}/{{ .Values.postgres.databases.agent }}?ssl={{ include "cell.pgSslmode" . }}" }
+- { name: ASYNC_DATABASE_URL, value: "postgresql://{{ include "cell.pgUser" . }}:$(POSTGRES_PASSWORD)@{{ include "cell.pgHost" . }}:{{ include "cell.pgPort" . }}/{{ .Values.postgres.databases.agent }}?sslmode={{ include "cell.pgSslmode" . }}" }
 - { name: REDIS_URL, value: "redis://:$(REDIS_PASSWORD)@{{ include "cell.redisHost" . }}:{{ if .Values.redis.bundled.enabled }}6379{{ else }}{{ .Values.redis.external.port }}{{ end }}/0" }
 - { name: STORE_BACKEND, value: postgres }
 - { name: FILE_STORE_BACKEND, value: s3 }

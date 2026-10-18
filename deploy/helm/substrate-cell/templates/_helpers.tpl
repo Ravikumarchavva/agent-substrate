@@ -51,7 +51,7 @@ app.kubernetes.io/component: {{ .component }}
 {{/* In-cluster hosts substrate-data may speak plain HTTP to (explicit opt-in there); NetworkPolicy fences the namespace. */}}
 {{- define "cell.insecureHosts" -}}
 {{- $f := include "cell.fullname" . -}}
-{{- $own := list (printf "%s-seaweedfs" $f) (printf "%s-keycloak" $f) (printf "%s-data-controller" $f) (printf "%s-data-worker-sql" $f) (printf "%s-data-worker-jobs" $f) (printf "%s-data-worker-rag" $f) -}}
+{{- $own := list (printf "%s-seaweedfs" $f) (printf "%s-keycloak" $f) -}}
 {{- $pub := list -}}
 {{- range $u := list .Values.publicUrls.keycloak .Values.publicUrls.s3 -}}
 {{- if hasPrefix "http://" $u }}{{ $pub = append $pub (regexReplaceAll "^http://([^/:]+).*$" $u "${1}") }}{{ end -}}
@@ -90,7 +90,9 @@ app.kubernetes.io/component: {{ .component }}
 - name: SUBSTRATE_DATA_STORAGE_ID
   value: {{ default (printf "%s-warehouse" .Release.Name) .Values.s3.storageId | quote }}
 - name: SUBSTRATE_DATA_CONTROLLER_URL
-  value: "http://{{ include "cell.fullname" . }}-data-controller:8040"
+  value: "https://{{ include "cell.fullname" . }}-data-controller:8040"
+- name: SUBSTRATE_DATA_INTERNAL_CA_FILE
+  value: /tls/ca.crt
 {{- if .Values.s3.stsRoleArn }}
 - name: SUBSTRATE_DATA_STORAGE_STS_ROLE_ARN
   value: {{ .Values.s3.stsRoleArn | quote }}
@@ -160,11 +162,11 @@ spec:
             {{- toYaml . | nindent 12 }}
           {{- end }}
           readinessProbe:
-            httpGet: { path: {{ .probePath }}, port: http }
+            httpGet: { path: {{ .probePath }}, port: http, scheme: {{ .scheme | default "HTTP" }} }
             periodSeconds: 10
             failureThreshold: 6
           livenessProbe:
-            httpGet: { path: {{ .probePath }}, port: http }
+            httpGet: { path: {{ .probePath }}, port: http, scheme: {{ .scheme | default "HTTP" }} }
             initialDelaySeconds: 30
             periodSeconds: 20
             failureThreshold: 6

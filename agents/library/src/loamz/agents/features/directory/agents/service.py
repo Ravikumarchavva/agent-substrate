@@ -11,10 +11,11 @@ from __future__ import annotations
 import time
 from collections.abc import Awaitable, Callable, Sequence
 from datetime import UTC, datetime
-from typing import Any, Protocol
+from typing import Protocol
 
 from loamz.agents.bootstrap.container import Container
 from loamz.agents.features.directory.agents.activity import (
+    LastWord,
     RuntimeActivity,
     ThreadActivity,
 )
@@ -31,6 +32,10 @@ from loamz.agents.features.directory.agents.model import (
     Drive,
     ToolInfo,
     ToolList,
+    ViewChat,
+    ViewChats,
+    ViewMessage,
+    ViewMessages,
     files_instructions,
 )
 from loamz.agents.features.directory.agents.store import AgentsStore
@@ -43,8 +48,10 @@ from loamz.agents.features.directory.delegation.service import (
 )
 from loamz.agents.features.directory.pairs.service import PairsService, channels, pairs
 from loamz.agents.features.directory.pins.service import PinsService, pins
+from loamz.agents.kernel.agents.agent import Agent
 from loamz.agents.kernel.caller import Caller
 from loamz.agents.kernel.ports.files import FileStore
+from loamz.agents.kernel.tools.tool import Tool
 from loamz.agents.kernel.types.ids import new_id
 from loamz.agents.providers.llm.factory import (
     detect_provider,
@@ -109,9 +116,7 @@ def agent_hooks(container: Container) -> AgentHooks:
     return AgentHooks()
 
 
-def narrow_tools(
-    tools: list[Any], profile: AgentProfile, name_of: Callable[[Any], str]
-) -> list[Any]:
+def narrow_tools[T](tools: list[T], profile: AgentProfile, name_of: Callable[[T], str]) -> list[T]:
     """The tools this agent may use: all of them unless it lists some."""
     if profile.allowed_tools is None:
         return tools
@@ -245,7 +250,7 @@ class AgentsService:
         profile: AgentProfile,
         pinned: datetime | None,
         thread_id: str | None = None,
-        last: Any = None,
+        last: LastWord | None = None,
         working: bool = False,
     ) -> AgentOut:
         return AgentOut(
@@ -321,7 +326,7 @@ class AgentsService:
         profile = await self.get_owned(caller, agent_id)
         self._check_tools(body.allowed_tools)
         self._check_model(body.model)
-        change: dict[str, Any] = {}
+        change: dict[str, object] = {}
         if body.name is not None:
             change["name"] = body.name.strip()
         if body.role is not None:
@@ -449,7 +454,7 @@ class AgentsService:
         self,
         caller: Caller,
         others: list[AgentRef],
-        name_of: Callable[[Any], str],
+        name_of: Callable[[object], str],
         run_delegate: RunDelegate,
         *,
         asker: str | None = None,
@@ -492,18 +497,18 @@ class AgentsService:
         caller: Caller,
         profile: AgentProfile,
         *,
-        tools: list[Any],
-        name_of: Callable[[Any], str],
+        tools: list[Tool],
+        name_of: Callable[[Tool], str],
         base_instructions: str = "",
         extra_instructions: str = "",
         drives: Sequence[Drive] = (),
-        extra_tools: Sequence[Any] = (),
+        extra_tools: Sequence[Tool] = (),
         session_id: str,
         name: str,
-        channel: Any = None,
+        channel: object = None,
         drop_tools: tuple[str, ...] = (),
-        **options: Any,
-    ) -> Any:
+        **options: object,
+    ) -> Agent:
         """The agent for `profile` (unregistered): its role, permitted tools plus `extra_tools`, its own model, keeping
         its conversation under `session_id`. With a `ChannelMemberConfig` as `channel` it is an agent that lives in
         channels. `options` go to `create_assistant_agent` (middleware, approval_required_risk…)."""
@@ -530,6 +535,108 @@ class AgentsService:
             channel=channel,
             **options,
         )
+
+    # ── views ───────────────────────────────────────────────────────────────
+    async def view_chats(
+        self,
+        caller: Caller,
+        agent_id: str,
+        *,
+        q: str = "",
+        kind: str = "all",
+        before: datetime | None = None,
+        limit: int = 30,
+    ) -> ViewChats:
+        agent = await self.get_owned(caller, agent_id)
+        rows: list[ViewChat] = []
+        if kind in ("all", "agents"):
+            before_ts = before.timestamp() if before else None
+            pair_list = await self.pairs.of_agent(
+                caller.tenant_id, caller.user_id, agent.id, q=q, before=before_ts, limit=limit
+            )
+            for pair, other_name, other_avatar in pair_list:
+                rows.append(
+                    ViewChat(
+                        key=f"pair-{pair.id}",
+                        kind="agent",
+                        id=str(pair.id),
+                        name=other_name,
+                        avatar=other_avatar,
+                        preview=pair.last_text,
+                        last_sender=pair.last_sender,
+                        at=datetime.fromtimestamp(pair.last_at, UTC) if pair.last_at else None,
+                        count=pair.exchanges,
+                    )
+                )
+        if kind in ("all", "you") and not q:
+            thread = await self._main_thread(caller, agent.id)
+            if thread is not None:
+                activity = self.activity()
+                last = await activity.last_word(thread.id)
+                rows.insert(
+                    0,
+                    ViewChat(
+                        key="you",
+                        kind="you",
+                        id=thread.id,
+                        name=caller.name or "You",
+                        preview=last.text if last else "",
+                        at=last.at if last else None,
+                    ),
+                )
+        return ViewChats(items=rows[:limit])
+
+    async def view_messages(
+        self,
+        caller: Caller,
+        agent_id: str,
+        key: str,
+        *,
+        before: int | None = None,
+        limit: int = 50,
+    ) -> ViewMessages:
+        agent = await self.get_owned(caller, agent_id)
+        if key == "you":
+            thread = await self._main_thread(caller, agent.id)
+            if thread is None:
+                return ViewMessages(items=[])
+            activity = self.activity()
+            said = await activity.said(thread.id)
+            return ViewMessages(
+                items=[
+                    ViewMessage(
+                        seq=i,
+                        sender=s.role,
+                        text=s.text,
+                        at=s.at,
+                    )
+                    for i, s in enumerate(said)
+                ]
+            )
+        if key.startswith("pair-"):
+            pair_id = key.removeprefix("pair-")
+            pair = await self.pairs.pair_for(caller.tenant_id, caller.user_id, agent.id, pair_id)
+            if pair is None:
+                raise NotFoundError("Chat not found")
+            channel_store = self._c.get(channels)
+            entries = (
+                await channel_store.channel_last(pair.channel, limit)
+                if before is None
+                else await channel_store.channel_read_before(pair.channel, before, limit)
+            )
+            return ViewMessages(
+                items=[
+                    ViewMessage(
+                        seq=e.seq,
+                        sender=str(e.sender.id if e.sender else ""),
+                        text=e.text or "",
+                        at=e.created_at,
+                        data=dict(e.data or {}),
+                    )
+                    for e in entries
+                ]
+            )
+        raise NotFoundError(f"Unknown chat key '{key}'")
 
     # ── erasure ─────────────────────────────────────────────────────────────
     async def erase(self, tenant_id: str, user_id: str | None = None) -> int:

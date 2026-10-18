@@ -6,22 +6,30 @@ contents are left out, which is also what makes the same function safe for a pub
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TypedDict
 
 
-def messages_of(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+class ExportMessage(TypedDict):
+    role: str
+    text: str
+    attachments: list[str]
+
+
+def messages_of(events: list[dict[str, object]]) -> list[ExportMessage]:
     """`[{"role": "user"|"assistant", "text", "attachments": [names]}]` in order, assistant deltas joined."""
-    out: list[dict[str, Any]] = []
+    out: list[ExportMessage] = []
     for event in events:
         kind = event.get("type")
         if kind == "user.message":
+            raw_att = event.get("attachments")
+            attachments_list: list[object] = raw_att if isinstance(raw_att, list) else []
             out.append(
                 {
                     "role": "user",
                     "text": str(event.get("text") or ""),
                     "attachments": [
                         str(a.get("name"))
-                        for a in event.get("attachments") or []
+                        for a in attachments_list
                         if isinstance(a, dict) and a.get("name")
                     ],
                 }
@@ -33,7 +41,7 @@ def messages_of(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [m for m in out if m["text"].strip() or m["attachments"]]
 
 
-def to_markdown(title: str, messages: list[dict[str, Any]]) -> str:
+def to_markdown(title: str, messages: list[ExportMessage]) -> str:
     lines = [f"# {title.strip() or 'Conversation'}", ""]
     for m in messages:
         lines.append("## You" if m["role"] == "user" else "## Assistant")

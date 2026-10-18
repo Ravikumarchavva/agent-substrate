@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Any
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, Response
 
@@ -15,6 +15,6 @@ router = APIRouter(prefix="/health", tags=["infra"])
 
 
 @router.get("/ready")
-async def ready(service: Service, response: Response) -> dict[str, Any]:
+async def ready(service: Service, response: Response) -> dict[str, object]:
     response.headers["Cache-Control"] = "no-store"
     return await service.ready()

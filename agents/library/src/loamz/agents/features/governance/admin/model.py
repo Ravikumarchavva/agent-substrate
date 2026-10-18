@@ -1,7 +1,3 @@
-from __future__ import annotations
-
-from typing import Any
-
 from pydantic import BaseModel
 
 
@@ -27,7 +23,7 @@ class ThreadList(BaseModel):
 
 
 class StepList(BaseModel):
-    items: list[dict[str, Any]]
+    items: list[dict[str, object]]
     next_page_token: str | None = None
 
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Any
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Response
 
@@ -71,5 +71,5 @@ async def list_storage_conversations(
 @router.put("/storage/{tenant_id}/quota")
 async def set_storage_quota(
     tenant_id: str, body: SetQuota, caller: CallerDep, service: Service
-) -> dict[str, Any]:
+) -> dict[str, object]:
     return await service.set_storage_quota(caller, tenant_id, body.quota_bytes)

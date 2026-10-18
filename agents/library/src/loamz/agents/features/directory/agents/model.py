@@ -112,6 +112,35 @@ class ContactList(BaseModel):
     items: list[ContactOut]
 
 
+class ViewChat(BaseModel):
+    key: str
+    kind: str
+    id: str
+    name: str
+    avatar: str | None = None
+    preview: str = ""
+    last_sender: str | None = None
+    at: datetime | None = None
+    count: int = 0
+
+
+class ViewChats(BaseModel):
+    items: list[ViewChat]
+    next: datetime | None = None
+
+
+class ViewMessage(BaseModel):
+    seq: int
+    sender: str
+    text: str
+    at: datetime
+    data: dict[str, object] = Field(default_factory=dict)
+
+
+class ViewMessages(BaseModel):
+    items: list[ViewMessage]
+
+
 @dataclass(frozen=True, slots=True)
 class Drive:
     """One group's shared folder as an agent's code sees it."""

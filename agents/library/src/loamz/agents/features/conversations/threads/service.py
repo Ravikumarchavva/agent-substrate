@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from collections.abc import Awaitable, Callable
 
 from loamz.agents.bootstrap.container import Container
 from loamz.agents.features.conversations.threads.export import filename, messages_of, to_markdown
@@ -59,7 +59,7 @@ class ThreadsService:
         caller: Caller,
         body: ThreadCreate,
         *,
-        agent_thread: Any = None,
+        agent_thread: Callable[[Caller, str], Awaitable[ThreadHeader]] | None = None,
     ) -> ThreadHeader:
         """A new thread. With `agent_id` the agent's one conversation is opened instead (`agent_thread` is the
         directory's `open_thread(caller, agent_id)`, passed in by the API layer's provider)."""
@@ -76,7 +76,7 @@ class ThreadsService:
         *,
         name: str = "New Chat",
         tags: tuple[str, ...] = (),
-        metadata: dict[str, Any] | None = None,
+        metadata: dict[str, object] | None = None,
         agent_id: str | None = None,
     ) -> ThreadHeader:
         """A thread for `user_id`, from the server's own work (a schedule, a delegation) as well as from a request."""
@@ -147,7 +147,7 @@ class ThreadsService:
 
     async def update(self, caller: Caller, thread_id: str, body: ThreadUpdate) -> ThreadOut:
         owned = await self.require(caller, thread_id)
-        changes: dict[str, Any] = {}
+        changes: dict[str, object] = {}
         if body.name is not None and not is_agent_chat(owned):
             changes["name"] = body.name
         updated = await self.headers.update(

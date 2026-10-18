@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from typing import Any
 
 from loamz.agents.bootstrap.container import Container
 from loamz.agents.bootstrap.settings import AudioSettings
@@ -54,7 +53,7 @@ class AudioService:
         self._container = container
         self._cfg = settings
 
-    def client_for(self, requested: str | None, fallback: str) -> tuple[Any, str, str]:
+    def client_for(self, requested: str | None, fallback: str) -> tuple[object, str, str]:
         """`(client, provider, model)` for the requested model, else the configured default for this job."""
         from loamz.agents.providers.llm import detect_provider, strip_provider_prefix
 

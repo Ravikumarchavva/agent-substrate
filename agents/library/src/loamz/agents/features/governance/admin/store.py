@@ -9,7 +9,6 @@ from __future__ import annotations
 import base64
 import json
 from datetime import UTC, datetime
-from typing import Any
 
 from loamz.agents.stores import AgentStore
 from loamz.data.storage.errors import InvalidRequestError
@@ -23,13 +22,15 @@ def _iso(value: float | None) -> str | None:
     return None if value is None else datetime.fromtimestamp(value, UTC).isoformat()
 
 
-def _token(*parts: Any) -> str:
+def _token(*parts: object) -> str:
     return base64.urlsafe_b64encode(json.dumps(list(parts)).encode()).decode().rstrip("=")
 
 
-def _untoken(token: str, size: int) -> list[Any]:
+def _untoken(token: str, size: int) -> list[str | int | float]:
     try:
-        parts = json.loads(base64.urlsafe_b64decode(token + "=" * (-len(token) % 4)))
+        parts: list[str | int | float] = json.loads(
+            base64.urlsafe_b64decode(token + "=" * (-len(token) % 4))
+        )
         if len(parts) != size:
             raise ValueError
         return parts
@@ -64,7 +65,7 @@ class AdminStore:
 
     async def threads(
         self, tenant_id: str | None, page_size: int, page_token: str | None
-    ) -> tuple[list[dict[str, Any]], str | None]:
+    ) -> tuple[list[dict[str, object]], str | None]:
         """Threads (deleted ones included), newest activity first, with their journal event counts."""
         if not await self._store.has(HEADERS):
             return [], None
@@ -131,7 +132,7 @@ class AdminStore:
 
     async def steps(
         self, tenant_id: str, thread_id: str, page_size: int, page_token: str | None
-    ) -> tuple[list[dict[str, Any]], str | None]:
+    ) -> tuple[list[dict[str, object]], str | None]:
         """The thread's durable journal (live token streams excluded), run by run, entry by entry."""
         if not await self._store.has(RUNTIME):
             return [], None

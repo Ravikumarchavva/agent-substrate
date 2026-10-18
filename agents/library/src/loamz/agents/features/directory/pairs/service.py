@@ -9,7 +9,6 @@ with a hundred contacts is a page of rows, not a hundred journals.
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any
 
 from loamz.agents.bootstrap.container import Container
 from loamz.agents.features.directory.pairs.store import Pair, PairsStore
@@ -45,7 +44,7 @@ class ChannelsStore(RuntimeStore):
 
     _opened = False
 
-    async def _tx(self, fn: Callable[..., Any]) -> Any:
+    async def _tx[T](self, fn: Callable[..., T]) -> T:
         if not self._opened:
             await self.start()
             self._opened = True

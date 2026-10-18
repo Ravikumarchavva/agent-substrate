@@ -117,4 +117,3 @@ class DataFileStore(FileStore):
         with self._connection.bearer(token):
             res = await self._connection.client.files.copy_prefix(volume, s_rel, d_rel)
             return int(res.get("copied", 0))
-

@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import time
 from collections.abc import Awaitable, Callable
-from typing import Any, ClassVar
+from typing import ClassVar
 
 from loamz.agents.bootstrap.container import Container
 from loamz.data.storage.errors import ServiceUnavailableError
@@ -18,15 +18,17 @@ class NotReadyError(ServiceUnavailableError):
 
     code: ClassVar[str] = "unavailable"
 
-    def __init__(self, checks: list[dict[str, Any]]) -> None:
-        super().__init__("Not ready: " + ", ".join(c["name"] for c in checks if not c["ok"]))
+    def __init__(self, checks: list[dict[str, object]]) -> None:
+        super().__init__(
+            "Not ready: " + ", ".join(str(c["name"]) for c in checks if not c.get("ok"))
+        )
         self.checks = checks
 
-    def extensions(self) -> dict[str, Any]:
+    def extensions(self) -> dict[str, object]:
         return {"status": "unavailable", "checks": self.checks}
 
 
-async def _timed(name: str, check: Callable[[], Awaitable[Any]]) -> dict[str, Any]:
+async def _timed(name: str, check: Callable[[], Awaitable[object]]) -> dict[str, object]:
     started = time.monotonic()
     try:
         await asyncio.wait_for(check(), timeout=CHECK_TIMEOUT_S)
@@ -50,7 +52,7 @@ class HealthService:
     def __init__(self, container: Container) -> None:
         self._c = container
 
-    async def ready(self) -> dict[str, Any]:
+    async def ready(self) -> dict[str, object]:
         c = self._c
 
         async def database() -> None:

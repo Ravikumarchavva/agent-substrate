@@ -178,11 +178,19 @@ async def test_the_api(tmp_path):
             r = await c.post("/api/v1/me/memories", json={"content": "I like tea"})
             assert r.status_code == 201
             made = r.json()
-            assert (await c.post("/api/v1/me/memories", json={"content": "i like TEA"})).status_code == 409
-            assert (await c.post("/api/v1/me/memories", json={"content": "x" * 501})).status_code == 422
-            r = await c.patch(f"/api/v1/me/memories/{made['id']}", json={"content": "I like coffee"})
+            assert (
+                await c.post("/api/v1/me/memories", json={"content": "i like TEA"})
+            ).status_code == 409
+            assert (
+                await c.post("/api/v1/me/memories", json={"content": "x" * 501})
+            ).status_code == 422
+            r = await c.patch(
+                f"/api/v1/me/memories/{made['id']}", json={"content": "I like coffee"}
+            )
             assert r.json() == {"id": made["id"], "content": "I like coffee"}
-            assert (await c.get("/api/v1/me/memories")).json()["items"][0]["content"] == "I like coffee"
+            assert (await c.get("/api/v1/me/memories")).json()["items"][0][
+                "content"
+            ] == "I like coffee"
         async with served.client("acme", "u2") as c:
             assert (await c.delete(f"/api/v1/me/memories/{made['id']}")).status_code == 404
         async with served.client("acme", "u1") as c:

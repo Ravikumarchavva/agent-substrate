@@ -55,7 +55,9 @@ async def test_a_days_messages_tokens_and_cost_are_summed(log):
 async def test_only_the_given_threads_and_the_tenant_count(log):
     await run(log, "mine", [("llm.call", {"tokens": 100, "cost_usd": 0.1})])
     await run(log, "theirs", [("llm.call", {"tokens": 900, "cost_usd": 0.9})])
-    await run(log, "other-tenant", [("llm.call", {"tokens": 900, "cost_usd": 0.9})], tenant="globex")
+    await run(
+        log, "other-tenant", [("llm.call", {"tokens": 900, "cost_usd": 0.9})], tenant="globex"
+    )
     series = await usage_by_day(
         log._owner, tenant=TENANT, thread_ids=["mine", "other-tenant"], since=since(1)
     )
@@ -84,14 +86,20 @@ async def test_a_store_that_never_ran_anything_has_no_usage(tmp_path):
 async def test_the_api_sums_only_the_callers_own_threads(tmp_path):
     async with serving(tmp_path, only=("people.usage",)) as served:
         store = served.container.agent_store
-        await store.thread_headers.create(ThreadHeader(id="mine", tenant_id="acme", user_id="alice"))
+        await store.thread_headers.create(
+            ThreadHeader(id="mine", tenant_id="acme", user_id="alice")
+        )
         await store.thread_headers.create(ThreadHeader(id="his", tenant_id="acme", user_id="bob"))
         from loamz.agents.kernel.runtime.persistence.store import RuntimeStore
 
         runtime = RuntimeStore(served.container.database)
         await runtime.start()
         for thread, tokens in (("mine", 100), ("his", 900)):
-            await run(runtime, thread, [("user.message", {}), ("llm.call", {"tokens": tokens, "cost_usd": 0.5})])
+            await run(
+                runtime,
+                thread,
+                [("user.message", {}), ("llm.call", {"tokens": tokens, "cost_usd": 0.5})],
+            )
         async with served.client("acme", "alice") as c:
             body = (await c.get("/api/v1/me/usage")).json()
         assert body["today"] == {"messages": 1, "tokens": 100, "cost_usd": 0.5}

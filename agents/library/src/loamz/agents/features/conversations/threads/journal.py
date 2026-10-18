@@ -11,13 +11,13 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
 
 from loamz.agents.features.conversations.threads.model import LastWord, RunDetail, ToolStep
 from loamz.agents.kernel.runtime import NewEntry, Runtime
 from loamz.agents.kernel.types.run_log import RunLogKind
 from loamz.agents.kernel.wire import WireEvent, wire_from_log
 from loamz.agents.stores import AgentStore
+from loamz.data.storage.sql import Row, Tx
 
 MESSAGE_KINDS = ("user.message", "assistant.message")
 MAX_THREADS = 500
@@ -54,12 +54,12 @@ def snippet(text: str, query: str) -> str:
     return ("…" if start else "") + cut + ("…" if start + SNIPPET_CHARS < len(flat) else "")
 
 
-def _cut(text: Any) -> str:
+def _cut(text: object) -> str:
     s = text if isinstance(text, str) else repr(text)
     return s if len(s) <= CUT else s[:CUT] + "…"
 
 
-def _args(args: Any) -> str:
+def _args(args: object) -> str:
     try:
         return _cut(json.dumps(args, ensure_ascii=False, default=str))
     except TypeError, ValueError:
@@ -85,7 +85,7 @@ class ThreadJournal:
                     events.append((wire, entry.ts))
         return events
 
-    async def annotate(self, thread_id: str, kind: str, payload: dict[str, Any]) -> bool:
+    async def annotate(self, thread_id: str, kind: str, payload: dict[str, object]) -> bool:
         """Append an entry to the thread's active run (else its latest) for writes that do not come from a running
         agent: an MCP app's context, a note between runs. False if the thread has no runs yet."""
         runs = await self._rt.find_runs(thread_id=thread_id)
@@ -171,7 +171,7 @@ class ThreadJournal:
         if not ids:
             return {}
 
-        async def op(tx: Any) -> dict[str, int]:
+        async def op(tx: Tx) -> dict[str, int]:
             rows = await tx.fetchall(
                 "SELECT r.thread_id AS thread_id, COUNT(*) AS n FROM rt_events e "
                 "JOIN rt_runs r ON r.run_id = e.run_id "
@@ -195,7 +195,7 @@ class ThreadJournal:
         if len(query) < 2 or not ids:
             return []
 
-        async def op(tx: Any) -> list[Any]:
+        async def op(tx: Tx) -> list[Row]:
             return list(
                 await tx.fetchall(
                     "SELECT r.thread_id AS thread_id, e.seq AS seq, e.kind AS kind, e.entry_json AS entry "

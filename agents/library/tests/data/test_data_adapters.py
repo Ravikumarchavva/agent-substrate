@@ -95,12 +95,16 @@ async def test_data_memory_store():
     conn.bearer.return_value.__enter__ = MagicMock()
     conn.bearer.return_value.__exit__ = MagicMock()
 
-    rec = MemoryRecord.from_text("user likes tea", namespace=MemoryNamespace(tenant_id="acme", user_id="u1"))
+    rec = MemoryRecord.from_text(
+        "user likes tea", namespace=MemoryNamespace(tenant_id="acme", user_id="u1")
+    )
     client.memory = MagicMock()
     client.memory.save = AsyncMock(return_value="rec-1")
     client.memory.get = AsyncMock(return_value=rec.model_dump(mode="json"))
     client.memory.delete = AsyncMock()
-    client.memory.query = AsyncMock(return_value=[{"record": rec.model_dump(mode="json"), "score": 0.95, "rank": 1}])
+    client.memory.query = AsyncMock(
+        return_value=[{"record": rec.model_dump(mode="json"), "score": 0.95, "rank": 1}]
+    )
     client.memory.touch = AsyncMock()
     client.memory.erase = AsyncMock(return_value=1)
 
@@ -117,7 +121,9 @@ async def test_data_memory_store():
     deleted = await store.delete(MemoryNamespace(tenant_id="acme", user_id="u1"), rec.id)
     assert deleted is True
 
-    matches = await store.query(MemoryQuery(namespace=MemoryNamespace(tenant_id="acme", user_id="u1"), text_query="tea"))
+    matches = await store.query(
+        MemoryQuery(namespace=MemoryNamespace(tenant_id="acme", user_id="u1"), text_query="tea")
+    )
     assert len(matches) == 1
     assert matches[0].record.text == "user likes tea"
 

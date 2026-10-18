@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 from loamz.agents.bootstrap.container import Container
 from loamz.agents.features.governance.admin.model import (
@@ -104,7 +103,7 @@ class AdminService:
 
     async def set_storage_quota(
         self, caller: Caller, tenant_id: str, quota_bytes: int | None
-    ) -> dict[str, Any]:
+    ) -> dict[str, object]:
         caller.require_role(PLATFORM_ADMIN)
         # TODO(integration): the data service's volume quota. The local folder store keeps one global figure and this
         # process holds no per-tenant table, so it says so instead of pretending to persist one.

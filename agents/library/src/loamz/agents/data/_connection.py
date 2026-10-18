@@ -82,4 +82,3 @@ def identity_of(collection: str) -> tuple[str, str | None]:
     if len(parts) >= 2 and parts[0] == "users":
         return tenant, parts[1]
     return tenant, None
-

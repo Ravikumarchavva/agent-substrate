@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from typing import Any
-
 from loamz.agents.bootstrap.container import Container
+from loamz.agents.bootstrap.settings import RateLimitSettings
 from loamz.agents.kernel.ports.counters import Counters
 
 __all__ = ["RateLimitService", "rate_limit"]
@@ -11,11 +10,11 @@ __all__ = ["RateLimitService", "rate_limit"]
 class RateLimitService:
     """Where a caller stands against the request limit, read without counting the call."""
 
-    def __init__(self, counters: Counters, settings: Any) -> None:
+    def __init__(self, counters: Counters, settings: RateLimitSettings) -> None:
         self._counters = counters
         self._cfg = settings
 
-    async def status(self, key: str, *, authenticated: bool) -> dict[str, Any]:
+    async def status(self, key: str, *, authenticated: bool) -> dict[str, int | bool]:
         """`enabled`, `used`, `limit`, `window_seconds`, `reset_in` for the window keyed by `key`."""
         cfg = self._cfg
         if not cfg.enabled:

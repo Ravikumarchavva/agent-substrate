@@ -1296,6 +1296,27 @@
         "title": "TableCreate",
         "type": "object"
       },
+      "TenantEnsure": {
+        "additionalProperties": false,
+        "properties": {
+          "alias": {
+            "pattern": "^[a-z][a-z0-9_]{0,55}$",
+            "title": "Alias",
+            "type": "string"
+          },
+          "tenant_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "alias"
+        ],
+        "title": "TenantEnsure",
+        "type": "object"
+      },
       "Update": {
         "additionalProperties": false,
         "properties": {
@@ -5327,6 +5348,45 @@
         "summary": "Cancel",
         "tags": [
           "statements"
+        ]
+      }
+    },
+    "/api/v1/tenants": {
+      "post": {
+        "operationId": "ensure_tenant_api_v1_tenants_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TenantEnsure"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Ensure Tenant",
+        "tags": [
+          "tenants"
         ]
       }
     },

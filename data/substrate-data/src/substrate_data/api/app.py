@@ -26,6 +26,7 @@ from substrate_data.api.routes import (
     materialized,
     policies,
     statements,
+    tenants,
     views,
     workloads,
 )
@@ -154,6 +155,7 @@ def create_app(settings: Settings | None = None, services: Services | None = Non
         workloads,
         assets,
         files,
+        tenants,
     ):
         app.include_router(module.router)
 

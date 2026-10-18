@@ -17,13 +17,33 @@ import uvicorn
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from fastapi import FastAPI
 from pydantic import ValidationError
+from substrate_identity import IdentityProviderUnavailable, InvalidToken, JwksSource
 
 from conftest import IssuerKeys
 from pki import issue, make_ca
-from substrate_data.auth.oidc import RemoteKeys
 from substrate_data.cli import listener_config
-from substrate_data.core.errors import Problem
 from substrate_data.core.models import Settings, TrustedIssuer
+
+
+def test_a_trusted_issuer_is_capped_to_its_allowed_scopes(identity):
+    from conftest import AGENT_ISSUER, ISSUER
+    from substrate_data.auth.oidc import TokenVerifier
+
+    cfg = Settings(
+        _env_file=None,
+        oidc_issuer=ISSUER,
+        trusted_issuers=[
+            TrustedIssuer(
+                issuer=AGENT_ISSUER,
+                jwks_uri=identity.agent_keys.uri,
+                allowed_scopes=["data:read", "files:read"],
+            )
+        ],
+    )
+    verifier = TokenVerifier(cfg, jwks=identity.jwks)
+    asked = identity.agent_token("alice", scope="data:read files:read files:write")
+    caller = verifier.verify("Bearer " + asked)
+    assert caller.scopes == {"data:read", "files:read"} and not caller.is_admin
 
 
 def token(key, kid):
@@ -43,7 +63,7 @@ def issuer():
 
 
 def remote(keys, **options):
-    return RemoteKeys(TrustedIssuer(issuer="agent", jwks_uri=keys.uri), **options)
+    return JwksSource(keys.uri, ("EdDSA",), insecure_http=True, **options)
 
 
 def test_keys_are_fetched_once_and_cached(issuer):
@@ -69,7 +89,7 @@ def test_unknown_key_ids_cannot_make_the_service_hammer_the_issuer(issuer):
     fetcher = remote(keys, min_refresh=60)
     fetcher.key_for(token(first, "k1"))
     for index in range(20):
-        with pytest.raises(jwt.InvalidKeyError):
+        with pytest.raises(InvalidToken):
             fetcher.key_for(token(first, f"spray-{index}"))
     assert keys.hits == 1
 
@@ -85,7 +105,7 @@ def test_a_brief_issuer_outage_is_survivable_a_long_one_is_not(issuer):
     expired.key_for(token(first, "k1"))
     keys.failing = True
     time.sleep(0.3)  # longer than the stale window
-    with pytest.raises(Problem) as error:
+    with pytest.raises(IdentityProviderUnavailable) as error:
         expired.key_for(token(first, "k1"))
     assert error.value.status == 503
 
@@ -93,7 +113,7 @@ def test_a_brief_issuer_outage_is_survivable_a_long_one_is_not(issuer):
 def test_no_keys_and_an_unreachable_issuer_is_a_503_not_a_pass(issuer):
     keys, first = issuer
     keys.failing = True
-    with pytest.raises(Problem) as error:
+    with pytest.raises(IdentityProviderUnavailable) as error:
         remote(keys).key_for(token(first, "k1"))
     assert error.value.status == 503
 
@@ -101,7 +121,7 @@ def test_no_keys_and_an_unreachable_issuer_is_a_503_not_a_pass(issuer):
 def test_keys_for_algorithms_the_operator_did_not_allow_are_ignored(issuer):
     keys, first = issuer
     keys.keys["k1"]["alg"] = "RS256"
-    with pytest.raises(Problem):  # nothing usable was published
+    with pytest.raises(IdentityProviderUnavailable):  # nothing usable was published
         remote(keys).key_for(token(first, "k1"))
 
 
@@ -154,12 +174,11 @@ def test_the_issuers_keys_can_be_fetched_over_tls_from_a_private_ca(pki, issuer)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     uri = f"https://127.0.0.1:{server.server_port}/jwks.json"
     try:
-        trusted = TrustedIssuer(issuer="agent", jwks_uri=uri, jwks_ca_file=pki["ca"])
-        assert RemoteKeys(trusted).key_for(token(first, "k1"))
-        with pytest.raises(Problem):  # a CA we do not trust: the keys are not accepted
-            RemoteKeys(
-                TrustedIssuer(issuer="agent", jwks_uri=uri, jwks_ca_file=pki["other_ca"])
-            ).key_for(token(first, "k1"))
+        assert JwksSource(uri, ("EdDSA",), ca_file=pki["ca"]).key_for(token(first, "k1"))
+        with pytest.raises(
+            IdentityProviderUnavailable
+        ):  # a CA we do not trust: keys are not accepted
+            JwksSource(uri, ("EdDSA",), ca_file=pki["other_ca"]).key_for(token(first, "k1"))
     finally:
         server.shutdown()
 

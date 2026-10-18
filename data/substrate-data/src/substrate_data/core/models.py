@@ -51,6 +51,8 @@ class TrustedIssuer(BaseModel):
     username_claim: str = "sub"
     group_claim: str = "groups"
     read_only: bool = True
+    # Scopes this issuer's tokens may ever carry (others are dropped); None: whatever the token asks for.
+    allowed_scopes: list[str] | None = None
 
     @field_validator("jwks_uri")
     @classmethod

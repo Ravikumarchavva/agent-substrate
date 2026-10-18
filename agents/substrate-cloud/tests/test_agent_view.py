@@ -18,6 +18,10 @@ from substrate_cloud.monolith.services.groups.service import member_actor
 
 from test_scheduled_notifications import session
 
+pytestmark = (
+    pytest.mark.slow
+)  # Postgres-backed, minutes in total: run by CI and `make test-slow`
+
 
 async def _wipe(tenant: str) -> None:
     store = app.state.ctx.runtime.store

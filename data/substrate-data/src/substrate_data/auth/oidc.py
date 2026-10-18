@@ -24,6 +24,16 @@ from substrate_data.core.errors import Problem
 from substrate_data.core.models import Settings, TrustedIssuer
 
 
+def _with_tenant(who) -> frozenset[str]:
+    """The caller's groups plus ``org:<tenant>``: the group tenant provisioning grants a tenant's workspace to.
+
+    Derived here from the verified ``tenant_id`` (never taken from a token's own groups), so a token cannot claim another tenant.
+    """
+    if who.tenant_id:
+        return frozenset({*who.groups, f"org:{who.tenant_id}"})
+    return who.groups
+
+
 class _InjectedKeys:
     """Adapts a PyJWKClient-like object (tests, custom key sources) to the library's key source."""
 
@@ -82,7 +92,7 @@ class TokenVerifier:
                 subject=who.subject,
                 name=who.name,
                 kind="user",
-                groups=who.groups,
+                groups=_with_tenant(who),
                 email=who.email,
                 actor=who.actor,
                 is_admin=False,  # a trusted issuer can never mint an administrator
@@ -94,7 +104,7 @@ class TokenVerifier:
             subject=who.subject,
             name=who.name,
             kind=who.kind,
-            groups=who.groups,
+            groups=_with_tenant(who),
             email=who.email,
             actor=who.actor,
             is_admin=self.settings.admin_group in who.groups,

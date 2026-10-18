@@ -33,6 +33,13 @@ async def test_with_a_data_service_the_agent_database_has_no_file_tables_and_the
         )
     )
     monkeypatch.setattr(settings, "DATA_TOKEN_KEY_FILE", str(key_file))
+    from substrate_cloud import factory
+
+    class _Everyone:
+        async def is_member(self, tenant_id: str, user_id: str) -> bool:
+            return True  # Keycloak membership is covered in test_data_access
+
+    monkeypatch.setattr(factory, "_membership", lambda cfg: _Everyone())
     monkeypatch.setattr(settings, "DATA_TOKEN_ISSUER", "agent-substrate-test")
     monkeypatch.setattr(
         settings, "DATA_FILES_TOKEN_ISSUER", "agent-substrate-test-writable"
@@ -82,7 +89,7 @@ async def test_with_a_data_service_the_agent_database_has_no_file_tables_and_the
         )
         try:
             async with AsyncClient(
-                transport=ASGITransport(app=app), base_url="http://test"
+                transport=ASGITransport(app=app), base_url="http://test/api/v1"
             ) as client:
                 up = await client.post(
                     "/files/upload",

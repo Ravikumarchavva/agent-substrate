@@ -12,6 +12,10 @@ from substrate_cloud.monolith.app import app
 
 from test_scheduled_notifications import session
 
+pytestmark = (
+    pytest.mark.slow
+)  # Postgres-backed, minutes in total: run by CI and `make test-slow`
+
 
 def _image(fmt: str = "PNG", size=(600, 300), color=(200, 30, 30)) -> bytes:
     out = io.BytesIO()

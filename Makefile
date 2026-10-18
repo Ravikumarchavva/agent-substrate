@@ -1,6 +1,6 @@
 # Root entry points. Each package keeps its own Makefile for its own concerns; these run the common checks
 # across the workspace. Python: uv workspace (uv.lock). JavaScript: pnpm workspace (pnpm-lock.yaml).
-.PHONY: sync lint format test test-agents test-data test-services imports check js-install js-check clean-venv help
+.PHONY: sync lint format test test-slow test-agents test-data test-services imports check js-install js-check clean-venv help
 
 PY_PACKAGES := agents/agent-substrate agents/substrate-cloud data/substrate-data data/substrate-data-client data/embedding-reranker data/inference-pool
 
@@ -27,12 +27,17 @@ format:
 imports:
 	cd agents/agent-substrate && uv run --package agent-substrate lint-imports
 
+# `make test` is the fast tier (a few minutes, no infrastructure): lint, import contracts and the default test selection of
+# every package. Postgres-backed and model-loading tests are marked `slow`/`heavy`/`integration` and run in CI or `make test-slow`.
 test-agents:
-	cd agents/agent-substrate && uv run --package agent-substrate pytest tests -q
-	cd agents/substrate-cloud && OTEL_SDK_DISABLED=true uv run --package substrate-cloud pytest -q
+	cd agents/agent-substrate && uv run --package agent-substrate pytest tests -q -n 6 --timeout=120
+	cd agents/substrate-cloud && OTEL_SDK_DISABLED=true uv run --package substrate-cloud pytest -q --timeout=60
 
 test-data:
-	cd data/substrate-data && SUBSTRATE_DATA_SKIP_INTEGRATION=1 uv run --package substrate-data pytest tests -q -m "not integration"
+	cd data/substrate-data && SUBSTRATE_DATA_SKIP_INTEGRATION=1 uv run --package substrate-data pytest tests -q -n 4 --timeout=120 -m "not integration"
+
+test-slow:
+	cd agents/substrate-cloud && OTEL_SDK_DISABLED=true uv run --package substrate-cloud pytest -q -m "slow" --timeout=120
 
 test-services:
 	cd data/inference-pool && uv run --package inference-pool pytest -q
@@ -42,4 +47,6 @@ js-check:
 	pnpm -r typecheck
 	pnpm -r test
 
-check: lint imports test-data test-services
+test: test-agents test-data test-services
+
+check: lint imports test

@@ -22,7 +22,6 @@ sed \
   -e "s|^WORKER_TOKEN=.*|WORKER_TOKEN=$(rand 48 48)|" \
   -e "s|^WEB_SESSION_SECRET=.*|WEB_SESSION_SECRET=$(rand 48 48)|" \
   -e "s|^UI_SESSION_SECRET=.*|UI_SESSION_SECRET=$(rand 48 48)|" \
-  -e "s|^JWT_SECRET=.*|JWT_SECRET=$(rand 48 48)|" \
   -e "s|^MASK_SALT=.*|MASK_SALT=$(rand 24 24)|" \
   .env.example > .env
 echo "wrote $(pwd)/.env (mode 600). Add an LLM key, then: docker compose --profile monolith up -d"

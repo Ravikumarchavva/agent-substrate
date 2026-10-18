@@ -67,7 +67,6 @@ x-agent-env: &agent-env
   FILE_STORE_REGION: us-east-1
   FILE_STORE_ACCESS_KEY: ${AGENTS_S3_ACCESS_KEY_ID:?}
   FILE_STORE_SECRET_KEY: ${AGENTS_S3_SECRET_ACCESS_KEY:?}
-  JWT_SECRET: ${JWT_SECRET:?}
   # Keycloak resource-server settings (the verifier in the agent server reads these).
   OIDC_ISSUER: ${KEYCLOAK_PUBLIC_URL:-http://keycloak:8080}/realms/substrate
   OIDC_AUDIENCE: agent-substrate
@@ -399,7 +398,6 @@ services:
     environment:
       BACKEND_API_URL: http://${AGENT_UPSTREAM:-agent-server:8000}
       DATABASE_URL: postgresql://${POSTGRES_USER:-substrate}:${POSTGRES_PASSWORD}@postgres:5432/substrate_ui?sslmode=require
-      ENGINE_JWT_SECRET: ${JWT_SECRET:?}
       OIDC_ISSUER: ${KEYCLOAK_PUBLIC_URL:-http://keycloak:8080}/realms/substrate
       OIDC_CLIENT_ID: substrate-ui
       OIDC_CLIENT_SECRET: ${SUBSTRATE_UI_CLIENT_SECRET:?}

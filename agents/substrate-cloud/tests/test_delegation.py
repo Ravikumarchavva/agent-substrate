@@ -19,6 +19,10 @@ from substrate_cloud.monolith.services.agents.pairs import _line
 
 from test_scheduled_notifications import session
 
+pytestmark = (
+    pytest.mark.slow
+)  # Postgres-backed, minutes in total: run by CI and `make test-slow`
+
 
 def agent(name="Scout", role="Researcher"):
     return AgentRef(id=uuid.uuid4(), name=name, role=role)

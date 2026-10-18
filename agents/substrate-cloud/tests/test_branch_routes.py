@@ -22,6 +22,10 @@ from substrate_cloud.monolith.models import Thread, User
 from substrate_cloud.monolith.security.deps import get_current_user
 from substrate_cloud.shared.auth.claims import AuthClaims
 
+pytestmark = (
+    pytest.mark.slow
+)  # Postgres-backed, minutes in total: run by CI and `make test-slow`
+
 TENANT = "test-branch-tenant"
 OTHER_TENANT = "other-tenant"
 

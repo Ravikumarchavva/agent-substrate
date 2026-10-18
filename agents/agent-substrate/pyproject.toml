@@ -132,6 +132,8 @@ dev = [
     "ipykernel>=7.2.0",
     "pytest>=9.0.3",
     "pytest-asyncio>=1.4.0",
+    "pytest-xdist>=3.6",
+    "pytest-timeout>=2.3",
     "ruff>=0.15.15",
     # tests only: an encrypted PDF to build, and a reference YAML parser for the frontmatter codec
     "pypdf>=6.13.0",

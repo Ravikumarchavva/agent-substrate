@@ -15,8 +15,6 @@
   valueFrom: { {{ include "cell.secretRef" (dict "root" . "key" "agents-s3-access-key-id") }} }
 - name: FILE_STORE_SECRET_KEY
   valueFrom: { {{ include "cell.secretRef" (dict "root" . "key" "agents-s3-secret-access-key") }} }
-- name: JWT_SECRET
-  valueFrom: { {{ include "cell.secretRef" (dict "root" . "key" "jwt-secret") }} }
 - { name: OIDC_ISSUER, value: {{ include "cell.issuer" . | quote }} }
 - { name: OIDC_AUDIENCE, value: agent-substrate }
 - { name: FRONTEND_URL, value: {{ .Values.publicUrls.ui | quote }} }

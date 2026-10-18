@@ -28,7 +28,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-test = ["pytest>=9.0.3", "pytest-asyncio>=1.4.0", "httpx>=0.27.0", "pillow>=12.0.0", "import-linter>=2.11"]
+test = ["pytest>=9.0.3", "pytest-asyncio>=1.4.0", "httpx>=0.27.0", "pillow>=12.0.0", "import-linter>=2.11", "pytest-xdist>=3.6", "pytest-timeout>=2.3"]
 
 [project.scripts]
 substrate-cloud = "substrate_cloud.cli:main"
@@ -45,7 +45,8 @@ asyncio_mode = "auto"
 testpaths = ["tests"]
 pythonpath = ["."]
 # Tests marked ``heavy`` load real models (several GB, tens of seconds) and are left out of a plain run.
-addopts = ["-m", "not heavy"]
+addopts = ["-m", "not heavy and not slow"]
+markers = ["slow: Postgres-backed or minutes-long; left out of the default run (CI and `make test-slow` run them)", "heavy: loads real models"]
 
 [tool.importlinter]
 root_packages = ["substrate_cloud", "substrate"]

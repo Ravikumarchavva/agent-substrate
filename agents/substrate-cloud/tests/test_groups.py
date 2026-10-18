@@ -17,6 +17,10 @@ from substrate_cloud.monolith.services.groups.service import member_actor, parse
 
 from test_scheduled_notifications import session
 
+pytestmark = (
+    pytest.mark.slow
+)  # Postgres-backed, minutes in total: run by CI and `make test-slow`
+
 
 def test_a_members_address_round_trips():
     agent, group = uuid.uuid4(), uuid.uuid4()

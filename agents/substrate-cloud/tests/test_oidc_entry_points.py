@@ -115,6 +115,8 @@ def bad_tokens(realm: FakeRealm) -> dict[str, str | None]:
 async def call(app, method: str, path: str, token: str | None) -> httpx.Response:
     url = re.sub(r"\{[^}]+\}", "x", path)
     headers = {"Authorization": f"Bearer {token}"} if token else {}
+    # Authentication is under test, not the limiter (which runs first and needs Redis); the app object is shared across tests.
+    app.state.rate_limit_settings = {"enabled": False}
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://test"
     ) as client:

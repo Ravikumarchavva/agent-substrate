@@ -36,7 +36,7 @@ secrets:
   #   ui-client-secret data-web-client-secret cell-admin-client-secret
   #   control-s3-access-key-id control-s3-secret-access-key worker-s3-access-key-id worker-s3-secret-access-key
   #   agents-s3-access-key-id agents-s3-secret-access-key
-  #   controller-token worker-token web-session-secret ui-session-secret jwt-secret mask-salt
+  #   controller-token worker-token web-session-secret ui-session-secret mask-salt
   # Optional: openai-api-key anthropic-api-key gemini-api-key openrouter-api-key accounts-broker-client-secret
   existingSecret: ""
   # With no existingSecret, create a Secret of random values (kept across upgrades through `lookup`).

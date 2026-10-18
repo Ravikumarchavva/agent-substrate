@@ -719,12 +719,18 @@ def build_file_connection(
     admin_issuer: str = "",
     admin_client_id: str = "",
     admin_client_secret: str = "",
+    membership: MembershipChecker | None = None,
 ) -> tuple[DataFilesConnection, DataTokenMinter, AsyncDataClient | None]:
     """The pooled connection every file operation goes through, and the minter whose public keys the data service must fetch.
 
     Same address rules and TLS as the sandbox gateway: https:// unless the service is on this machine, a private CA and a client
     certificate when configured, no ambient proxy, no redirects.
     """
+    if membership is None:
+        raise ValueError(
+            "DATA_SERVICE_URL is set but no organization-membership check is configured "
+            "(OIDC_ISSUER, OIDC_ADMIN_CLIENT_ID, OIDC_ADMIN_CLIENT_SECRET): files tokens cannot be signed safely."
+        )
     parts = urlsplit(service_url)
     if (
         parts.scheme not in {"http", "https"}
@@ -755,6 +761,7 @@ def build_file_connection(
         audience=audience,
         previous=previous,
         files_issuer=files_issuer,
+        membership=membership,
     )
 
     def transport() -> httpx.AsyncHTTPTransport:

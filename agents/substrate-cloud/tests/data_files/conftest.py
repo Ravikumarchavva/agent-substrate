@@ -65,7 +65,15 @@ class DataService:
             issuer=harness.AGENT_ISSUER,
             audience="substrate-data",
             files_issuer=harness.AGENT_ISSUER_WRITABLE,
+            membership=_EveryoneIsAMember(),
         )
+
+
+class _EveryoneIsAMember:
+    """These tests exercise the files path, not Keycloak membership (covered in test_data_access)."""
+
+    async def is_member(self, tenant_id: str, user_id: str) -> bool:
+        return True
 
 
 @pytest.fixture(scope="session")

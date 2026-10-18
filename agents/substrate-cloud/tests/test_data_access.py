@@ -96,6 +96,7 @@ async def test_a_files_token_is_delegated_writable_and_under_the_files_issuer():
         issuer="agent-substrate",
         audience="substrate-data",
         files_issuer="agent-substrate-files",
+        membership=Members(("acme", "user-1")),
     )
     public = jwt.PyJWK(m.jwks()["keys"][0]).key
     claims = jwt.decode(

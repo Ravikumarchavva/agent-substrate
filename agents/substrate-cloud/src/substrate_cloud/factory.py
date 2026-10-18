@@ -219,6 +219,18 @@ async def init_runtime(store: Any) -> tuple[Any, AsyncExitStack | None]:
 # ── Infrastructure ────────────────────────────────────────────────────────────
 
 
+def _membership(cfg: SubstrateConfig) -> KeycloakMembership | None:
+    """The organization-membership check every delegated data token needs, or None when no OIDC admin client is configured."""
+    if cfg.OIDC_ISSUER and cfg.OIDC_ADMIN_CLIENT_ID and cfg.OIDC_ADMIN_CLIENT_SECRET:
+        return KeycloakMembership(
+            cfg.OIDC_ISSUER,
+            cfg.OIDC_ADMIN_CLIENT_ID,
+            cfg.OIDC_ADMIN_CLIENT_SECRET,
+            ca_file=cfg.OIDC_CA_FILE or None,
+        )
+    return None
+
+
 def _init_file_access(cfg: SubstrateConfig, store: Any) -> tuple[FileAccess, Any]:
     """Where files live: Substrate Data's Files domain when ``DATA_SERVICE_URL`` is set, else the store's own ``files`` folder.
 
@@ -239,6 +251,7 @@ def _init_file_access(cfg: SubstrateConfig, store: Any) -> tuple[FileAccess, Any
         admin_issuer=cfg.DATA_ADMIN_OIDC_ISSUER,
         admin_client_id=cfg.DATA_ADMIN_CLIENT_ID,
         admin_client_secret=cfg.DATA_ADMIN_CLIENT_SECRET,
+        membership=_membership(cfg),
     )
     return FileAccess(connection=connection, admin=admin), minter
 
@@ -461,18 +474,7 @@ async def init_tool_registry(
                 ca_file=cfg.DATA_SERVICE_CA_FILE,
                 client_cert_file=cfg.DATA_CLIENT_CERT_FILE,
                 client_key_file=cfg.DATA_CLIENT_KEY_FILE,
-                membership=(
-                    KeycloakMembership(
-                        cfg.OIDC_ISSUER,
-                        cfg.OIDC_ADMIN_CLIENT_ID,
-                        cfg.OIDC_ADMIN_CLIENT_SECRET,
-                        ca_file=cfg.OIDC_CA_FILE or None,
-                    )
-                    if cfg.OIDC_ISSUER
-                    and cfg.OIDC_ADMIN_CLIENT_ID
-                    and cfg.OIDC_ADMIN_CLIENT_SECRET
-                    else None
-                ),
+                membership=_membership(cfg),
             )
         elif cfg.DATA_SERVICE_URL:
             logger.warning(

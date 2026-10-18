@@ -1372,6 +1372,154 @@
         "title": "DeleteCollectionResponse",
         "type": "object"
       },
+      "DirectUploadComplete": {
+        "properties": {
+          "parts": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/UploadPart"
+            },
+            "title": "Parts",
+            "type": "array"
+          }
+        },
+        "title": "DirectUploadComplete",
+        "type": "object"
+      },
+      "DirectUploadRequest": {
+        "description": "Start an upload whose bytes go straight from the browser to object storage on signed URLs.",
+        "properties": {
+          "content_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Type"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sha256"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          },
+          "thread_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thread Id"
+          }
+        },
+        "required": [
+          "name",
+          "size"
+        ],
+        "title": "DirectUploadRequest",
+        "type": "object"
+      },
+      "DirectUploadTicket": {
+        "description": "Send the bytes to ``url`` with ``PUT`` and ``headers`` (or each ``parts[].url`` for its ``offset``/``length``), then\n``POST /files/uploads/{id}/complete`` with the ETag each part answered.",
+        "properties": {
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "headers": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "default": {},
+            "title": "Headers",
+            "type": "object"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "method": {
+            "title": "Method",
+            "type": "string"
+          },
+          "part_size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Part Size"
+          },
+          "parts": {
+            "default": [],
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Parts",
+            "type": "array"
+          },
+          "session_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Path"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "required": [
+          "id",
+          "method"
+        ],
+        "title": "DirectUploadTicket",
+        "type": "object"
+      },
       "EditIn": {
         "properties": {
           "text": {
@@ -3998,6 +4146,24 @@
         "title": "TranscribeResponse",
         "type": "object"
       },
+      "UploadPart": {
+        "properties": {
+          "etag": {
+            "title": "Etag",
+            "type": "string"
+          },
+          "part_number": {
+            "title": "Part Number",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "part_number",
+          "etag"
+        ],
+        "title": "UploadPart",
+        "type": "object"
+      },
       "UsageOut": {
         "properties": {
           "days": {
@@ -4420,7 +4586,7 @@
     },
     "/api/v1/admin/storage": {
       "get": {
-        "description": "Every tenant with a workspace directory, their usage, effective quota\n(override or global default), and conversation count.\n\nMetered per tenant, not per user: usage/quota stay tenant-scoped even\nthough conversation keys do carry a user segment (see\n``Files``' module docstring) \u2014 tenant is the coarser\nidentity every key reliably carries.",
+        "description": "Every tenant with a workspace, their usage, quota and conversation count.\n\nMetered per tenant, not per user: usage/quota stay tenant-scoped even though conversation keys do carry a user segment (see\n``Files``' module docstring) \u2014 tenant is the coarser identity every key reliably carries.",
         "operationId": "list_storage_tenants_api_v1_admin_storage_get",
         "responses": {
           "200": {
@@ -4447,7 +4613,7 @@
     },
     "/api/v1/admin/storage/{tenant_id}/conversations": {
       "get": {
-        "description": "``(conversation_id, size_bytes, file_count)`` for one tenant \u2014 the\nadmin storage page's drill-down. Conversation workspaces are what the\ncode interpreter's sandbox mounts (``sandbox_service.py`` /\n``nsjail.py`` mount ``.../conversations/{cid}/workspace``), so this\nis what an agent's sandbox run actually wrote.",
+        "description": "``(conversation_id, size_bytes, file_count)`` for one tenant \u2014 the admin storage page's drill-down. Conversation workspaces\nare what the code interpreter's sandbox mounts (``sandbox_service.py`` / ``nsjail.py`` mount ``.../conversations/{cid}/workspace``),\nso this is what an agent's sandbox run actually wrote.",
         "operationId": "list_storage_conversations_api_v1_admin_storage__tenant_id__conversations_get",
         "parameters": [
           {
@@ -4495,7 +4661,7 @@
     },
     "/api/v1/admin/storage/{tenant_id}/quota": {
       "put": {
-        "description": "Set (or, with ``quota_bytes: null``, reset to the global default)\none tenant's storage quota. Takes effect immediately (updates the live\nstore) and persists (upserts/deletes the ``workspace_quotas`` row) so\nit survives a restart.",
+        "description": "Set (or, with ``quota_bytes: null``, remove) one tenant's storage quota. It is the tenant volume's hard quota in the data\nservice, enforced there on every write; this process keeps no copy.",
         "operationId": "set_storage_quota_api_v1_admin_storage__tenant_id__quota_put",
         "parameters": [
           {
@@ -6407,7 +6573,7 @@
     },
     "/api/v1/files/object": {
       "get": {
-        "description": "Serve a stored object by key \u2014 the target of the ``/files/object?key=``\nlinks in tool-result attachments (see ``agents/runtime/context/tool.py``)\nand of ``ask()``'s ``Citation.image_key``/``pdf_key`` (see\n``integrations/knowledge/ask.py``).\n\nDeliberately a stable, authenticated app URL rather than a presigned one:\nthe wire-event log is replayed months later, and a presigned link would\nhave expired, leaving old conversations full of dead images.\n\nAuthorization is resolved through a ``FileMetadata`` row when one exists\n(uploads go through ``upload_file``, which records one); many objects\nthis route serves never get one \u2014 RAG-extracted images, other\ncapability-written artifacts \u2014 so those fall back to ``_may_access_key``,\na structural check on the key's own tenant/user/conversation segments.\nIn particular, knowledge-base keys are project-shared within a tenant,\nnever a global open namespace across tenants.\n\nRegistered before ``/{file_id}/status`` so \"object\" is never matched as a\nfile_id path param (Starlette matches in registration order).",
+        "description": "Serve a stored object by key \u2014 the target of the ``/files/object?key=`` links in tool-result attachments (see\n``agents/runtime/context/tool.py``) and of ``ask()``'s ``Citation.image_key``/``pdf_key`` (see ``integrations/knowledge/ask.py``).\n\nDeliberately a stable, authenticated app URL rather than a presigned one: the wire-event log is replayed months later, and a\npresigned link would have expired, leaving old conversations full of dead images.\n\nAuthorization is structural, off the key's own tenant/user/conversation segments (``_may_access_key``): every key starts\n``tenants/{tenant_id}/...`` and the server itself built it. In particular, knowledge-base keys are project-shared within a\ntenant, never a global open namespace across tenants. The read itself is made as the key's owner, so the data service applies\nits own ownership rule on top.\n\nRegistered before ``/{file_id}/status`` so \"object\" is never matched as a file_id path param (Starlette matches in\nregistration order).",
         "operationId": "serve_object_api_v1_files_object_get",
         "parameters": [
           {
@@ -6474,7 +6640,7 @@
     },
     "/api/v1/files/upload": {
       "post": {
-        "description": "Upload a file and store its metadata.\n\nObject keys are scoped by tenant, user, and thread (when given):\n``tenants/{tid}/users/{uid}/conversations/{thread_id}/workspace/shared/\nuploads/{name}`` or, with no thread, ``tenants/{tid}/users/{uid}/\nuploads/{name}`` \u2014 see ``workspace/layout.py``. In a conversation with an\nagent this is the agent's own home, which its sandbox opens as\n``/workspace``, so the upload is there for its code.\n\nRAG-eligible types (currently PDF only \u2014 see ``EXTRACTABLE_CONTENT_TYPES``)\nget extra, synchronous-before-storing checks (upload-attempt quota, size\ncap, page cap) plus eager background staging (the document is read once\nand filed in the conversation's documents) once stored, when a\n``thread_id`` is already known \u2014 see ``_stage_uploaded_doc``. Other file types are\nunaffected: pure blob+metadata storage, same as today.",
+        "description": "Upload a file through this server (small files, scripts, tests). Browsers use ``POST /files/uploads`` and send the bytes\nthemselves, straight to object storage.\n\nRAG-eligible types (currently PDF only \u2014 see ``EXTRACTABLE_CONTENT_TYPES``) get extra, synchronous-before-storing checks\n(upload-attempt quota, size cap, page cap) plus eager background staging (the document is read once and filed in the\nconversation's documents) once stored, when a ``thread_id`` is already known \u2014 see ``_stage_uploaded_doc``. Other file types\nare unaffected: pure blob + record storage.",
         "operationId": "upload_file_api_v1_files_upload_post",
         "requestBody": {
           "content": {
@@ -6514,9 +6680,105 @@
         ]
       }
     },
+    "/api/v1/files/uploads": {
+      "post": {
+        "description": "Start an upload whose bytes never pass through this server: the response carries signed URLs, the browser ``PUT``s the file\n(or each part) to them, then calls ``POST /files/uploads/{id}/complete``. The size is pinned into the signature, so the\ndeclared size is the enforced one.",
+        "operationId": "start_direct_upload_api_v1_files_uploads_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DirectUploadRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectUploadTicket"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Direct Upload",
+        "tags": [
+          "files"
+        ]
+      }
+    },
+    "/api/v1/files/uploads/{file_id}/complete": {
+      "post": {
+        "description": "Finish a direct upload: the data service checks the stored size (and hash) and makes the new version atomically. Safe to\nretry. A document is then checked (page count) and, in a conversation, read and filed in the background like any upload.",
+        "operationId": "complete_direct_upload_api_v1_files_uploads__file_id__complete_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "file_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "File Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DirectUploadComplete"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileUploadResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Complete Direct Upload",
+        "tags": [
+          "files"
+        ]
+      }
+    },
     "/api/v1/files/{file_id}": {
       "delete": {
-        "description": "Soft-delete metadata and remove object from store.",
+        "description": "Delete the file (the data service keeps its versions until they are purged) and its record.",
         "operationId": "delete_file_api_v1_files__file_id__delete",
         "parameters": [
           {
@@ -6687,7 +6949,7 @@
     },
     "/api/v1/files/{file_id}/status": {
       "get": {
-        "description": "Lightweight polling target for the composer's per-attachment progress\nring \u2014 never touches file_store, just the metadata row. See\n``substrate-ui``'s ``useFileAttachments.ts``: ``page_count``/\n``created_at`` drive a simulated (elapsed-time-based) progress estimate\nsince true per-page extraction progress isn't available (PaddleOCR\nbatches internally despite ``predict_iter()`` looking lazy \u2014 verified,\nnot assumed); ``staged_at``/``staging_error`` are the real ground truth\nfor when the ring should snap to 100% or show an error state.",
+        "description": "Lightweight polling target for the composer's per-attachment progress ring \u2014 only reads the file's record. See\n``substrate-ui``'s ``useFileAttachments.ts``: ``page_count``/``created_at`` drive a simulated (elapsed-time-based) progress\nestimate since true per-page extraction progress isn't available (PaddleOCR batches internally despite ``predict_iter()``\nlooking lazy \u2014 verified, not assumed); ``staged_at``/``staging_error`` are the real ground truth for when the ring should snap\nto 100% or show an error state.",
         "operationId": "get_file_status_api_v1_files__file_id__status_get",
         "parameters": [
           {
@@ -6733,7 +6995,7 @@
     },
     "/api/v1/files/{file_id}/url": {
       "get": {
-        "description": "Return a presigned URL (or download URL for a store with no direct URL, or a not-yet-\npromoted pending attachments \u2014 the pending store has no presign\ncapability, so it always falls back to the redirect-through-us form).",
+        "description": "Return a presigned URL (the browser then fetches straight from object storage), or this server's download URL for a store\nwith no direct URL (the local folder).",
         "operationId": "get_file_url_api_v1_files__file_id__url_get",
         "parameters": [
           {
@@ -11218,7 +11480,7 @@
     },
     "/api/v1/workspace/file": {
       "get": {
-        "description": "Serve a code-interpreter / workspace file by its session-relative path.\n\nResolves to the conversation's ``.../conversations/{thread_id}/workspace/shared/{path}`` key \u2014 the same\nper-thread directory the sandbox runs in (see the code-interpreter tools'\n``workspace_dir``). This is what the frontend ``sandbox:<path>`` markdown\nrefs resolve to: images render inline, everything else downloads.\n\nServing the *current* file also lazily versions it: a change made outside\nour save endpoints (i.e. the agent rewrote it via code_interpreter) is\ncaptured as an ``\"agent\"`` ``FileVersion`` here, so the panel's version\nhistory stays honest without a per-turn scan.",
+        "description": "Serve a code-interpreter / workspace file by its session-relative path.\n\nResolves to the conversation's ``.../conversations/{thread_id}/workspace/shared/{path}`` key \u2014 the same\nper-thread directory the sandbox runs in (see the code-interpreter tools'\n``workspace_dir``). This is what the frontend ``sandbox:<path>`` markdown\nrefs resolve to: images render inline, everything else downloads.\n\nServing the *current* file also lazily versions it: a change made outside\nour save endpoints (i.e. the agent rewrote it via code_interpreter) is\ncaptured as an ``\"agent\"`` version here, so the panel's version\nhistory stays honest without a per-turn scan.",
         "operationId": "serve_file_api_v1_workspace_file_get",
         "parameters": [
           {

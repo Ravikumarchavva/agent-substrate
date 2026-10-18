@@ -130,7 +130,7 @@ if __name__ == "__main__":
 
 ## 🧱 Tech Stack: required vs opt-in
 
-Two things are called "Agent Substrate": the **library** (`pip install agent-substrate`, an engine you embed) and the **platform** (`apps/substrate-cloud`, a multi-tenant HTTP server built on it, which the chat app talks to). They need different things.
+Two things are called "Agent Substrate": the **library** (`pip install agent-substrate`, an engine you embed) and the **platform** (`agents/substrate-cloud`, a multi-tenant HTTP server built on it, which the chat app talks to). They need different things.
 
 ### The library needs nothing but Python
 
@@ -163,7 +163,7 @@ Full reasoning per extra (sizes, pins, exclusivity) is in [`optional-dependencie
 
 > **No LanceDB.** Vectors live in the same database as everything else (SQLite, or PostgreSQL with pgvector). The "Lance database" comment in `stores/store.py` is only an analogy for how the folder is laid out.
 
-### The platform (`apps/substrate-cloud`) is a deployment, so it needs services
+### The platform (`agents/substrate-cloud`) is a deployment, so it needs services
 
 | Needed | Why |
 |---|---|

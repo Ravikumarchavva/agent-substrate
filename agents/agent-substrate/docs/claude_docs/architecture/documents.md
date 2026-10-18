@@ -26,7 +26,7 @@
   A page that is only a picture is OCR'd or listed in `needs_ocr` — never silently empty.
 * **By URL:** `POST {url}/v1/extract` with `content_base64`, `filename`, `content_type`, `strategy`; an answer is final (even a refusal), and
   only an unreachable server (connection error, 5xx, timeout) falls back to the built-in engine (`degraded_from` = the URL). The server is
-  `apps/document-intelligence`: the library's `Reader` as the baseline, Paddle for `hi_res` or scanned pages, LibreOffice for legacy formats.
+  `data/document-intelligence`: the library's `Reader` as the baseline, Paddle for `hi_res` or scanned pages, LibreOffice for legacy formats.
 * **OCR:** `Tesseract` (the program, via its CLI) by default if installed; RapidOCR with the `ocr` extra is preferred automatically.
 
 ## Filing and navigating
@@ -86,7 +86,7 @@ Cost: about $0.01 per average (30k-token) document with `gpt-5.4-mini`; the live
 ## Searching by meaning (knowledge bases)
 
 `Library(store, embedder=…, reranker=…)` — an `EmbeddingModel`/`Reranker`, or a URL (`RemoteEmbedder`/`RemoteReranker`, `models/remote.py`:
-the OpenAI embeddings wire and the Jina/Cohere rerank wire; `apps/embedding-reranker` serves Qwen3-VL on them, text and images in one space).
+the OpenAI embeddings wire and the Jina/Cohere rerank wire; `data/embedding-reranker` serves Qwen3-VL on them, text and images in one space).
 
 * `add` also chunks each section to the embedder's `max_input_tokens`, embeds (figures with their captions, if the model takes images) and
   stores in `store.vectors`. A collection holds one embedder's vectors (`VectorSpaceError` otherwise, via `vector_spaces`).
@@ -97,7 +97,7 @@ the OpenAI embeddings wire and the Jina/Cohere rerank wire; `apps/embedding-rera
 * The folder store scans exactly (about 1 s per 10,000 chunks at 2,048 dimensions; a warning is logged above that); large knowledge bases
   belong on `postgres_store` (pgvector HNSW).
 
-## In the platform (`apps/substrate-cloud`)
+## In the platform (`agents/substrate-cloud`)
 
 * One `Reader` (`document_reader.py`): the document-intelligence URL if `DOCUMENT_INTELLIGENCE_SERVICE_URL` is set, else built-in.
 * A conversation's uploads are read once, filed under `conversation_documents_prefix(tenant, user, conversation)`, and the
@@ -127,5 +127,5 @@ the OpenAI embeddings wire and the Jina/Cohere rerank wire; `apps/embedding-rera
 | Change what the model can do with documents | `documents/tool.py`; keep it free of any argument that names a collection or a path |
 
 Tests: `tests/documents/` (formats, PDF, OCR, reader, library on SQLite **and** PostgreSQL, embeddings, `test_library_enrichment.py`,
-`test_llm_enricher.py`), `apps/substrate-cloud/tests/test_enrichment_queue.py`, invariants I32–I39 and the tenant
-row in `tests/invariants/test_documents.py`, `apps/substrate-cloud/tests/test_rag_routes.py` for tenant isolation.
+`test_llm_enricher.py`), `agents/substrate-cloud/tests/test_enrichment_queue.py`, invariants I32–I39 and the tenant
+row in `tests/invariants/test_documents.py`, `agents/substrate-cloud/tests/test_rag_routes.py` for tenant isolation.

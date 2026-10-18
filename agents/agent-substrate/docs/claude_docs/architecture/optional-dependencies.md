@@ -27,7 +27,7 @@ so asking for one vendor's client needs that vendor's SDK and nothing else.
 | `console` | the interactive console (`rich`, `prompt-toolkit`, `pydantic-settings`) |
 | `serve` | `substrate.serve.add_routes` (`fastapi`) |
 | `testing` | the conformance suites in `substrate.testing` (`pytest`, `pytest-asyncio`, `httpx`) |
-| *(no `server` extra)* | the multi-tenant platform is `apps/substrate-cloud`, a project of its own that depends on the extras above plus SQLAlchemy, uvicorn, JWT and the OpenTelemetry SDK |
+| *(no `server` extra)* | the multi-tenant platform is `agents/substrate-cloud`, a project of its own that depends on the extras above plus SQLAlchemy, uvicorn, JWT and the OpenTelemetry SDK |
 
 Logging follows the same rule (I33–I34): the library emits through `logging.getLogger(__name__)` and installs only a
 `NullHandler`; `substrate.logger.setup_logging` is for the application's entry point.
@@ -112,14 +112,14 @@ only holds the client, in the core and standard-library only: `Reader("http://�
 of its own with its own `pyproject.toml`, environment, tests and Dockerfile, so installing the library never installs them and
 upgrading one never touches another:
 
-* `apps/document-intelligence` — the library's own `Reader` as the baseline (every format, isolated), PaddleOCR layout/chart/table
+* `data/document-intelligence` — the library's own `Reader` as the baseline (every format, isolated), PaddleOCR layout/chart/table
   extraction for PDFs and images when asked for (`hi_res`) or when the baseline found scanned pages, LibreOffice for legacy
   `.doc/.ppt/.xls/.rtf` only, and a pre-parse security scan. Extras `paddle` (CPU wheel) or `paddle-gpu`, pinned to the wheel
   versions verified on the target hardware and served from PaddlePaddle's own indexes (declared in that project, not here).
-* `apps/embedding-reranker` — Qwen3-VL embedding and reranking, a thin proxy in front of llama-server, on the OpenAI embeddings
+* `data/embedding-reranker` — Qwen3-VL embedding and reranking, a thin proxy in front of llama-server, on the OpenAI embeddings
   wire (`/v1/embeddings`, `/v1/models`) and the Jina/Cohere rerank wire (`/v1/rerank`). No model library at all. This is the
   default knowledge-base backend; llama.cpp, vLLM, Ollama and TEI serve the same endpoints, so `RemoteEmbedder` works with them too.
-* `packages/inference-pool` — spawning, supervising and load-balancing llama-server children (or pointing at remote ones), and
+* `data/inference-pool` — spawning, supervising and load-balancing llama-server children (or pointing at remote ones), and
   GPU/CPU/RAM detection; shared by both services.
 
 `make test-apps` installs each into a fresh environment and runs its tests there.

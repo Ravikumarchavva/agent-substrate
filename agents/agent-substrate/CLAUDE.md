@@ -1,4 +1,6 @@
-# Agent Framework — Claude Instructions
+# agent-substrate (the library) — Claude Instructions
+
+> This package lives in the `agent-substrate` monorepo at `agents/agent-substrate/`; see the root `CLAUDE.md` and `docs/adr/` for the repo layout. The platform server, UIs, and data services are sibling packages (`agents/substrate-cloud`, `data/...`). Paths below that start with `agents/` or `data/` are relative to the monorepo root; run package commands from this directory with `uv run --package agent-substrate ...`.
 
 This file is read automatically by Claude when working in this repo.
 Trust it as the primary reference; only search the codebase if something here is incomplete or appears incorrect.
@@ -17,8 +19,8 @@ keeping — it decays like this file does if left untouched.
 
 Python async AI-agent framework with two deployment modes:
 
-1. **Monolith** — single FastAPI server at `apps/substrate-cloud/src/substrate_cloud/monolith/`
-2. **Microservices** — 12 independent FastAPI services at `apps/substrate-cloud/src/substrate_cloud/services/`
+1. **Monolith** — single FastAPI server at `agents/substrate-cloud/src/substrate_cloud/monolith/`
+2. **Microservices** — 12 independent FastAPI services at `agents/substrate-cloud/src/substrate_cloud/services/`
 
 Stack: Python 3.14, FastAPI, SQLAlchemy 2 async, asyncpg, PostgreSQL 18, Redis 7, OpenTelemetry → Tempo.
 
@@ -38,17 +40,17 @@ uv sync
 
 # Start infrastructure (Postgres, Redis, SeaweedFS, observability, MCP server)
 make infra-up                        # repo contributors — full stack via Makefile
-uv run --project apps/substrate-cloud substrate-cloud up   # anyone running the platform —
+uv run --package substrate-cloud substrate-cloud up   # anyone running the platform —
                                       # no clone-only tooling, no `make`
 
 # Start monolith backend (port 8000)
-uv run --project apps/substrate-cloud substrate-cloud start --host 0.0.0.0 --foreground
+uv run --package substrate-cloud substrate-cloud start --host 0.0.0.0 --foreground
 
 # With hot-reload
-uv run --project apps/substrate-cloud substrate-cloud start --host 0.0.0.0 --reload
+uv run --package substrate-cloud substrate-cloud start --host 0.0.0.0 --reload
 
 # Bring up infra + start the server in one command
-uv run --project apps/substrate-cloud substrate-cloud start --all --host 0.0.0.0 --foreground
+uv run --package substrate-cloud substrate-cloud start --all --host 0.0.0.0 --foreground
 
 # Run tests
 uv run pytest
@@ -64,7 +66,7 @@ projects. `make infra-*` uses `deployment/docker/docker-compose.yml` at the
 repo root (`name: agent-framework` — what actually runs when you work in
 this repo, e.g. via `make infra-up`). `substrate-cloud up`/`down` resolve to a
 separate, packaged copy shipped inside the installed package
-(`apps/substrate-cloud/src/substrate_cloud/deployment/docker/docker-compose.yml`, `name:
+(`agents/substrate-cloud/src/substrate_cloud/deployment/docker/docker-compose.yml`, `name:
 substrate-infra`) — meant for a downstream project depending on
 `agent-substrate` with no clone of this repo, not for repo contributors.
 Real, hit-live bug: running `substrate-cloud down` in this repo silently did
@@ -158,12 +160,12 @@ src/substrate/
 Everything that is not the library is a project of its own (own `pyproject.toml`, environment, tests; `make test-apps`):
 
 ```
-apps/substrate-cloud/        the multi-tenant platform: monolith API, 12 services, settings, GDPR, the composition root
+agents/substrate-cloud/        the multi-tenant platform: monolith API, 12 services, settings, GDPR, the composition root
   src/substrate_cloud/       monolith/ services/ shared/ stream/ factory.py config.py gdpr/ documents_library.py document_reader.py cli.py
-apps/document-intelligence/  layout/OCR document server (PaddleOCR in extras) — `Reader("http://…")` reaches it
-apps/embedding-reranker/     Qwen3-VL embedding + reranking (OpenAI embeddings wire, Jina rerank wire) — `Library(embedder="http://…")`
-apps/embedding-reranker/     multimodal embedding + reranking proxy       — the library reaches it by URL
-packages/inference-pool/     llama-server supervision + hardware detection, shared by the two services
+data/document-intelligence/  layout/OCR document server (PaddleOCR in extras) — `Reader("http://…")` reaches it
+data/embedding-reranker/     Qwen3-VL embedding + reranking (OpenAI embeddings wire, Jina rerank wire) — `Library(embedder="http://…")`
+data/embedding-reranker/     multimodal embedding + reranking proxy       — the library reaches it by URL
+data/inference-pool/     llama-server supervision + hardware detection, shared by the two services
 ```
 
 ---
@@ -205,7 +207,7 @@ Services intentionally missing `models.py`/`service.py` by design: `gateway` (BF
 substrate/{types … agents}   the core: the engine, one folder per concept, contracts beside implementations
 integrations/               adapters: vendors, databases, MCP, tools, and clients for the heavy services (by URL)
 apps/ packages/             the heavy services themselves, each a project of its own (see below)
-server/ console/ cli         the library's HTTP server, the REPL, the CLI  (the platform is apps/substrate-cloud)
+server/ console/ cli         the library's HTTP server, the REPL, the CLI  (the platform is agents/substrate-cloud)
 evals/                       the eval harness (a client of the core)
 ```
 
@@ -229,7 +231,7 @@ something the package does not export.
 | `the core imports nothing outside it` | the core never imports integrations/server/evals/console/cli |
 | `the core's concepts only import downward` | the `layers` order above; imports made only under `TYPE_CHECKING` are exempt |
 | `adapters depend on the contracts and the engine's support libraries, not how it runs an agent` | integrations may use the contracts plus `models/workspace/stores/safety/tools/runtime/telemetry`, never `agents`, the context window internals, or middleware implementations |
-| `the platform routes cannot import the engine's internals` (apps/substrate-cloud) | the platform's routes and services don't reach past its `factory.py`/`research_orchestrator.py` composition root |
+| `the platform routes cannot import the engine's internals` (agents/substrate-cloud) | the platform's routes and services don't reach past its `factory.py`/`research_orchestrator.py` composition root |
 
 **Structure rows** (`tests/invariants/test_structure.py`): the core's third-party imports are exactly the allowed
 set; concepts only import downward; the contracts never import the engine (I27); `substrate.testing` is never imported by

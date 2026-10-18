@@ -14,7 +14,7 @@ same second).
 **Check the server terminal first**, filtered:
 
 ```bash
-uv run --project apps/substrate-cloud substrate-cloud start --foreground 2>&1 | grep -iE "suspended|resumed|HITL|signal|pending request"
+uv run --package substrate-cloud substrate-cloud start --foreground 2>&1 | grep -iE "suspended|resumed|HITL|signal|pending request"
 ```
 
 or, if already running, check what already printed. You're looking for:

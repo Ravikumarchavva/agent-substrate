@@ -18,7 +18,7 @@ dependencies = [
     "pyjwt[crypto]>=2.10",
     "orjson>=3.10",
     "boto3>=1.40",
-    "substrate-data-client",
+    "substrate-data-client[arrow]",
     "psycopg[binary,pool]>=3.2,<4",
 ]
 [project.optional-dependencies]

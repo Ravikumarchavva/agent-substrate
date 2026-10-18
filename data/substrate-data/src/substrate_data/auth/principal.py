@@ -18,6 +18,9 @@ class Principal:
     is_admin: bool = False
     # A read-only token may run statements and browse, never change anything.
     read_only: bool = False
+    # None: an ordinary user token, limited only by grants. A set: a delegated token (an agent run) that may
+    # use only the routes declaring one of these scopes (see auth/scopes.py), and then only what grants allow.
+    scopes: frozenset[str] | None = None
     # Where the request came from (agent run, conversation, tenant); recorded with every statement.
     context: dict[str, str] = field(default_factory=dict, compare=False)
 

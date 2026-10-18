@@ -14,6 +14,7 @@ from fastapi import Request
 
 from substrate_data.auth.oidc import TokenVerifier
 from substrate_data.auth.principal import Principal
+from substrate_data.auth.scopes import route_declares_scope
 from substrate_data.catalog.store import CatalogStore
 from substrate_data.core.errors import Problem, unavailable
 from substrate_data.core.models import Settings
@@ -94,6 +95,13 @@ def principal(request: Request) -> Principal:
     value = request.app.state.services.verifier.verify(request.headers.get("authorization"))
     if value.read_only and not read_only_allowed(request):
         raise Problem(403, "token-read-only", "This token may read data but not change anything")
+    if (
+        value.scopes is not None
+        and not value.read_only
+        and not read_only_allowed(request)
+        and not route_declares_scope(request)
+    ):
+        raise Problem(403, "insufficient-scope", "This token may not use this route")
     request.app.state.limiter.check(value.id)
     request.state.principal = value
     return value

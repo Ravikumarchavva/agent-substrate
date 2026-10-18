@@ -150,6 +150,7 @@ class TokenVerifier:
             actor=_actor(claims),
             is_admin=self.settings.admin_group in groups,
             read_only=_scopes(claims) == {"data:read"},
+            scopes=_restricted(claims),
             context=_context(claims),
         )
 
@@ -177,6 +178,7 @@ class TokenVerifier:
             actor=_actor(claims),
             is_admin=False,  # a trusted issuer can never mint an administrator
             read_only=trusted.read_only or _scopes(claims) == {"data:read"},
+            scopes=_restricted(claims) or frozenset({"data:read"}),
             context=_context(claims),
         )
 
@@ -184,6 +186,15 @@ class TokenVerifier:
 def _actor(claims: dict[str, Any]) -> str | None:
     act = claims.get("act")
     return str(act["sub"]) if isinstance(act, dict) and act.get("sub") else None
+
+
+RESTRICTED_PREFIXES = ("data:", "files:", "documents:", "memory:")
+
+
+def _restricted(claims: dict[str, Any]) -> frozenset[str] | None:
+    """The delegated scopes of a token, or None for an ordinary user token (grants alone limit it)."""
+    held = frozenset(s for s in _scopes(claims) if s.startswith(RESTRICTED_PREFIXES))
+    return held or None
 
 
 def _scopes(claims: dict[str, Any]) -> set[str]:

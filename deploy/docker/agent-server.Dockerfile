@@ -39,6 +39,18 @@ COPY data/substrate-data-client data/substrate-data-client
 COPY identity/substrate-identity identity/substrate-identity
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-editable --package substrate-cloud
+# uv.lock resolves torch (pulled in transitively by the local-embedding/safety extras) from PyPI, i.e. the CUDA build with
+# ~4 GB of nvidia-*/triton wheels. The cell runs no GPU model in this image, so swap in the same version from the CPU index.
+# (The durable fix is to pin torch to the pytorch-cpu index in the lock; then this step is a no-op and can go.)
+RUN --mount=type=cache,target=/root/.cache/uv \
+    if /app/.venv/bin/python -c "import torch" 2>/dev/null; then \
+      v="$(/app/.venv/bin/python -c "import importlib.metadata as m; print(m.version('torch').split('+')[0])")"; \
+      case "$(/app/.venv/bin/python -c "import importlib.metadata as m; print(m.version('torch'))")" in *+cpu) ;; *) \
+        uv pip install --python /app/.venv/bin/python --no-deps --reinstall-package torch --index-url https://download.pytorch.org/whl/cpu "torch==${v}+cpu" \
+        && uv pip freeze --python /app/.venv/bin/python | cut -d= -f1 | grep -E '^(nvidia-|cuda-|triton)' | xargs -r uv pip uninstall --python /app/.venv/bin/python \
+        && /app/.venv/bin/python -c "import torch" ;; \
+      esac; \
+    fi
 
 FROM python:3.14-slim-bookworm AS runtime
 RUN apt-get update && apt-get install -y --no-install-recommends libprotobuf32 libnl-route-3-200 \

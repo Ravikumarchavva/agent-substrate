@@ -28,6 +28,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=build --chown=app:app /app/data/document-intelligence/.venv /app/.venv
 ENV PATH="/app/.venv/bin:$PATH" PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
 USER app
+WORKDIR /home/app
 EXPOSE 8080
 # Generous start period: first boot loads the OCR/layout model weights.
 HEALTHCHECK --interval=15s --timeout=5s --start-period=90s --retries=3 \

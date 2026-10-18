@@ -9,7 +9,7 @@ dependencies = ["loamz-data-storage", "loamz-identity"]
 
 [project.optional-dependencies]
 data = ["loamz-data-client"]
-server = ["loamz-identity[fastapi]", "fastapi>=0.128", "uvicorn>=0.34"]
+server = ["loamz-identity[fastapi]", "fastapi>=0.128", "uvicorn>=0.34", "pydantic-settings>=2.12"]
 
 [dependency-groups]
 dev = ["pytest>=9", "pytest-asyncio>=1.4", "pytest-xdist>=3.6", "pytest-timeout>=2.3"]

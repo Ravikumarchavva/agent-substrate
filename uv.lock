@@ -2304,6 +2304,7 @@ data = [
 server = [
     { name = "fastapi" },
     { name = "loamz-identity", extra = ["fastapi"] },
+    { name = "pydantic-settings" },
     { name = "uvicorn" },
 ]
 
@@ -2322,6 +2323,7 @@ requires-dist = [
     { name = "loamz-data-storage", editable = "data/storage" },
     { name = "loamz-identity", editable = "identity/python" },
     { name = "loamz-identity", extras = ["fastapi"], marker = "extra == 'server'", editable = "identity/python" },
+    { name = "pydantic-settings", marker = "extra == 'server'", specifier = ">=2.12" },
     { name = "uvicorn", marker = "extra == 'server'", specifier = ">=0.34" },
 ]
 provides-extras = ["data", "server"]

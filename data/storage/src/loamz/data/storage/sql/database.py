@@ -73,9 +73,7 @@ class Database(Protocol):
     def is_retryable(self, exc: BaseException) -> bool: ...
 
 
-class SchemaVersionError(RuntimeError):
-    """The database was written by a newer build than this one understands."""
-
+from loamz.data.storage.errors import SchemaVersionError  # noqa: E402
 
 _MIGRATIONS_TABLE = """
 CREATE TABLE IF NOT EXISTS loamz_migrations (

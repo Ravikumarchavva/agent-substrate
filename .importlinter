@@ -1,0 +1,54 @@
+# Loamz dependency rules (docs/rewrite/principles). Run: uv run lint-imports --config .importlinter
+[importlinter]
+root_packages =
+    loamz
+include_external_packages = False
+
+[importlinter:contract:storage-is-the-bottom]
+name = loamz.data.storage imports no other Loamz package
+type = forbidden
+source_modules =
+    loamz.data.storage
+forbidden_modules =
+    loamz.agents
+    loamz.data.server
+    loamz.data.client
+    loamz.identity
+
+[importlinter:contract:identity-stands-alone]
+name = loamz.identity imports no other Loamz package
+type = forbidden
+source_modules =
+    loamz.identity
+forbidden_modules =
+    loamz.agents
+    loamz.data
+
+[importlinter:contract:data-never-imports-agents]
+name = Loamz Data never imports Loamz Agents (agents are built on data, never the reverse)
+type = forbidden
+source_modules =
+    loamz.data
+forbidden_modules =
+    loamz.agents
+
+[importlinter:contract:client-is-light]
+name = loamz.data.client depends on nothing but identity
+type = forbidden
+source_modules =
+    loamz.data.client
+forbidden_modules =
+    loamz.data.server
+    loamz.data.storage
+
+[importlinter:contract:agents-layers]
+name = loamz.agents layers point downward
+type = layers
+layers =
+    loamz.agents.server
+    loamz.agents.features
+    loamz.agents.bootstrap
+    loamz.agents.data | loamz.agents.toolkit | loamz.agents.providers
+    loamz.agents.stores
+    loamz.agents.kernel
+

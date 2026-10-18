@@ -142,7 +142,6 @@ agent:
   # Only the gateway is exposed; ports match deploy/PORTS.md.
   microservices:
     gateway: { port: 8001, replicas: 2, resources: { requests: { cpu: 250m, memory: 256Mi } }, autoscaling: { enabled: false, minReplicas: 2, maxReplicas: 10, targetCPUUtilizationPercentage: 70 } }
-    identity: { port: 8010, replicas: 1, resources: { requests: { cpu: 100m, memory: 256Mi } } }
     policy: { port: 8011, replicas: 1, resources: { requests: { cpu: 100m, memory: 256Mi } } }
     conversation: { port: 8012, replicas: 2, resources: { requests: { cpu: 250m, memory: 512Mi } }, autoscaling: { enabled: false, minReplicas: 2, maxReplicas: 10, targetCPUUtilizationPercentage: 70 } }
     job_controller: { port: 8013, replicas: 1, resources: { requests: { cpu: 100m, memory: 256Mi } } }

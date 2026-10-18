@@ -92,6 +92,9 @@ x-microservice: &microservice
   environment: &microservice-env
     <<: *agent-env
     SUBSTRATE_MODE: microservices
+    # How the services find each other: {name} is the service in dashes, {port} its port (deploy/PORTS.md).
+    SERVICE_URL_TEMPLATE: http://agent-{name}:{port}
+    AGENT_RUNTIME_SERVICE_URL: http://agent-runtime:8014
   depends_on:
     postgres: { condition: service_healthy }
     redis: { condition: service_healthy }
@@ -363,9 +366,6 @@ services:
       SUBSTRATE_SERVICE: gateway
     ports:
       - "${BIND_ADDR:-127.0.0.1}:${PORT_AGENT:-8000}:8001"
-  agent-identity:
-    <<: *microservice
-    environment: { <<: *microservice-env, SUBSTRATE_SERVICE: identity }
   agent-policy:
     <<: *microservice
     environment: { <<: *microservice-env, SUBSTRATE_SERVICE: policy }

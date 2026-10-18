@@ -17,6 +17,7 @@
   valueFrom: { {{ include "cell.secretRef" (dict "root" . "key" "agents-s3-secret-access-key") }} }
 - { name: OIDC_ISSUER, value: {{ include "cell.issuer" . | quote }} }
 - { name: OIDC_AUDIENCE, value: agent-substrate }
+- { name: SERVICE_URL_TEMPLATE, value: "http://{{ include "cell.fullname" . }}-agent-{name}:{port}" }
 - { name: FRONTEND_URL, value: {{ .Values.publicUrls.ui | quote }} }
 - { name: CHAT_MODEL, value: {{ .Values.agent.model | quote }} }
 - { name: SANDBOX_RUNTIME, value: {{ .Values.agent.sandbox.runtime | quote }} }

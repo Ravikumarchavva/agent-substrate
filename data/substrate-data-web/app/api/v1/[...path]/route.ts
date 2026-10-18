@@ -1,13 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import {
-  SESSION_COOKIE,
-  type Session,
-  config,
-  cookieOptions,
-  fresh,
-  seal,
-  unseal,
-} from "../../../../lib/session";
+import { bff, config } from "../../../../lib/session";
 
 // Streams /api/v1/* to the data API with the session's bearer token. Bodies are not buffered.
 const FORWARDED = ["accept", "content-type", "if-match", "x-request-id"];
@@ -16,39 +8,21 @@ async function forward(
   request: NextRequest,
   context: { params: Promise<{ path: string[] }> },
 ) {
-  if (request.method !== "GET" && request.method !== "HEAD") {
-    const origin = request.headers.get("origin");
-    if (origin && origin !== config().publicUrl) {
-      return NextResponse.json(
-        { detail: "Cross-site request refused" },
-        { status: 403 },
-      );
-    }
-  }
-  const stored = await unseal<Session>(
-    request.cookies.get(SESSION_COOKIE)?.value,
-  );
-  const current = stored ? await fresh(stored) : null;
-  if (!current) {
-    const response = NextResponse.json(
-      {
-        type: "https://substrate.dev/problems/unauthorized",
-        title: "Unauthorized",
-        status: 401,
-        detail: "Sign in again",
-      },
-      { status: 401 },
+  if (!bff.sameOrigin(request)) {
+    return NextResponse.json(
+      { detail: "Cross-site request refused" },
+      { status: 403 },
     );
-    response.cookies.delete(SESSION_COOKIE);
-    return response;
   }
+  const bearer = await bff.bearerFor(request);
+  if (!bearer) return bff.unauthorized(request);
   const { path } = await context.params;
   const target = new URL(
     `${config().api}/api/v1/${path.map(encodeURIComponent).join("/")}`,
   );
   target.search = request.nextUrl.search;
   const headers = new Headers({
-    Authorization: `Bearer ${current.session.access_token}`,
+    Authorization: `Bearer ${bearer.token}`,
   });
   for (const name of FORWARDED) {
     const value = request.headers.get(name);
@@ -71,14 +45,7 @@ async function forward(
     headers: upstream.headers,
   });
   response.headers.delete("set-cookie");
-  if (current.changed) {
-    response.cookies.set(
-      SESSION_COOKIE,
-      await seal(current.session),
-      cookieOptions(60 * 60 * 10),
-    );
-  }
-  return response;
+  return bff.withCookies(response, bearer.setCookies);
 }
 
 export const GET = forward;

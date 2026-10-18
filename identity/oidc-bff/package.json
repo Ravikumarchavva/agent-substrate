@@ -1,0 +1,29 @@
+{
+  "name": "@substrate/oidc-bff",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Authorization-code + PKCE backend-for-frontend session for Keycloak, on the Web Request/Response APIs",
+  "type": "module",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "files": [
+    "src"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "lint": "eslint ."
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "eslint": "^9",
+    "typescript": "^5.9.0",
+    "typescript-eslint": "^8",
+    "vitest": "^4.0.0"
+  }
+}

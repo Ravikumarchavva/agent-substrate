@@ -1,6 +1,7 @@
 packages:
   - agents/substrate-ui
   - data/substrate-data-web
+  - identity/oidc-bff
 
 allowBuilds:
   '@prisma/client': true

@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
+    "@substrate/oidc-bff": "workspace:*",
     "@radix-ui/react-slot": "^1.2.0",
     "@tanstack/react-query": "^5.90.0",
     "@tanstack/react-table": "^8.21.0",

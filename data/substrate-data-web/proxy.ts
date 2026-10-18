@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import { SESSION_COOKIE } from "./lib/session-cookie";
 
 // Optimistic check only: pages without a session cookie go to sign-in. The API route handler
 // and the data API itself do the real verification.
 export function proxy(request: NextRequest) {
-  if (request.cookies.has("sd_session")) return NextResponse.next();
+  if (request.cookies.has(SESSION_COOKIE)) return NextResponse.next();
   const login = new URL("/auth/login", request.url);
   login.searchParams.set(
     "next",

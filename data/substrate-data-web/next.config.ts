@@ -2,6 +2,8 @@ import type { NextConfig } from "next";
 
 const config: NextConfig = {
   poweredByHeader: false,
+  // The shared BFF library ships TypeScript source.
+  transpilePackages: ["@substrate/oidc-bff"],
   distDir: process.env.SUBSTRATE_WEB_DIST_DIR || ".next",
   async headers() {
     return [

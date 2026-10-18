@@ -40,6 +40,7 @@ _LAZY: dict[str, str] = {
     "HttpRequestTool": "substrate.integrations.tools.communication.http_request",
     "AskHumanTool": "substrate.integrations.tools.human_input",
     "ImageGeneratorTool": "substrate.integrations.tools.ai.image_generator",
+    "DataCatalogTool": "substrate.integrations.tools.data_catalog",
     "MemoryTool": "substrate.integrations.tools.memory",
     "PipelineManagerTool": "substrate.integrations.tools.pipeline_manager",
     "TaskManagerTool": "substrate.integrations.tools.task_manager.tool",
@@ -60,6 +61,7 @@ if TYPE_CHECKING:
     from substrate.integrations.tools.communication.http_request import HttpRequestTool
     from substrate.integrations.tools.human_input import AskHumanTool
     from substrate.integrations.tools.ai.image_generator import ImageGeneratorTool
+    from substrate.integrations.tools.data_catalog import DataCatalogTool
     from substrate.integrations.tools.memory import MemoryTool
     from substrate.integrations.tools.pipeline_manager import PipelineManagerTool
     from substrate.integrations.tools.task_manager.tool import TaskManagerTool
@@ -83,6 +85,7 @@ __all__ = [
     "HttpRequestTool",
     "AskHumanTool",
     "ImageGeneratorTool",
+    "DataCatalogTool",
     "MemoryTool",
     "PipelineManagerTool",
     "TaskManagerTool",

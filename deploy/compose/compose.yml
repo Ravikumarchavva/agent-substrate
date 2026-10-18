@@ -12,7 +12,9 @@ name: ${COMPOSE_PROJECT_NAME:-substrate-cell}
 x-data-env: &data-env
   # The services are on one private Docker network behind (optionally) a TLS-terminating proxy; plain HTTP to these
   # named hosts is an explicit opt-in in substrate-data, and the proxy flag lets it listen beyond loopback.
-  SUBSTRATE_DATA_INSECURE_HTTP_HOSTS: '["seaweedfs","keycloak","data-controller","data-worker-sql","data-worker-jobs","data-worker-rag"]'
+  SUBSTRATE_DATA_INSECURE_HTTP_HOSTS: '["seaweedfs","keycloak"]'
+  # Controller and workers serve HTTPS with the cell's private CA (cell-init); the API trusts it.
+  SUBSTRATE_DATA_INTERNAL_CA_FILE: /tls/ca.crt
   SUBSTRATE_DATA_BEHIND_TLS_PROXY: "true"
   SUBSTRATE_DATA_OIDC_ISSUER: ${KEYCLOAK_PUBLIC_URL:-http://keycloak:8080}/realms/substrate
   SUBSTRATE_DATA_OIDC_AUDIENCE: substrate-data
@@ -22,14 +24,26 @@ x-data-env: &data-env
   SUBSTRATE_DATA_STAGING_BUCKET: ${STAGING_BUCKET:-substrate-staging}
   SUBSTRATE_DATA_VOLUMES_BUCKET: ${VOLUMES_BUCKET:-substrate-volumes}
   SUBSTRATE_DATA_STORAGE_ID: cell-warehouse
-  SUBSTRATE_DATA_CONTROLLER_URL: http://data-controller:8040
+  SUBSTRATE_DATA_CONTROLLER_URL: https://data-controller:8040
 
 x-data-image: &data-image
   image: ${IMAGE_REGISTRY:-ghcr.io/agent-substrate}/substrate-data:${IMAGE_TAG:-local}
   build: { context: ../.., dockerfile: deploy/docker/substrate-data.Dockerfile }
 
+x-data-tls: &data-tls
+  SUBSTRATE_DATA_TLS_CERT_FILE: /tls/server.crt
+  SUBSTRATE_DATA_TLS_KEY_FILE: /tls/server.key
+
+# The controller and workers speak HTTPS, so the image's plain-HTTP probe does not apply.
+x-https-health: &https-health
+  test: ["CMD", "python", "-c", "import os, ssl, urllib.request as u; c = ssl.create_default_context(cafile='/tls/ca.crt'); u.urlopen('https://localhost:%s/readyz' % os.environ['PORT'], timeout=4, context=c)"]
+  interval: 15s
+  timeout: 5s
+  retries: 5
+  start_period: 20s
+
 x-worker-env: &worker-env
-  <<: *data-env
+  <<: [*data-env, *data-tls]
   SUBSTRATE_DATA_WORKER_BIND_HOST: 0.0.0.0
   SUBSTRATE_DATA_WORKER_TOKEN: ${WORKER_TOKEN:?run ./gen-env.sh}
   SUBSTRATE_DATA_S3_ACCESS_KEY_ID: ${WORKER_S3_ACCESS_KEY_ID:?}
@@ -42,7 +56,9 @@ x-agent-image: &agent-image
   build: { context: ../.., dockerfile: deploy/docker/agent-server.Dockerfile }
 
 x-agent-env: &agent-env
+  # SQLAlchemy (asyncpg dialect) wants ssl=, the library's own asyncpg connection wants sslmode=.
   DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-substrate}:${POSTGRES_PASSWORD:?run ./gen-env.sh}@postgres:5432/agentdb?ssl=require
+  ASYNC_DATABASE_URL: postgresql://${POSTGRES_USER:-substrate}:${POSTGRES_PASSWORD}@postgres:5432/agentdb?sslmode=require
   REDIS_URL: redis://:${REDIS_PASSWORD:?}@redis:6379/0
   STORE_BACKEND: postgres
   FILE_STORE_BACKEND: s3
@@ -89,6 +105,7 @@ services:
     <<: *data-image
     user: "0:0"
     entrypoint: ["python", "/init/cell-init.py"]
+    healthcheck: { disable: true }
     command: []
     environment:
       WAREHOUSE_BUCKET: ${WAREHOUSE_BUCKET:-warehouse}
@@ -107,6 +124,7 @@ services:
       - ticket-private:/out/ticket-private
       - ticket-public:/out/ticket-public
       - postgres-tls:/out/postgres-tls
+      - internal-tls:/out/internal-tls
     restart: "no"
 
   postgres:
@@ -248,6 +266,7 @@ services:
       SUBSTRATE_DATA_MASK_SALT: ${MASK_SALT:-}
     volumes:
       - ticket-private:/keys:ro
+      - internal-tls:/tls:ro
     ports:
       - "${BIND_ADDR:-127.0.0.1}:${PORT_DATA_API:-8020}:8020"
     depends_on:
@@ -260,18 +279,21 @@ services:
     <<: *data-image
     command: ["controller", "--host", "0.0.0.0", "--port", "8040"]
     environment:
-      <<: *data-env
+      <<: [*data-env, *data-tls]
       PORT: "8040"
       SUBSTRATE_DATA_CONTROLLER_TOKEN: ${CONTROLLER_TOKEN:?}
+    healthcheck: *https-health
     volumes:
       - controller-state:/var/lib/substrate-data
+      - internal-tls:/tls:ro
     restart: unless-stopped
 
   data-worker-sql:
     <<: *data-image
     command: ["worker", "--role", "sql", "--port", "8041"]
     environment: { <<: *worker-env, PORT: "8041" }
-    volumes: [ "ticket-public:/keys:ro" ]
+    healthcheck: *https-health
+    volumes: [ "ticket-public:/keys:ro", "internal-tls:/tls:ro" ]
     depends_on:
       seaweed-init: { condition: service_completed_successfully }
     restart: unless-stopped
@@ -280,7 +302,8 @@ services:
     <<: *data-image
     command: ["worker", "--role", "jobs", "--port", "8042"]
     environment: { <<: *worker-env, PORT: "8042" }
-    volumes: [ "ticket-public:/keys:ro" ]
+    healthcheck: *https-health
+    volumes: [ "ticket-public:/keys:ro", "internal-tls:/tls:ro" ]
     depends_on:
       seaweed-init: { condition: service_completed_successfully }
     restart: unless-stopped
@@ -289,19 +312,21 @@ services:
     <<: *data-image
     command: ["worker", "--role", "rag", "--port", "8043"]
     environment: { <<: *worker-env, PORT: "8043" }
-    volumes: [ "ticket-public:/keys:ro" ]
+    healthcheck: *https-health
+    volumes: [ "ticket-public:/keys:ro", "internal-tls:/tls:ro" ]
     restart: unless-stopped
 
   # Registers the workers with the controller (idempotent by name), then exits.
   data-attach:
     <<: *data-image
     entrypoint: ["/bin/sh", "-ec"]
+    healthcheck: { disable: true }
     command:
       - |
         for spec in sql:8041 jobs:8042 rag:8043; do
           role=$${spec%%:*}; port=$${spec##*:}
           for i in $$(seq 1 30); do
-            substrate-data attach --name "$$role" --role "$$role" --url "http://data-worker-$$role:$$port" --token-env SUBSTRATE_DATA_WORKER_TOKEN && break
+            substrate-data attach --name "$$role" --role "$$role" --url "https://data-worker-$$role:$$port" --token-env SUBSTRATE_DATA_WORKER_TOKEN && break
             sleep 2
           done
         done
@@ -309,6 +334,8 @@ services:
       <<: *data-env
       SUBSTRATE_DATA_CONTROLLER_TOKEN: ${CONTROLLER_TOKEN:?}
       SUBSTRATE_DATA_WORKER_TOKEN: ${WORKER_TOKEN:?}
+    volumes:
+      - internal-tls:/tls:ro
     depends_on: [data-controller, data-worker-sql, data-worker-jobs, data-worker-rag]
     restart: "no"
 
@@ -436,6 +463,7 @@ services:
 volumes:
   postgres-data:
   postgres-tls:
+  internal-tls:
   redis-data:
   seaweed-data:
   seaweed-config:

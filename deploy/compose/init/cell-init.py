@@ -5,6 +5,8 @@ Runs inside the substrate-data image (it has `cryptography`) as root, once, befo
   /out/ticket-private/ticket.pem   Ed25519 ticket signing key (control plane only)
   /out/ticket-public/ticket.pub.pem   its public half (workers)
   /out/postgres-tls/server.{crt,key}  self-signed server certificate, so database connections are encrypted
+  /out/internal-tls/{ca.crt,server.crt,server.key}  private CA and one certificate for the controller and the workers:
+                              substrate-data refuses plain HTTP between them off loopback, so they serve HTTPS
 Secrets come from the environment (.env); nothing here invents a credential.
 """
 
@@ -127,8 +129,62 @@ def postgres_tls() -> None:
     write(crt, cert.public_bytes(serialization.Encoding.PEM), 0o644, (999, 999))
 
 
+def internal_tls() -> None:
+    d = OUT / "internal-tls"
+    if (d / "ca.crt").exists() and (d / "server.crt").exists():
+        return
+    now = datetime.datetime.now(datetime.UTC)
+    ca_key = ec.generate_private_key(ec.SECP256R1())
+    ca_name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "substrate cell internal CA")])
+    ca = (
+        x509.CertificateBuilder()
+        .subject_name(ca_name)
+        .issuer_name(ca_name)
+        .public_key(ca_key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(now - datetime.timedelta(days=1))
+        .not_valid_after(now + datetime.timedelta(days=3650))
+        .add_extension(x509.BasicConstraints(ca=True, path_length=0), critical=True)
+        .add_extension(
+            x509.KeyUsage(True, False, False, False, False, True, True, False, False), critical=True
+        )
+        .add_extension(x509.SubjectKeyIdentifier.from_public_key(ca_key.public_key()), critical=False)
+        .sign(ca_key, hashes.SHA256())
+    )
+    key = ec.generate_private_key(ec.SECP256R1())
+    hosts = ["data-controller", "data-worker-sql", "data-worker-jobs", "data-worker-rag", "localhost"]
+    cert = (
+        x509.CertificateBuilder()
+        .subject_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "substrate-data internal")]))
+        .issuer_name(ca_name)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(now - datetime.timedelta(days=1))
+        .not_valid_after(now + datetime.timedelta(days=825))
+        .add_extension(x509.SubjectAlternativeName([x509.DNSName(h) for h in hosts]), critical=False)
+        .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
+        .add_extension(
+            x509.KeyUsage(True, False, False, False, False, False, False, False, False), critical=True
+        )
+        .add_extension(x509.ExtendedKeyUsage([x509.oid.ExtendedKeyUsageOID.SERVER_AUTH]), critical=False)
+        .add_extension(x509.SubjectKeyIdentifier.from_public_key(key.public_key()), critical=False)
+        .add_extension(x509.AuthorityKeyIdentifier.from_issuer_public_key(ca_key.public_key()), critical=False)
+        .sign(ca_key, hashes.SHA256())
+    )
+    owner = (10001, 10001)
+    write(d / "ca.crt", ca.public_bytes(serialization.Encoding.PEM), 0o444, owner)
+    write(d / "server.crt", cert.public_bytes(serialization.Encoding.PEM), 0o444, owner)
+    write(
+        d / "server.key",
+        key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()),
+        0o400,
+        owner,
+    )
+
+
 if __name__ == "__main__":
     s3_identities()
+    internal_tls()
     ticket_keys()
     postgres_tls()
     print("cell-init: done")

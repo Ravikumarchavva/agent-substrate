@@ -42,7 +42,9 @@ export function Messages({ entries, names, avatars, typing, readByAll, onReply, 
   const seen = useRef(entries.length);
   const content = useRef<HTMLDivElement>(null);
   const following = useRef(true);
-  following.current = atEnd;
+  useEffect(() => {
+    following.current = atEnd;
+  }, [atEnd]);
   const bySeq = new Map(entries.map((e) => [e.seq, e]));
 
   useEffect(() => {

@@ -10,3 +10,7 @@ allowBuilds:
   prisma: true
   sharp: true
   unrs-resolver: true
+
+# Keep the react-hooks lint rules the code was written against; 7.1 added stricter rules (23 errors in substrate-ui).
+overrides:
+  eslint-plugin-react-hooks: 7.0.1

@@ -8,7 +8,7 @@ const path = require("node:path");
 
 const env = Object.fromEntries(
   fs
-    .readFileSync(path.join(__dirname, "../../.env"), "utf8")
+    .readFileSync(path.join(__dirname, "../../substrate-data/.env"), "utf8")
     .split("\n")
     .filter((line) => line.includes("=") && !line.startsWith("#"))
     .map((line) => [
@@ -17,7 +17,7 @@ const env = Object.fromEntries(
     ]),
 );
 const base = process.env.DATA_UI_URL || "http://127.0.0.1:3011";
-const shots = path.join(__dirname, "../../docs/screenshots");
+const shots = path.join(__dirname, "../../substrate-data/docs/screenshots");
 
 (async () => {
   const browser = await chromium.launch({

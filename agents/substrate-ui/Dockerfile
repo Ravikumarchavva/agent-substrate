@@ -7,19 +7,20 @@ FROM base AS deps
 WORKDIR /app
 
 # Install pnpm
-# Pin pnpm to the version that generated pnpm-lock.yaml (not @latest, which
+# Pin pnpm to the version that generated pnpm-lock.yaml (see packageManager in root package.json) (not @latest, which
 # drifts and can require a newer Node than the base image ships).
-RUN corepack enable && corepack prepare pnpm@11.5.2 --activate
+RUN corepack enable && corepack prepare pnpm@11.1.1 --activate
 
-# Copy package files
+# Copy workspace manifests (build context is the monorepo root:
+#   docker build -f agents/substrate-ui/Dockerfile .)
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY prisma ./prisma/
+COPY agents/substrate-ui/package.json ./agents/substrate-ui/
+COPY agents/substrate-ui/prisma ./agents/substrate-ui/prisma/
+COPY data/substrate-data-web/package.json ./data/substrate-data-web/
+COPY data/substrate-data-web/scripts ./data/substrate-data-web/scripts/
 
-# Install dependencies
-RUN pnpm install --frozen-lockfile
-
-# Generate Prisma client
-RUN pnpm prisma generate
+# Install dependencies for the UI only (runs its postinstall: prisma generate)
+RUN pnpm install --frozen-lockfile --filter ./agents/substrate-ui...
 
 
 # Rebuild the source code only when needed
@@ -27,12 +28,15 @@ FROM base AS builder
 WORKDIR /app
 
 # Install pnpm
-# Pin pnpm to the version that generated pnpm-lock.yaml (not @latest, which
+# Pin pnpm to the version that generated pnpm-lock.yaml (see packageManager in root package.json) (not @latest, which
 # drifts and can require a newer Node than the base image ships).
-RUN corepack enable && corepack prepare pnpm@11.5.2 --activate
+RUN corepack enable && corepack prepare pnpm@11.1.1 --activate
 
 COPY --from=deps /app/node_modules ./node_modules
-COPY . .
+COPY --from=deps /app/agents/substrate-ui/node_modules ./agents/substrate-ui/node_modules
+COPY package.json pnpm-workspace.yaml ./
+COPY agents/substrate-ui ./agents/substrate-ui
+WORKDIR /app/agents/substrate-ui
 
 
 # Build Next.js
@@ -52,10 +56,11 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./.next/static
-COPY --from=builder /app/prisma ./prisma
+# Monorepo standalone output nests the app under agents/substrate-ui/
+COPY --from=builder /app/agents/substrate-ui/.next/standalone ./
+COPY --from=builder /app/agents/substrate-ui/public ./agents/substrate-ui/public
+COPY --from=builder /app/agents/substrate-ui/.next/static ./agents/substrate-ui/.next/static
+COPY --from=builder /app/agents/substrate-ui/prisma ./agents/substrate-ui/prisma
 COPY --from=builder /app/node_modules ./node_modules
 
 USER nextjs
@@ -65,4 +70,4 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-CMD ["node", "server.js"]
+CMD ["node", "agents/substrate-ui/server.js"]

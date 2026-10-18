@@ -192,6 +192,15 @@ plateau, but **that is a hypothesis, not a measurement**, and this was not run a
 extrapolation (about 1.5 hours at the rate above, if throughput holds). The job memory ceiling is what makes a wrong
 extrapolation safe: a job that outgrows it is stopped and reported.
 
+## Files (volumes bucket, quotas, sweeper)
+
+Create the `volumes` bucket (`SUBSTRATE_DATA_VOLUMES_BUCKET`, default `substrate-volumes`; `scripts/infra_ready.py` does in
+development) and give **only the control plane's S3 identity** read/write/list on it; a worker identity must carry
+no action on it. Settings, quotas, version retention, the expiry sweeper (it runs inside every API replica) and the
+tenant provisioning role are in [FILES.md](FILES.md). Raise `SUBSTRATE_DATA_RATE_LIMIT_PER_MINUTE` for file-heavy
+agents. Set `SUBSTRATE_DATA_VOLUMES_PUBLIC_ENDPOINT_URL` when clients reach storage at another address than the control
+plane does.
+
 ## Not built
 
 - On-disk (NVMe) block cache: DuckDB runs with extensions locked, and the community extension that provides one

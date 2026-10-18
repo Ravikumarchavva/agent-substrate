@@ -61,6 +61,12 @@ inside a view definition still prune files; filters written outside it are appli
 - **Control-plane state:** SQLite in WAL mode (`catalog/store.py`): securables, grants, audit, statement
   and import history, pipelines, collections, durable publications. Schema is typed and indexed.
 
+## Files
+
+User files live in volumes and are served by the Files API ([FILES.md](FILES.md)): the control plane keeps paths,
+versions, quotas and audit in the catalog database and signs URLs; bytes move directly between clients and a
+dedicated `volumes` bucket whose key only the control plane holds.
+
 ## Layout
 
 | Path | Role |
@@ -68,6 +74,7 @@ inside a view definition still prune files; filters written outside it are appli
 | `api/` | FastAPI app, `routes/` (catalog, statements, imports, workloads), publisher for finished jobs |
 | `auth/` | OIDC verification, principals, Ed25519 tickets |
 | `catalog/` | Securables, privilege inheritance, grants, audit, history |
+| `files/` | Files domain: paths, ownership policy, quotas, versions, volumes bucket, sweeper |
 | `sql/` | One-pass analysis and pruning filters; planner and ticket builder |
 | `tables/` | Iceberg service (planning, commits, schema), presigned staging |
 | `compute/` | Controller and its API, attach registry, job store; worker service, batch (Polars) |

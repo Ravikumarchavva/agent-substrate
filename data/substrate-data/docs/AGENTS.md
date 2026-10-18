@@ -94,8 +94,10 @@ concurrency at 64, and logs an unreachable data service or rejected certificate 
    `DATA_CLIENT_CERT_FILE`, `DATA_CLIENT_KEY_FILE`, `DATA_TOKEN_ISSUER`, `DATA_TOKEN_AUDIENCE`,
    `DATA_TOKEN_KEY_FILE`, `DATA_RELAY_DIR`. An unset URL disables the feature. Expose the keys path on the
    backend's public address.
-4. **Sandbox Python.** `substrate-data-client` (in `client/`) must be importable by the sandbox interpreter, with
-   `polars`, `pyarrow`, `httpx`, `xlsxwriter` and `kaleido`. agent-substrate's lockfile is intentionally not
+4. **Sandbox Python.** `substrate-data-client` (in `data/substrate-data-client`) must be importable by the sandbox interpreter,
+   installed with its Arrow extra (`pip install 'substrate-data-client[arrow]'`: `polars`, `pyarrow`, `httpx`),
+   plus `xlsxwriter` and `kaleido`. Without the extra the client still imports (`sd.rows(...)` returns JSON) and
+   `sd.sql` says what to install. agent-substrate's lockfile is intentionally not
    changed by this repo.
 
 ## Verify

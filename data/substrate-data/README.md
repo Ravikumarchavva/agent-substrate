@@ -67,7 +67,11 @@ client = DataClient("http://127.0.0.1:8020", token=ClientCredentials(ISSUER, CLI
 df = client.sql("SELECT PULocationID, count(*) n FROM main.nyc.yellow GROUP BY 1")  # polars.DataFrame
 client.upload("main.nyc.trips", ["trips.parquet"],
               partitioning=[{"column": "pickup_time", "transform": "month"}])
+client.files.upload("main.ws.files", "reports/q3.csv", "q3.csv")                   # versioned file in a volume
 ```
+
+The client's core needs only `httpx`; `client.sql(...)` (Polars/Arrow) needs `pip install 'substrate-data-client[arrow]'`,
+and `AsyncDataClient` is the asyncio twin.
 
 See [examples/agent_data.py](examples/agent_data.py).
 
@@ -77,7 +81,7 @@ See [examples/agent_data.py](examples/agent_data.py).
 | --- | --- |
 | Catalog | `catalog.schema.table` namespace, Unity Catalog-style privileges (`USE_CATALOG`, `USE_SCHEMA`, `SELECT`, `MODIFY`, `CREATE_*`) that inherit downward; invisible tables return 404, not 403 |
 | Views | Named, governed queries (`POST …/views`): granted separately from their tables, read with the view owner's access, nestable, pruned by their own filters; `demo` creates three over the taxi data |
-| Volumes | Governed file namespaces with private S3 prefixes, signed direct uploads/downloads (64 MiB per UI upload), paginated folder listings, and READ_VOLUME / WRITE_VOLUME grants |
+| Volumes | Governed file namespaces with READ_VOLUME / WRITE_VOLUME grants. The [Files API](docs/FILES.md) adds versioned files in a separate bucket that workers cannot read, direct multipart uploads, batch URL signing, quotas, `users/{sub}` ownership for agent tokens, copy/restore and tenant provisioning; the older UI upload routes still address the staging bucket |
 | Models | Artifact registration with owner, framework, URI and USE_MODEL grants; initial artifact version 1, without model serving or version promotion |
 | Tables | Iceberg v2 through SeaweedFS's REST catalog: partition transforms, per-file statistics, ACID commits, schema evolution; readable by Spark, Trino, DuckDB and PyIceberg |
 | Ingest | Files upload straight to object storage (presigned, multipart); a Polars worker streams them once into partitioned Parquet written directly to the table location, then one atomic commit. CSV, Parquet, NDJSON; nanosecond timestamps normalized |
@@ -87,7 +91,7 @@ See [examples/agent_data.py](examples/agent_data.py).
 
 ## Documentation
 
-- [Architecture](docs/ARCHITECTURE.md) · [Attached compute](docs/COMPUTE.md) · [Security](docs/SECURITY.md) · [Agent access](docs/AGENTS.md) · [European controls](docs/COMPLIANCE.md) · [Operations](docs/OPERATIONS.md)
+- [Architecture](docs/ARCHITECTURE.md) · [Attached compute](docs/COMPUTE.md) · [Security](docs/SECURITY.md) · [Agent access](docs/AGENTS.md) · [European controls](docs/COMPLIANCE.md) · [Operations](docs/OPERATIONS.md) · [Files](docs/FILES.md)
 - [Decision: table format](../../docs/adr/0001-table-format.md) · [Decision: sandbox transport](../../docs/adr/0002-sandbox-data-transport.md)
 - [OpenAPI contract](docs/openapi.json) (a test fails on any undeclared change)
 

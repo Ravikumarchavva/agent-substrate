@@ -15,7 +15,7 @@ on the cell's private network.
 | 6379 | Redis | internal | password required |
 | 8000 | agent server, monolith | published (`PORT_AGENT`) | in microservices mode `PORT_AGENT` maps to the gateway (8001) |
 | 8001 | agent gateway (microservices) | published as `PORT_AGENT` | the only microservice with a public port |
-| 8010 | agent identity (microservices) | internal | to be replaced by Keycloak (ADR 0009) |
+| 8010 | (retired) agent identity | | removed: Keycloak is the identity service (ADR 0007, 0009); do not reuse for a new component |
 | 8011 | agent policy | internal | |
 | 8012 | agent conversation | internal | |
 | 8013 | agent job controller | internal | |
@@ -42,3 +42,7 @@ on the cell's private network.
 
 Not part of the cell: the developer infrastructure of `data/substrate-data` (`make up`) uses 18080 (Keycloak), 18333 (S3) and
 18181 (Iceberg) on purpose, so it can run next to this bundle.
+
+In microservices mode the services find each other by `SERVICE_URL_TEMPLATE` (`{name}` is the service in dashes, `{port}` its port from the
+table); compose sets `http://agent-{name}:{port}` and the chart `http://<release>-agent-{name}:{port}`. `<NAME>_SERVICE_URL`
+(for example `AGENT_RUNTIME_SERVICE_URL`) overrides one peer.

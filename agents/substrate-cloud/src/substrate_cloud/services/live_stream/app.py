@@ -1,4 +1,4 @@
-"""Live Stream Service — FastAPI application.
+"""Live Stream Service: FastAPI application.
 
 Entry point: uvicorn substrate_cloud.services.live_stream.app:app --port 8017
 """
@@ -6,56 +6,28 @@ Entry point: uvicorn substrate_cloud.services.live_stream.app:app --port 8017
 from __future__ import annotations
 
 import logging
-
-import asyncio
-import os
 from contextlib import asynccontextmanager
 
-from substrate.integrations.cache.redis import RedisConnector
 from substrate_cloud.services.base import AUTHENTICATED, create_service_app
-from substrate_cloud.services.live_stream.projector import StreamProjector
 from substrate_cloud.services.live_stream.routes import router
-from substrate_cloud.shared.events.factory import get_event_bus
+from substrate_cloud.shared.runtime_view import open_runtime_view
+from substrate_cloud.shared.service_client import ServiceClient
+from substrate_cloud.shared.service_urls import service_url
 
 logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app):
-    redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
-
-    redis_connector = RedisConnector(redis_url)
-    await redis_connector.connect()
-    app.state.redis = redis_connector.client
-
-    event_bus = get_event_bus(redis_url)
-    await event_bus.connect()
-    app.state.event_bus = event_bus
-
-    # Start the stream projector
-    projector = StreamProjector(app.state.redis, event_bus)
-    app.state.projector = projector
-
-    # Start background event listener
-    listener_task = asyncio.create_task(projector.run_event_listener())
-    app.state.listener_task = listener_task
-
+    app.state.store, app.state.runtime = await open_runtime_view()
+    app.state.conversation_client = ServiceClient(
+        service_url("conversation"), "conversation"
+    )
     logger.info("Live Stream service started")
     yield
-
-    # Shutdown
-    listener_task.cancel()
-    try:
-        await listener_task
-    except asyncio.CancelledError:
-        pass
-
-    await event_bus.disconnect()
-    await redis_connector.disconnect()
+    await app.state.conversation_client.aclose()
+    await app.state.store.aclose()
 
 
-app = create_service_app(
-    title="Live Stream Service",
-    lifespan=lifespan,
-)
-app.include_router(router, dependencies=AUTHENTICATED)
+app = create_service_app(title="Live Stream Service", lifespan=lifespan)
+app.include_router(router, prefix="/api/v1", dependencies=AUTHENTICATED)

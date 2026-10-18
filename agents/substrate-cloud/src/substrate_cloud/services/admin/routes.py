@@ -1,58 +1,21 @@
-"""Admin Control Plane — HTTP routes.
+"""Admin Control Plane: HTTP routes (platform administrators only).
 
-Routes:
-  GET  /admin/stats           – platform statistics
-  GET  /admin/audit           – audit log entries
-  POST /admin/tenants         – create tenant
-  GET  /admin/tenants         – list tenants
-  GET  /admin/tenants/{id}    – get tenant
+GET /api/v1/admin/stats   counts of what the audit trail holds
+GET /api/v1/admin/audit   audit log entries, newest first
 """
 
 from __future__ import annotations
 
-import logging
-
-import uuid
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from substrate_cloud.services.admin.service import get_audit_logs, get_platform_stats
 from substrate_cloud.shared.database.dependency import get_db_session
 
-from substrate_cloud.services.admin.service import (
-    create_tenant,
-    get_audit_logs,
-    get_platform_stats,
-    get_tenant,
-    list_tenants,
-    write_audit_log,
-)
-
-logger = logging.getLogger(__name__)
-
 router = APIRouter(prefix="/admin", tags=["admin"])
-
-
-# ── Schemas ──────────────────────────────────────────────────────────────────
-
-
-class TenantCreateBody(BaseModel):
-    name: str
-    slug: str
-    plan: str = "free"
-    settings: Optional[Dict[str, Any]] = None
-
-
-class TenantOut(BaseModel):
-    id: str
-    name: str
-    slug: str
-    plan: str
-    is_active: bool
-    settings: Optional[Dict[str, Any]]
-    created_at: str
 
 
 class AuditLogOut(BaseModel):
@@ -66,12 +29,8 @@ class AuditLogOut(BaseModel):
     created_at: str
 
 
-# ── Routes ───────────────────────────────────────────────────────────────────
-
-
 @router.get("/stats")
-async def platform_stats(db: AsyncSession = Depends(get_db_session)):
-    """Get platform-wide statistics."""
+async def platform_stats(db: AsyncSession = Depends(get_db_session)) -> dict:
     return await get_platform_stats(db)
 
 
@@ -80,11 +39,10 @@ async def audit_log(
     tenant_id: Optional[str] = None,
     actor_id: Optional[str] = None,
     action: Optional[str] = None,
-    limit: int = 100,
-    offset: int = 0,
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db_session),
-):
-    """Query the audit log."""
+) -> list[AuditLogOut]:
     logs = await get_audit_logs(
         db,
         tenant_id=tenant_id,
@@ -106,75 +64,3 @@ async def audit_log(
         )
         for log in logs
     ]
-
-
-@router.post("/tenants", status_code=201)
-async def create_tenant_endpoint(
-    body: TenantCreateBody,
-    db: AsyncSession = Depends(get_db_session),
-):
-    """Create a new tenant."""
-    tenant = await create_tenant(
-        db,
-        name=body.name,
-        slug=body.slug,
-        plan=body.plan,
-        settings=body.settings,
-    )
-    await write_audit_log(
-        db,
-        action="tenant.created",
-        tenant_id=str(tenant.id),
-        resource_type="tenant",
-        resource_id=str(tenant.id),
-        details={"name": tenant.name, "slug": tenant.slug, "plan": tenant.plan},
-    )
-    return TenantOut(
-        id=str(tenant.id),
-        name=tenant.name,
-        slug=tenant.slug,
-        plan=tenant.plan,
-        is_active=tenant.is_active,
-        settings=tenant.settings,
-        created_at=tenant.created_at.isoformat(),
-    )
-
-
-@router.get("/tenants")
-async def list_tenants_endpoint(
-    limit: int = 50,
-    offset: int = 0,
-    db: AsyncSession = Depends(get_db_session),
-):
-    tenants = await list_tenants(db, limit=limit, offset=offset)
-    return [
-        TenantOut(
-            id=str(t.id),
-            name=t.name,
-            slug=t.slug,
-            plan=t.plan,
-            is_active=t.is_active,
-            settings=t.settings,
-            created_at=t.created_at.isoformat(),
-        )
-        for t in tenants
-    ]
-
-
-@router.get("/tenants/{tenant_id}")
-async def get_tenant_endpoint(
-    tenant_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db_session),
-):
-    tenant = await get_tenant(db, tenant_id)
-    if not tenant:
-        raise HTTPException(status_code=404, detail="Tenant not found")
-    return TenantOut(
-        id=str(tenant.id),
-        name=tenant.name,
-        slug=tenant.slug,
-        plan=tenant.plan,
-        is_active=tenant.is_active,
-        settings=tenant.settings,
-        created_at=tenant.created_at.isoformat(),
-    )

@@ -1,378 +1,187 @@
-"""Conversation Service — HTTP routes.
+"""Conversation Service: HTTP routes (internal; the gateway serves them to clients as the Agent API).
 
-Routes:
-  POST   /threads              – create thread
-  GET    /threads              – list threads
-  GET    /threads/{id}         – get thread
-  PATCH  /threads/{id}         – update thread
-  DELETE /threads/{id}         – delete thread
-  GET    /threads/{id}/messages – get thread messages (steps)
-  POST   /threads/{id}/steps   – create step
-  GET    /threads/{id}/steps/{sid} – get step
-  POST   /threads/{id}/feedback – submit feedback
+  POST   /api/v1/threads                 create a thread owned by the caller
+  GET    /api/v1/threads                 the caller's threads
+  GET    /api/v1/threads/{id}            one thread
+  PATCH  /api/v1/threads/{id}            rename, tag, pin, archive
+  DELETE /api/v1/threads/{id}            delete (hidden from the owner, kept for review)
+  GET    /api/v1/threads/{id}/messages   the conversation, projected from the run journal
+  POST   /api/v1/feedbacks               rate an answer
+  GET    /api/v1/threads/{id}/feedback   the ratings given in a conversation
+
+The owner and tenant of a thread are the token's, never a field of the request.
 """
 
 from __future__ import annotations
 
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from substrate_cloud.shared.database.dependency import get_db_session
-
-from substrate_cloud.services.conversation.service import (
-    create_feedback,
-    create_step,
-    create_thread,
-    delete_thread,
-    get_step,
-    get_steps,
-    get_thread,
-    list_threads,
-    load_messages_for_memory,
-    update_step,
-    update_thread,
+from substrate_cloud.services.conversation import service
+from substrate_cloud.services.conversation.models import Thread
+from substrate_cloud.shared.auth.claims import AuthClaims
+from substrate_cloud.shared.auth.middleware import get_current_user
+from substrate_cloud.shared.contracts.conversation import (
+    FeedbackCreate,
+    FeedbackOut,
+    ThreadCreate,
+    ThreadOut,
+    ThreadUpdate,
 )
+from substrate_cloud.shared.database.dependency import get_db_session
+from substrate_cloud.shared.events import types as events
+from substrate_cloud.shared.problem import Problem
+from substrate_cloud.stream.history import project_thread_timed
+from substrate_cloud.stream.search import message_counts
+
+MAX_PAGE = 100
 
 router = APIRouter(tags=["conversation"])
-
-
-# ── Request/Response schemas ─────────────────────────────────────────────────
-
-
-class ThreadCreateBody(BaseModel):
-    name: Optional[str] = "New Chat"
-    user_id: Optional[str] = None
-    tags: Optional[List[str]] = None
-    metadata: Optional[Dict[str, Any]] = None
-
-
-class ThreadUpdateBody(BaseModel):
-    name: Optional[str] = None
-    tags: Optional[List[str]] = None
-    metadata: Optional[Dict[str, Any]] = None
-
-
-class StepCreateBody(BaseModel):
-    type: str
-    name: str = ""
-    parent_id: Optional[str] = None
-    input: Optional[str] = None
-    output: Optional[str] = None
-    streaming: bool = False
-    is_error: bool = False
-    metadata: Optional[Dict[str, Any]] = None
-
-
-class StepUpdateBody(BaseModel):
-    output: Optional[str] = None
-    streaming: Optional[bool] = None
-    is_error: Optional[bool] = None
-    metadata: Optional[Dict[str, Any]] = None
-
-
-class FeedbackBody(BaseModel):
-    for_id: str
-    value: int
-    comment: Optional[str] = None
-
-
-class ThreadOut(BaseModel):
-    id: str
-    name: Optional[str]
-    user_id: Optional[str]
-    tags: Optional[List[str]]
-    metadata: Optional[Dict[str, Any]]
-    created_at: str
-    updated_at: str
-    message_count: int = 0
-
-
-class StepOut(BaseModel):
-    id: str
-    name: str
-    type: str
-    thread_id: str
-    parent_id: Optional[str]
-    input: Optional[str]
-    output: Optional[str]
-    streaming: bool
-    is_error: Optional[bool]
-    metadata: Optional[Dict[str, Any]]
-    created_at: str
-
-
-class FeedbackOut(BaseModel):
-    id: str
-    for_id: str
-    thread_id: str
-    value: int
-    comment: Optional[str]
-    created_at: str
-
-
-# ── Thread routes ────────────────────────────────────────────────────────────
-
 thread_router = APIRouter(prefix="/threads", tags=["threads"])
 
 
-@thread_router.post("", status_code=201)
+async def owned(db: AsyncSession, thread_id: uuid.UUID, user: AuthClaims) -> Thread:
+    thread = await service.get_owned_thread(db, thread_id, user)
+    if thread is None:
+        raise Problem(404, "not-found", "Thread not found")
+    return thread
+
+
+@thread_router.post("", response_model=ThreadOut, status_code=201)
 async def create_thread_endpoint(
-    body: ThreadCreateBody,
+    body: ThreadCreate,
+    request: Request,
+    user: AuthClaims = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
-):
-    user_uuid = uuid.UUID(body.user_id) if body.user_id else None
-    thread = await create_thread(
-        db,
-        name=body.name or "New Chat",
-        user_id=user_uuid,
-        tags=body.tags,
-        metadata=body.metadata,
+) -> ThreadOut:
+    thread = await service.create_thread(db, user, name=body.name or "New Chat")
+    await request.app.state.event_bus.publish(
+        events.thread_created(
+            str(thread.id),
+            thread.name or "",
+            tenant_id=user.tenant_id,
+            user_id=user.sub,
+        )
     )
-    return ThreadOut(
-        id=str(thread.id),
-        name=thread.name,
-        user_id=str(thread.user_id) if thread.user_id else None,
-        tags=thread.tags,
-        metadata=thread.metadata_,
-        created_at=thread.created_at.isoformat(),
-        updated_at=thread.updated_at.isoformat(),
-        message_count=0,
-    )
+    return ThreadOut(**service.thread_row(thread))
 
 
-@thread_router.get("")
+@thread_router.get("", response_model=List[ThreadOut])
 async def list_threads_endpoint(
-    limit: int = 50,
-    offset: int = 0,
-    user_id: Optional[str] = None,
+    request: Request,
+    limit: int = Query(50, ge=1, le=MAX_PAGE),
+    offset: int = Query(0, ge=0),
+    archived: bool = False,
+    user: AuthClaims = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
-):
-    user_uuid = uuid.UUID(user_id) if user_id else None
-    return await list_threads(db, user_id=user_uuid, limit=limit, offset=offset)
+) -> List[ThreadOut]:
+    threads = await service.list_threads(
+        db, user, limit=limit, offset=offset, archived=archived
+    )
+    counts = (
+        await message_counts(
+            request.app.state.store,
+            tenant=user.tenant_id,
+            thread_ids=[str(t.id) for t in threads],
+        )
+        if threads
+        else {}
+    )
+    return [
+        ThreadOut(**service.thread_row(t, counts.get(str(t.id), 0))) for t in threads
+    ]
 
 
-@thread_router.get("/{thread_id}")
+@thread_router.get("/{thread_id}", response_model=ThreadOut)
 async def get_thread_endpoint(
     thread_id: uuid.UUID,
+    user: AuthClaims = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
-):
-    thread = await get_thread(db, thread_id)
-    if not thread:
-        raise HTTPException(status_code=404, detail="Thread not found")
-    return ThreadOut(
-        id=str(thread.id),
-        name=thread.name,
-        user_id=str(thread.user_id) if thread.user_id else None,
-        tags=thread.tags,
-        metadata=thread.metadata_,
-        created_at=thread.created_at.isoformat(),
-        updated_at=thread.updated_at.isoformat(),
-        message_count=0,
-    )
+) -> ThreadOut:
+    return ThreadOut(**service.thread_row(await owned(db, thread_id, user)))
 
 
-@thread_router.patch("/{thread_id}")
+@thread_router.patch("/{thread_id}", response_model=ThreadOut)
 async def update_thread_endpoint(
     thread_id: uuid.UUID,
-    body: ThreadUpdateBody,
+    body: ThreadUpdate,
+    user: AuthClaims = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
-):
-    thread = await update_thread(
+) -> ThreadOut:
+    thread = await owned(db, thread_id, user)
+    thread = await service.update_thread(
         db,
-        thread_id,
+        thread,
         name=body.name,
         tags=body.tags,
         metadata=body.metadata,
+        pinned=body.pinned,
+        archived=body.archived,
     )
-    if not thread:
-        raise HTTPException(status_code=404, detail="Thread not found")
-    return ThreadOut(
-        id=str(thread.id),
-        name=thread.name,
-        user_id=str(thread.user_id) if thread.user_id else None,
-        tags=thread.tags,
-        metadata=thread.metadata_,
-        created_at=thread.created_at.isoformat(),
-        updated_at=thread.updated_at.isoformat(),
-        message_count=0,
-    )
+    return ThreadOut(**service.thread_row(thread))
 
 
 @thread_router.delete("/{thread_id}", status_code=204)
 async def delete_thread_endpoint(
     thread_id: uuid.UUID,
+    request: Request,
+    user: AuthClaims = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
-):
-    deleted = await delete_thread(db, thread_id)
-    if not deleted:
-        raise HTTPException(status_code=404, detail="Thread not found")
-
-
-# ── Step routes ──────────────────────────────────────────────────────────────
+) -> None:
+    thread = await owned(db, thread_id, user)
+    await service.delete_thread(db, thread)
+    await request.app.state.event_bus.publish(
+        events.thread_deleted(
+            str(thread.id), tenant_id=thread.tenant_id, user_id=user.sub
+        )
+    )
 
 
 @thread_router.get("/{thread_id}/messages")
-async def get_messages_endpoint(
+async def get_thread_messages(
     thread_id: uuid.UUID,
+    request: Request,
+    user: AuthClaims = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
-):
-    """Get all user/assistant messages for a thread."""
-    steps = await get_steps(
-        db,
-        thread_id,
-        types=["user_message", "assistant_message", "tool_call", "tool_result"],
-    )
+) -> List[dict]:
+    """The whole conversation as wire events (``user.message``, ``text.delta``, ``tool.call``...), oldest first, each with when it
+    was logged: the same projection of the run journal the monolith serves."""
+    await owned(db, thread_id, user)
+    timed = await project_thread_timed(request.app.state.runtime.store, str(thread_id))
     return [
-        StepOut(
-            id=str(s.id),
-            name=s.name,
-            type=s.type,
-            thread_id=str(s.thread_id),
-            parent_id=str(s.parent_id) if s.parent_id else None,
-            input=s.input,
-            output=s.output,
-            streaming=s.streaming,
-            is_error=s.is_error,
-            metadata=s.metadata_,
-            created_at=s.created_at.isoformat(),
-        )
-        for s in steps
+        {**event.model_dump(mode="json"), "at": at.isoformat()} for event, at in timed
     ]
 
 
-@thread_router.post("/{thread_id}/steps", status_code=201)
-async def create_step_endpoint(
+@thread_router.get("/{thread_id}/feedback", response_model=List[FeedbackOut])
+async def thread_feedback(
     thread_id: uuid.UUID,
-    body: StepCreateBody,
+    user: AuthClaims = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
-):
-    """Create a step (internal — used by Workflow/Agent services)."""
-    parent_uuid = uuid.UUID(body.parent_id) if body.parent_id else None
-    step = await create_step(
+) -> List[FeedbackOut]:
+    await owned(db, thread_id, user)
+    return [
+        FeedbackOut.model_validate(f)
+        for f in await service.list_feedback(db, thread_id)
+    ]
+
+
+@router.post("/feedbacks", response_model=FeedbackOut | None, status_code=201)
+async def submit_feedback(
+    body: FeedbackCreate,
+    user: AuthClaims = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+) -> FeedbackOut | None:
+    """Rate an answer. Only the conversation's owner can; one rating per answer, the latest wins."""
+    await owned(db, body.thread_id, user)
+    saved = await service.set_feedback(
         db,
-        thread_id=thread_id,
-        type=body.type,
-        name=body.name,
-        parent_id=parent_uuid,
-        input=body.input,
-        output=body.output,
-        streaming=body.streaming,
-        is_error=body.is_error,
-        metadata=body.metadata,
-    )
-    return StepOut(
-        id=str(step.id),
-        name=step.name,
-        type=step.type,
-        thread_id=str(step.thread_id),
-        parent_id=str(step.parent_id) if step.parent_id else None,
-        input=step.input,
-        output=step.output,
-        streaming=step.streaming,
-        is_error=step.is_error,
-        metadata=step.metadata_,
-        created_at=step.created_at.isoformat(),
-    )
-
-
-@thread_router.get("/{thread_id}/steps/{step_id}")
-async def get_step_endpoint(
-    thread_id: uuid.UUID,
-    step_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db_session),
-):
-    step = await get_step(db, step_id)
-    if not step or step.thread_id != thread_id:
-        raise HTTPException(status_code=404, detail="Step not found")
-    return StepOut(
-        id=str(step.id),
-        name=step.name,
-        type=step.type,
-        thread_id=str(step.thread_id),
-        parent_id=str(step.parent_id) if step.parent_id else None,
-        input=step.input,
-        output=step.output,
-        streaming=step.streaming,
-        is_error=step.is_error,
-        metadata=step.metadata_,
-        created_at=step.created_at.isoformat(),
-    )
-
-
-@thread_router.patch("/{thread_id}/steps/{step_id}")
-async def update_step_endpoint(
-    thread_id: uuid.UUID,
-    step_id: uuid.UUID,
-    body: StepUpdateBody,
-    db: AsyncSession = Depends(get_db_session),
-):
-    step = await update_step(
-        db,
-        step_id,
-        output=body.output,
-        streaming=body.streaming,
-        is_error=body.is_error,
-        metadata=body.metadata,
-    )
-    if not step or step.thread_id != thread_id:
-        raise HTTPException(status_code=404, detail="Step not found")
-    return StepOut(
-        id=str(step.id),
-        name=step.name,
-        type=step.type,
-        thread_id=str(step.thread_id),
-        parent_id=str(step.parent_id) if step.parent_id else None,
-        input=step.input,
-        output=step.output,
-        streaming=step.streaming,
-        is_error=step.is_error,
-        metadata=step.metadata_,
-        created_at=step.created_at.isoformat(),
-    )
-
-
-# ── Feedback routes ──────────────────────────────────────────────────────────
-
-
-@thread_router.post("/{thread_id}/feedback", status_code=201)
-async def create_feedback_endpoint(
-    thread_id: uuid.UUID,
-    body: FeedbackBody,
-    db: AsyncSession = Depends(get_db_session),
-):
-    feedback = await create_feedback(
-        db,
-        for_id=uuid.UUID(body.for_id),
-        thread_id=thread_id,
+        for_id=body.for_id,
+        thread_id=body.thread_id,
         value=body.value,
         comment=body.comment,
     )
-    return FeedbackOut(
-        id=str(feedback.id),
-        for_id=str(feedback.for_id),
-        thread_id=str(feedback.thread_id),
-        value=feedback.value,
-        comment=feedback.comment,
-        created_at=feedback.created_at.isoformat(),
-    )
-
-
-# ── Memory endpoint (internal, for Agent Runtime) ────────────────────────────
-
-memory_router = APIRouter(prefix="/internal", tags=["internal"])
-
-
-@memory_router.get("/threads/{thread_id}/memory")
-async def get_memory_messages(
-    thread_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db_session),
-):
-    """Load steps formatted for agent memory reconstruction.
-
-    Internal endpoint — called by Agent Runtime service.
-    """
-    return await load_messages_for_memory(db, thread_id)
+    return None if saved is None else FeedbackOut.model_validate(saved)

@@ -1,6 +1,6 @@
 """Health endpoint tests for all microservices.
 
-Verifies that each service app can start and responds to /health and /ready.
+Verifies that each service app answers the same two open probes as the monolith: /health and /health/ready.
 These are quick smoke tests — they don't test business logic.
 """
 
@@ -15,10 +15,18 @@ from httpx import ASGITransport
 
 # All microservice apps and their expected service names
 SERVICE_APPS: list[tuple[str, str, str]] = [
-    ("substrate_cloud.services.gateway.app", "app", "Gateway BFF"),
-    ("substrate_cloud.services.conversation.app", "app", "Conversation"),
-    ("substrate_cloud.services.live_stream.app", "app", "Live Stream"),
-    ("substrate_cloud.services.admin.app", "app", "Admin"),
+    (f"substrate_cloud.services.{name}.app", "app", name)
+    for name in (
+        "gateway",
+        "policy",
+        "conversation",
+        "job_controller",
+        "agent_runtime",
+        "tool_executor",
+        "human_gate",
+        "live_stream",
+        "admin",
+    )
 ]
 
 
@@ -54,7 +62,7 @@ class TestServiceHealth:
         async with httpx.AsyncClient(
             transport=transport, base_url="http://test"
         ) as client:
-            resp = await client.get("/ready")
+            resp = await client.get("/health/ready")
             assert resp.status_code == 200
             data = resp.json()
             assert data["status"] == "ready"

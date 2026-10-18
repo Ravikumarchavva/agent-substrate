@@ -31,6 +31,7 @@ from substrate_cloud.monolith.security.deps import AuthClaims, get_current_user
 from substrate_cloud.monolith.models import Thread
 from substrate_cloud.monolith.services import get_owned_thread
 from substrate_cloud.monolith.services.thread_service import owned_thread_ids
+from substrate_cloud.stream.pending import pending_cards
 
 logger = logging.getLogger(__name__)
 
@@ -104,52 +105,26 @@ async def hitl_status(
 
 
 async def _durable_pending_hitl(ctx: ServerDependencies, thread_id: str) -> list[dict]:
-    from substrate.types import RunStatus
-
     runtime = getattr(ctx, "runtime", None)
     if runtime is None:
         return []
-    found = await runtime.active_run_for_thread(thread_id)
-    if found is None or found.status != RunStatus.SUSPENDED:
-        return []
-    run_id = found.run_id
-
-    last_kind: str | None = None
-    last_request: dict | None = None
-    for entry in await runtime.read(run_id):
-        if entry.kind in (RunLogKind.INPUT_REQUESTED, RunLogKind.APPROVAL_REQUESTED):
-            last_kind = entry.kind
-            last_request = entry.payload
-    if last_request is None or last_kind is None:
-        return []
-
-    request_id = last_request.get("request_id", "")
-    if last_kind == RunLogKind.INPUT_REQUESTED:
-        card = {
-            "request_id": request_id,
-            "run_id": run_id,
-            "question": last_request.get("question", ""),
-            "context": last_request.get("context", ""),
-            "options": last_request.get("options", []),
-            "allow_freeform": last_request.get("allow_freeform", True),
-        }
-        signal_card = {
-            k: card[k] for k in ("question", "context", "options", "allow_freeform")
-        }
-    else:  # approval.requested
-        card = {
-            "request_id": request_id,
-            "run_id": run_id,
-            "tool_name": last_request.get("tool_name", ""),
-            "args": last_request.get("args", {}),
-        }
-        signal_card = {k: card[k] for k in ("tool_name", "args")}
-
-    # Rehydrate the in-memory bridge so a subsequent POST /chat/respond
-    # resolves through the normal path instead of needing its own lookup.
-    bridge = await ctx.bridge_registry.acquire(thread_id)
-    bridge.register_signal_request(request_id, run_id, card=signal_card)
-    return [card]
+    cards = await pending_cards(runtime, thread_id)
+    if cards:
+        card = cards[0]
+        # Rehydrate the in-memory bridge so a subsequent POST /chat/respond resolves through the normal path instead of needing its
+        # own lookup.
+        signal_keys = (
+            ("question", "context", "options", "allow_freeform")
+            if "question" in card
+            else ("tool_name", "args")
+        )
+        bridge = await ctx.bridge_registry.acquire(thread_id)
+        bridge.register_signal_request(
+            card["request_id"],
+            card["run_id"],
+            card={k: card[k] for k in signal_keys},
+        )
+    return cards
 
 
 class PendingApproval(BaseModel):

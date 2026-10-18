@@ -9,11 +9,10 @@ case "${SUBSTRATE_MODE:-monolith}" in
     exec uvicorn substrate_cloud.monolith.app:app --host 0.0.0.0 --port "${PORT:-8000}" --proxy-headers --forwarded-allow-ips="*"
     ;;
   microservices)
-    service="${SUBSTRATE_SERVICE:?SUBSTRATE_SERVICE is required in microservices mode (gateway, identity, policy, conversation, job_controller, agent_runtime, tool_executor, human_gate, live_stream, admin)}"
+    service="${SUBSTRATE_SERVICE:?SUBSTRATE_SERVICE is required in microservices mode (gateway, policy, conversation, job_controller, agent_runtime, tool_executor, human_gate, live_stream, admin)}"
     # Default ports are the ones each service documents; see deploy/PORTS.md.
     case "$service" in
       gateway) default=8001 ;;
-      identity) default=8010 ;;
       policy) default=8011 ;;
       conversation) default=8012 ;;
       job_controller) default=8013 ;;

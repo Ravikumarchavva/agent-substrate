@@ -52,6 +52,11 @@ class ServerSettings(SubstrateConfig):
     # silently allowing unlimited traffic. Set True only for dev/single-user.
     RATE_LIMIT_FAIL_OPEN: bool = False
 
+    # ── Microservices mode ───────────────────────────────────────────────────
+    # Where a service finds its peers: ``{name}`` is the service in dashes (``job-controller``), ``{port}`` its port from
+    # deploy/PORTS.md. ``<NAME>_SERVICE_URL`` (``JOB_CONTROLLER_SERVICE_URL``) overrides one peer. Compose and Helm set the template.
+    SERVICE_URL_TEMPLATE: str = "http://localhost:{port}"
+
     # ── Observability ────────────────────────────────────────────────────────
     OTLP_ENDPOINT: str = "http://localhost:4318"
 

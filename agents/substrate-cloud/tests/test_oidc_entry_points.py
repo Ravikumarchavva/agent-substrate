@@ -1,4 +1,4 @@
-"""Every entry point (the monolith and each of the ten microservices) verifies Keycloak tokens, and only those.
+"""Every entry point (the monolith and each of the microservices) verifies Keycloak tokens, and only those.
 
 Parametrized over the real FastAPI apps and every route in their OpenAPI documents: a shared-secret (HS256) token, a token for
 another audience, an ID token, an expired one, one from another issuer, and no token at all are all refused with a problem+json
@@ -21,7 +21,6 @@ APPS = [
     "substrate_cloud.services.conversation.app",
     "substrate_cloud.services.gateway.app",
     "substrate_cloud.services.human_gate.app",
-    "substrate_cloud.services.identity.app",
     "substrate_cloud.services.job_controller.app",
     "substrate_cloud.services.live_stream.app",
     "substrate_cloud.services.policy.app",
@@ -176,6 +175,6 @@ async def test_no_issuer_configured_refuses_everything_with_503(monkeypatch):
     module = importlib.import_module("substrate_cloud.services.policy.app")
     app = module.app
     app.state.token_verifier = None
-    response = await call(app, "POST", "/policy/check", FakeRealm().token())
+    response = await call(app, "POST", "/api/v1/policy/check", FakeRealm().token())
     assert response.status_code == 503
     assert response.json()["type"].endswith("identity-provider-unavailable")

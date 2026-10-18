@@ -1,26 +1,24 @@
-"""Agent Runtime — HTTP routes.
+"""Agent Runtime: HTTP routes (internal; the job controller calls them with the caller's own token).
 
-Routes:
-  POST /agent/run       – start an agent run (called by Workflow Orchestrator)
-  GET  /agent/health    – health check
+POST /api/v1/agent/runs   accept a run: build the thread's agent, submit it, and announce its end when it ends
 """
 
 from __future__ import annotations
 
-import logging
-
 import asyncio
+import logging
+import uuid
 from typing import Optional
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 
-from substrate_cloud.factory import build_memory_tool
 from substrate_cloud.services.agent_runtime.service import (
-    create_agent,
-    execute_agent_run,
-    load_memory_for_thread,
+    announce_outcome,
+    submit_run,
 )
+from substrate_cloud.shared.auth.claims import AuthClaims
+from substrate_cloud.shared.auth.middleware import get_current_user
 
 logger = logging.getLogger(__name__)
 
@@ -28,85 +26,56 @@ router = APIRouter(prefix="/agent", tags=["agent-runtime"])
 
 
 class RunRequest(BaseModel):
-    run_id: str
-    thread_id: str
+    run_id: uuid.UUID  # the job controller's id for the run
+    thread_id: uuid.UUID
     user_content: str
     system_instructions: Optional[str] = None
-    file_ids: list[str] | None = None
+    file_ids: list[uuid.UUID] | None = None
 
 
-class RunResponse(BaseModel):
+class RunAccepted(BaseModel):
     run_id: str
-    status: str
+    runtime_run_id: str
+    status: str = "accepted"
 
 
-@router.post("/run", status_code=202)
-async def start_agent_run(body: RunRequest, request: Request):
-    """Accept a run command and execute the agent asynchronously.
-
-    The agent publishes events via the event bus as it runs.
-    Returns immediately with 202 Accepted.
-    """
-    model_client = request.app.state.model_client
-    tools = request.app.state.tools
-    history = request.app.state.history
-    short_term_memory = request.app.state.short_term_memory
-    event_bus = request.app.state.event_bus
-    runtime = request.app.state.runtime
-    conversation_url = request.app.state.conversation_service_url
-
-    system_instructions = (
-        body.system_instructions or request.app.state.system_instructions
+@router.post("/runs", status_code=202)
+async def start_agent_run(
+    body: RunRequest,
+    request: Request,
+    user: AuthClaims = Depends(get_current_user),
+) -> RunAccepted:
+    """Accept a run and execute it asynchronously. Answers once the runtime holds it, with the id to stream it by."""
+    state = request.app.state
+    runtime_run_id = await submit_run(
+        runtime=state.runtime,
+        model_client=state.model_client,
+        tools=state.tools,
+        history=state.history,
+        system_instructions=body.system_instructions or state.system_instructions,
+        user=user,
+        thread_id=str(body.thread_id),
+        user_content=body.user_content,
     )
-
-    # Load memory
-    memory = await load_memory_for_thread(
-        thread_id=body.thread_id,
-        system_instructions=system_instructions,
-        history=history,
-        conversation_service_url=conversation_url,
-    )
-
-    memory_tool = build_memory_tool(body.thread_id, short_term_memory)
-    if memory_tool is not None:
-        tools = [*tools, memory_tool]
-
-    # Create agent
-    agent = create_agent(
-        model_client=model_client,
-        tools=tools,
-        system_instructions=system_instructions,
-        memory=memory,
-        session_id=body.thread_id,
-    )
-
-    forwarding_tasks: dict = request.app.state.forwarding_tasks
-    run_id = body.run_id
-
-    if run_id in forwarding_tasks and not forwarding_tasks[run_id].done():
-        logger.warning(
-            "Forwarding task already running for run %s — skipping duplicate", run_id
-        )
-        return RunResponse(run_id=run_id, status="accepted")
 
     task = asyncio.create_task(
-        execute_agent_run(
-            agent=agent,
-            user_content=body.user_content,
-            run_id=run_id,
-            thread_id=body.thread_id,
-            event_bus=event_bus,
-            runtime=runtime,
+        announce_outcome(
+            runtime=state.runtime,
+            event_bus=state.event_bus,
+            job_run_id=str(body.run_id),
+            runtime_run_id=runtime_run_id,
+            thread_id=str(body.thread_id),
+            tenant_id=user.tenant_id,
+            user_id=user.sub,
         ),
-        name=f"forward-{run_id}",
+        name=f"outcome-{body.run_id}",
     )
-    forwarding_tasks[run_id] = task
+    state.outcome_tasks.add(task)
 
-    def _on_done(t: asyncio.Task) -> None:
-        forwarding_tasks.pop(run_id, None)
+    def _done(t: asyncio.Task) -> None:
+        state.outcome_tasks.discard(t)
         if not t.cancelled() and t.exception():
-            logger.error("Forwarding task for run %s failed: %s", run_id, t.exception())
+            logger.error("Watching run %s failed: %s", body.run_id, t.exception())
 
-    task.add_done_callback(_on_done)
-
-    return RunResponse(run_id=run_id, status="accepted")
+    task.add_done_callback(_done)
+    return RunAccepted(run_id=str(body.run_id), runtime_run_id=runtime_run_id)

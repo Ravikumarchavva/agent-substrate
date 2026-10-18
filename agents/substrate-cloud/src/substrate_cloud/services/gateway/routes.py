@@ -1,250 +1,230 @@
-"""Gateway BFF — HTTP routes.
+"""Gateway BFF: the Agent API (``/api/v1``) of microservices mode.
 
-The Gateway routes client calls to internal services. It validates input,
-checks policy, and composes responses. No business logic lives here.
+The gateway is the only public service. It serves the same routes and documents as the monolith (``contracts/agents/v1``) and
+composes the internal services behind them, forwarding the caller's own token so every service applies the caller's tenant and
+user. It holds no business logic and trusts no identity in a request body.
 
-Routes mirror the public API surface:
-  POST /chat              → Workflow Orchestrator + Stream Projection
-  GET  /chat/stream/{id}  → Stream Projection SSE
-  POST /chat/respond/{id} → HITL Approval service
-  POST /chat/{id}/cancel  → Workflow Orchestrator
-  CRUD /threads           → Conversation service
-  CRUD /threads/{id}/files → Artifact service
-  GET  /users/me          → Identity service (profile of the token's user)
-  POST /api/execute       → Code Interpreter service (direct execution)
-  GET  /api/execute/health   → Code Interpreter health
-  GET  /api/execute/sessions → Code Interpreter sessions
-  GET  /health            → Local health check
+  /threads, /feedbacks, /threads/{id}/messages|feedback     Conversation service
+  POST /chat                                                Policy (may submit?) -> Job controller (start) -> Live stream (events)
+  POST /chat/{thread_id}/cancel                             Job controller
+  POST /chat/respond/{request_id}, GET /hitl/status/{id}    Human gate
+  GET  /stream/{thread_id}                                  Live stream (reconnect)
+  /files/...                                                the caller's file store (``files.py``)
 """
 
 from __future__ import annotations
 
 import logging
+import uuid
+from collections.abc import AsyncIterator
+from typing import Any, List, Optional
 
-import json
-from typing import AsyncIterator
-
-from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Query, Request
+from fastapi.responses import Response, StreamingResponse
+from pydantic import BaseModel
 
 from substrate_cloud.shared.contracts.conversation import (
-    ChatRequest,
+    ChatMessage,
+    FeedbackCreate,
+    FeedbackOut,
     ThreadCreate,
+    ThreadOut,
     ThreadUpdate,
 )
 from substrate_cloud.shared.contracts.human_gate import HITLResponse
+from substrate_cloud.shared.problem import Problem
+from substrate_cloud.shared.service_client import ServiceClient
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(tags=["gateway"])
+router = APIRouter()
+
+SSE_HEADERS = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
 
 
-def _get_auth_token(request: Request) -> str:
-    """Extract raw Bearer token from request for proxying."""
-    auth = request.headers.get("Authorization", "")
-    if auth.startswith("Bearer "):
-        return auth[7:]
-    return ""
+def token_of(request: Request) -> str:
+    """The caller's raw bearer token, to forward. (It is verified before any handler runs.)"""
+    header = request.headers.get("authorization", "")
+    return header[7:] if header.lower().startswith("bearer ") else ""
 
 
-# ── Users (proxy to the Identity service: profile lookups; sign-in is Keycloak) ──────────────────────
-
-users_router = APIRouter(prefix="/users", tags=["users"])
-
-
-@users_router.get("/me")
-async def get_me(request: Request):
-    token = _get_auth_token(request)
-    client = request.app.state.identity_client
-    return await client.get_me(token)
+def _client(request: Request, name: str) -> ServiceClient:
+    return getattr(request.app.state, f"{name}_client")
 
 
-# ── Thread routes (proxy to Conversation service) ───────────────────────────
-
-thread_router = APIRouter(prefix="/threads", tags=["threads"])
+# ── Threads ──────────────────────────────────────────────────────────────────
 
 
-@thread_router.post("", status_code=201)
-async def create_thread(body: ThreadCreate, request: Request):
-    token = _get_auth_token(request)
-    client = request.app.state.conversation_client
-    return await client.create_thread(token, name=body.name or "New Chat")
+@router.post("/threads", response_model=ThreadOut, status_code=201, tags=["threads"])
+async def create_thread(body: ThreadCreate, request: Request) -> Any:
+    return await _client(request, "conversation").json(
+        "POST", "/threads", token_of(request), json=body.model_dump()
+    )
 
 
-@thread_router.get("")
+@router.get("/threads", response_model=List[ThreadOut], tags=["threads"])
 async def list_threads(
     request: Request,
-    limit: int = 50,
-    offset: int = 0,
-):
-    token = _get_auth_token(request)
-    client = request.app.state.conversation_client
-    return await client.list_threads(token, limit=limit, offset=offset)
-
-
-@thread_router.get("/{thread_id}")
-async def get_thread(thread_id: str, request: Request):
-    token = _get_auth_token(request)
-    client = request.app.state.conversation_client
-    return await client.get_thread(token, thread_id)
-
-
-@thread_router.patch("/{thread_id}")
-async def update_thread(thread_id: str, body: ThreadUpdate, request: Request):
-    token = _get_auth_token(request)
-    client = request.app.state.conversation_client
-    return await client.update_thread(
-        token, thread_id, body.model_dump(exclude_none=True)
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    archived: bool = False,
+) -> Any:
+    return await _client(request, "conversation").json(
+        "GET",
+        "/threads",
+        token_of(request),
+        params={"limit": limit, "offset": offset, "archived": archived},
     )
 
 
-@thread_router.delete("/{thread_id}", status_code=204)
-async def delete_thread(thread_id: str, request: Request):
-    token = _get_auth_token(request)
-    client = request.app.state.conversation_client
-    await client.delete_thread(token, thread_id)
+@router.get("/threads/{thread_id}", response_model=ThreadOut, tags=["threads"])
+async def get_thread(thread_id: uuid.UUID, request: Request) -> Any:
+    return await _client(request, "conversation").json(
+        "GET", f"/threads/{thread_id}", token_of(request)
+    )
 
 
-@thread_router.get("/{thread_id}/messages")
-async def get_messages(thread_id: str, request: Request):
-    token = _get_auth_token(request)
-    client = request.app.state.conversation_client
-    return await client.get_messages(token, thread_id)
+@router.patch("/threads/{thread_id}", response_model=ThreadOut, tags=["threads"])
+async def update_thread(
+    thread_id: uuid.UUID, body: ThreadUpdate, request: Request
+) -> Any:
+    return await _client(request, "conversation").json(
+        "PATCH",
+        f"/threads/{thread_id}",
+        token_of(request),
+        json=body.model_dump(exclude_unset=True),
+    )
 
 
-# ── Chat routes (proxy to Workflow + Stream services) ────────────────────────
+@router.delete("/threads/{thread_id}", status_code=204, tags=["threads"])
+async def delete_thread(thread_id: uuid.UUID, request: Request) -> Response:
+    await _client(request, "conversation").request(
+        "DELETE", f"/threads/{thread_id}", token_of(request)
+    )
+    return Response(status_code=204)
 
-chat_router = APIRouter(tags=["chat"])
+
+@router.get("/threads/{thread_id}/messages", tags=["threads"])
+async def get_thread_messages(thread_id: uuid.UUID, request: Request) -> Any:
+    return await _client(request, "conversation").json(
+        "GET", f"/threads/{thread_id}/messages", token_of(request)
+    )
 
 
-@chat_router.post("/chat")
-async def chat(body: ChatRequest, request: Request):
-    """Start a workflow run and return SSE stream from Stream Projection.
+@router.get(
+    "/threads/{thread_id}/feedback", response_model=List[FeedbackOut], tags=["feedback"]
+)
+async def thread_feedback(thread_id: uuid.UUID, request: Request) -> Any:
+    return await _client(request, "conversation").json(
+        "GET", f"/threads/{thread_id}/feedback", token_of(request)
+    )
 
-    The gateway:
-    1. Validates the request and checks policy
-    2. Sends the run command to Workflow Orchestrator
-    3. Connects to Stream Projection SSE and proxies it to the client
-    """
-    token = _get_auth_token(request)
 
-    # Check policy
-    policy = request.app.state.policy_client
+@router.post(
+    "/feedbacks", response_model=FeedbackOut | None, status_code=201, tags=["feedback"]
+)
+async def submit_feedback(body: FeedbackCreate, request: Request) -> Any:
+    return await _client(request, "conversation").json(
+        "POST", "/feedbacks", token_of(request), json=body.model_dump(mode="json")
+    )
+
+
+# ── Chat ─────────────────────────────────────────────────────────────────────
+
+
+class ChatBody(BaseModel):
+    thread_id: uuid.UUID
+    messages: List[ChatMessage]
+    system_instructions: Optional[str] = None
+    file_ids: Optional[List[uuid.UUID]] = None
+
+
+async def relay(upstream: Any) -> AsyncIterator[bytes]:
+    """The upstream event stream, byte for byte. The run keeps going if the client leaves; only this connection closes."""
     try:
-        allowed = await policy.check(token, "submit_conversation")
-    except Exception:
-        allowed = True  # graceful degradation: allow if policy service is down
+        async for chunk in upstream.aiter_bytes():
+            yield chunk
+    except (
+        Exception
+    ) as exc:  # the stream is open: report in-band, then end it like every stream
+        logger.exception("Event stream interrupted")
+        yield f'data: {{"type": "error", "message": "{type(exc).__name__}"}}\n\n'.encode()
+        yield b"data: [DONE]\n\n"
+    finally:
+        await upstream.aclose()
 
-    if not allowed:
-        raise HTTPException(
-            status_code=403, detail="Not authorized to submit conversation"
-        )
 
-    # Start workflow run
-    workflow = request.app.state.workflow_client
-    run_payload = {
-        "thread_id": str(body.thread_id),
-        "user_content": body.messages[-1].content if body.messages else "",
-        "system_instructions": body.system_instructions,
-        "file_ids": [str(f) for f in body.file_ids] if body.file_ids else [],
-    }
-
-    try:
-        run_result = await workflow.start_run(token, run_payload)
-    except Exception as e:
-        # 409 = a run is already active for this thread (stale run, e.g. after page refresh).
-        # Auto-cancel it, then retry once so the user doesn't have to.
-        import httpx
-
-        if isinstance(e, httpx.HTTPStatusError) and e.response.status_code == 409:
-            logger.warning(
-                "Stale run detected for thread %s — cancelling and retrying",
-                body.thread_id,
-            )
-            try:
-                await workflow.cancel_run(token, str(body.thread_id))
-            except Exception:
-                pass
-            try:
-                run_result = await workflow.start_run(token, run_payload)
-            except Exception as retry_err:
-                logger.exception("Retry after cancel failed")
-                raise HTTPException(
-                    status_code=502, detail=f"Workflow service error: {retry_err}"
-                )
-        else:
-            logger.exception("Failed to start workflow run")
-            raise HTTPException(status_code=502, detail=f"Workflow service error: {e}")
-
-    run_id = run_result.get("run_id", "")
-
-    # Connect to Stream Projection SSE
-    stream_client = request.app.state.stream_client
-
-    async def proxy_sse() -> AsyncIterator[str]:
-        """Proxy SSE from Stream Projection to the client."""
-        import httpx
-
-        try:
-            async with httpx.AsyncClient(timeout=None) as client:
-                hdrs: dict[str, str] = {}
-                if token:
-                    hdrs["Authorization"] = f"Bearer {token}"
-                async with client.stream(
-                    "GET",
-                    f"{stream_client._base_url}/stream/{str(body.thread_id)}",
-                    params={"run_id": run_id},
-                    headers=hdrs,
-                ) as resp:
-                    async for line in resp.aiter_lines():
-                        if await request.is_disconnected():
-                            break
-                        if line:
-                            yield f"{line}\n"
-                        else:
-                            yield "\n"
-        except Exception as e:
-            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
-        yield "data: [DONE]\n\n"
-
+def _sse(upstream: Any) -> StreamingResponse:
     return StreamingResponse(
-        content=proxy_sse(),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        relay(upstream), media_type="text/event-stream", headers=SSE_HEADERS
     )
 
 
-@chat_router.post("/chat/respond/{request_id}")
-async def respond_to_hitl(request_id: str, body: HITLResponse, request: Request):
-    """Proxy HITL response to the HITL Approval service."""
-    token = _get_auth_token(request)
-    hitl = request.app.state.hitl_client
-    return await hitl.respond(token, request_id, body.model_dump(exclude_none=True))
+@router.post("/chat", tags=["chat"])
+async def chat(body: ChatBody, request: Request) -> StreamingResponse:
+    """Start a run and stream it as server-sent events (the monolith's ``POST /chat``).
+
+    The caller must be allowed to submit (policy; if the policy service is unreachable the request is refused, not allowed), must own
+    the thread, and a thread has one run at a time (409).
+    """
+    if not body.messages:
+        raise Problem(422, "invalid-request", "messages[] must not be empty")
+    token = token_of(request)
+
+    decision = await _client(request, "policy").json(
+        "POST", "/policy/check", token, json={"action": "submit_conversation"}
+    )
+    if not decision.get("allowed", False):
+        raise Problem(403, "forbidden", "Not authorized to submit a conversation")
+
+    run = await _client(request, "job_controller").json(
+        "POST",
+        "/jobs/runs",
+        token,
+        json={
+            "thread_id": str(body.thread_id),
+            "user_content": body.messages[-1].content,
+            "system_instructions": body.system_instructions,
+            "file_ids": [str(f) for f in body.file_ids or []],
+        },
+        timeout=60.0,
+    )
+    upstream = await _client(request, "live_stream").open_stream(
+        f"/stream/runs/{run['runtime_run_id']}", token
+    )
+    return _sse(upstream)
 
 
-@chat_router.post("/chat/{thread_id}/cancel")
-async def cancel_chat(thread_id: str, request: Request):
-    """Proxy cancellation to the Workflow Orchestrator."""
-    token = _get_auth_token(request)
-    workflow = request.app.state.workflow_client
-    return await workflow.cancel_run(token, thread_id)
+@router.post("/chat/respond/{request_id}", tags=["chat"])
+async def respond_to_hitl(request_id: str, body: HITLResponse, request: Request) -> Any:
+    return await _client(request, "human_gate").json(
+        "POST",
+        f"/hitl/respond/{request_id}",
+        token_of(request),
+        json=body.model_dump(exclude_none=True),
+    )
 
 
-@chat_router.get("/hitl/status/{thread_id}")
-async def hitl_status(thread_id: str, request: Request):
-    """Proxy HITL status check."""
-    token = _get_auth_token(request)
-    hitl = request.app.state.hitl_client
-    return await hitl.get_status(token, thread_id)
+@router.post("/chat/{thread_id}/cancel", tags=["chat"])
+async def cancel_chat(thread_id: uuid.UUID, request: Request) -> dict:
+    """``{"status": "cancelled"}`` when a run was going, ``{"status": "not_found"}`` when none was."""
+    result = await _client(request, "job_controller").json(
+        "POST", f"/jobs/threads/{thread_id}/cancel", token_of(request)
+    )
+    return {"status": result["status"], "thread_id": str(thread_id)}
 
 
-# ── File routes (proxy to Artifact service) ──────────────────────────────────
+@router.get("/hitl/status/{thread_id}", tags=["chat"])
+async def hitl_status(thread_id: uuid.UUID, request: Request) -> Any:
+    return await _client(request, "human_gate").json(
+        "GET", f"/hitl/status/{thread_id}", token_of(request)
+    )
 
-file_router = APIRouter(prefix="/threads", tags=["files"])
 
-
-@file_router.get("/{thread_id}/files")
-async def list_files(thread_id: str, request: Request):
-    token = _get_auth_token(request)
-    artifact = request.app.state.artifact_client
-    return await artifact.list_files(token, thread_id)
+@router.get("/stream/{thread_id}", tags=["chat"])
+async def stream_thread(thread_id: uuid.UUID, request: Request) -> StreamingResponse:
+    """Reconnect to a thread's active run (``[DONE]`` at once when none is)."""
+    upstream = await _client(request, "live_stream").open_stream(
+        f"/stream/{thread_id}", token_of(request)
+    )
+    return _sse(upstream)

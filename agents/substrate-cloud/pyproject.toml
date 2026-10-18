@@ -1,7 +1,7 @@
 [project]
 name = "substrate-cloud"
 version = "0.1.0"
-description = "The multi-tenant Substrate platform: the monolith API, its twelve services, and the composition root that picks backends. A consumer of the agent-substrate library."
+description = "The multi-tenant Substrate platform: the monolith API, the nine microservices behind its gateway, and the composition root that picks backends. A consumer of the agent-substrate library."
 requires-python = ">=3.13"
 # Everything the library keeps optional is chosen here, because this is where backends are chosen: the library's extras
 # for the vendors, stores and tools the platform wires up, plus the web, ORM, auth and observability it owns.
@@ -103,9 +103,10 @@ forbidden_modules = [
     "substrate.safety.normalize",
     "substrate.stores.scoped",
     "substrate.tools.toolbox",
+    # substrate.workspace.layout is deliberately NOT listed: it is the one place object keys are built (pure stdlib, no engine state),
+    # so every route that touches the file store is meant to import it.
     "substrate.workspace.branching",
     "substrate.workspace.cas",
-    "substrate.workspace.layout",
     "substrate.workspace.materialize",
     "substrate.workspace.scope",
     "substrate.workspace.snapshots",
@@ -139,12 +140,4 @@ ignore_imports = [
     "substrate_cloud.services.tool_executor.app -> substrate.integrations.tools.code_interpreter.code_interpreter.runtimes.factory",
     "substrate_cloud.services.tool_executor.app -> substrate.integrations.tools.task_manager.tool",
     "substrate_cloud.services.tool_executor.app -> substrate.integrations.tools.web.surfer",
-    # files/workspace/knowledge routes build object keys with the canonical workspace layout
-    "substrate_cloud.monolith.routes.workspace -> substrate.workspace.layout",
-    "substrate_cloud.monolith.routes.files -> substrate.workspace.layout",
-    "substrate_cloud.monolith.routes.knowledge -> substrate.workspace.layout",
-    # file_versioning builds version-snapshot keys with the same canonical
-    # layout helper routes/workspace.py uses for the working file's key —
-    # otherwise it has to hand-roll (and keep in sync) the same key shape.
-    "substrate_cloud.monolith.file_versioning -> substrate.workspace.layout",
 ]

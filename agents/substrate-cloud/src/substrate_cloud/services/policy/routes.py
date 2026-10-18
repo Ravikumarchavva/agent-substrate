@@ -16,6 +16,7 @@ from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
+from substrate_identity import Forbidden
 
 from substrate_cloud.shared.auth.claims import AuthClaims
 from substrate_cloud.shared.auth.middleware import get_current_user, require_role
@@ -82,15 +83,17 @@ async def check_policy(
 async def get_role(
     user_id: str,
     request: Request,
-    tenant_id: str = "default",
     workspace_id: str = "default",
+    user: AuthClaims = Depends(get_current_user),
 ):
-    """Get the effective role for a user in a workspace."""
+    """The effective role of a user of the caller's tenant in a workspace (one's own, or any user's for an administrator)."""
     from substrate_cloud.services.policy.service import get_effective_role
 
+    if user_id != user.sub and not user.is_admin:
+        raise Forbidden("Only administrators look up other users' roles")
     db_factory = request.app.state.session_factory
     async with db_factory() as db:
-        role = await get_effective_role(db, user_id, tenant_id, workspace_id)
+        role = await get_effective_role(db, user_id, user.tenant_id, workspace_id)
     return {"user_id": user_id, "role": role, "workspace_id": workspace_id}
 
 

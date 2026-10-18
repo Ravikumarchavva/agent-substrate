@@ -21,7 +21,7 @@ from substrate_cloud.shared.problem import install_problem_handlers
 logger = logging.getLogger(__name__)
 
 # Every router of every service is included with this: the same Keycloak token verification as the monolith.
-# /health and /ready (below) are the only open endpoints.
+# /health and /health/ready (below, the same probes as the monolith) are the only open endpoints.
 AUTHENTICATED = [Depends(get_current_user)]
 
 
@@ -60,7 +60,7 @@ def create_service_app(
     async def health():
         return {"status": "ok", "service": title}
 
-    @app.get("/ready", tags=["infra"])
+    @app.get("/health/ready", tags=["infra"])
     async def readiness():
         return {"status": "ready", "service": title}
 

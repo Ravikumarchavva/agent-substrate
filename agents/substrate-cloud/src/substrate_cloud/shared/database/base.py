@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
+from sqlalchemy import JSON
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase
+
+# JSON that is JSONB on PostgreSQL and plain JSON elsewhere (the services run on SQLite in tests).
+Json = JSON().with_variant(JSONB(), "postgresql")
 
 
 class ServiceBase(DeclarativeBase):

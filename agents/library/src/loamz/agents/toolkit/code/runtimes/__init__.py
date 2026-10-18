@@ -1,0 +1,50 @@
+"""Sandbox execution backends behind one ``SandboxRuntime`` contract.
+
+| Runtime              | Isolation                                  | Needs |
+|----------------------|--------------------------------------------|-------|
+| ``NsjailRuntime``    | Namespaces + cgroups (real per-sandbox process-count/memory caps, optional seccomp) | `nsjail` binary (build from source), cgroup v2 delegation |
+| ``K8sRuntime``       | Pod per session + per-user PVC subPath, optional gVisor | a cluster |
+| ``InProcessRuntime`` | **none** — tests/CI only                   | nothing |
+
+``K8sRuntime`` is imported lazily: it pulls in the Kubernetes client, which is
+not installed in single-node deployments.
+"""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
+
+from .base import (
+    ExecResult,
+    Mount,
+    NetworkPolicy,
+    SandboxRuntime,
+    SandboxSpec,
+    SandboxUnavailableError,
+)
+from .inprocess import InProcessRuntime
+from .nsjail import NsjailRuntime
+
+if TYPE_CHECKING:
+    from .k8s import K8sRuntime
+
+
+def __getattr__(name: str) -> Any:
+    if name == "K8sRuntime":
+        from .k8s import K8sRuntime
+
+        return K8sRuntime
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+__all__ = [
+    "ExecResult",
+    "InProcessRuntime",
+    "K8sRuntime",
+    "Mount",
+    "NetworkPolicy",
+    "NsjailRuntime",
+    "SandboxRuntime",
+    "SandboxSpec",
+    "SandboxUnavailableError",
+]

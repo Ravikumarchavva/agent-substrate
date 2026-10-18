@@ -1,0 +1,492 @@
+"""Isolation guarantees of the sandbox runtimes.
+
+These are security regression tests, not feature tests. Before this suite the
+shared sandbox let one user's generated code read every other user's files and
+inherit their interpreter state; ``test_cross_user_file_is_invisible`` and
+``test_no_state_bleeds_between_executions`` are the two that must never regress.
+
+``NsjailRuntime`` tests skip automatically where the host cannot run nsjail
+(not installed, or no usable cgroup v2 subtree — see ``runtimes/nsjail.py``'s
+module docstring), so the suite stays green while still being meaningful on
+Linux.
+"""
+
+from __future__ import annotations
+
+import shutil
+from pathlib import Path
+
+import pytest
+
+from loamz.agents.toolkit.code.runtimes import (
+    InProcessRuntime,
+    NetworkPolicy,
+    NsjailRuntime,
+    SandboxRuntime,
+    SandboxSpec,
+    SandboxUnavailableError,
+)
+
+ALICE_DIR = "users/alice/sessions/s1"
+BOB_SECRET = "BOB PRIVATE DATA"
+
+
+@pytest.fixture
+def workspace(tmp_path: Path) -> Path:
+    """Two users' trees under one root — the layout the real store uses."""
+    (tmp_path / ALICE_DIR).mkdir(parents=True)
+    bob = tmp_path / "users/bob/sessions/s2"
+    bob.mkdir(parents=True)
+    (bob / "private.xlsx").write_text(BOB_SECRET)
+    return tmp_path
+
+
+def _nsjail_or_skip(root: Path) -> NsjailRuntime:
+    if shutil.which("nsjail") is None:
+        pytest.skip("nsjail not installed on this host")
+    runtime = NsjailRuntime(root)
+    try:
+        runtime.preflight()
+    except SandboxUnavailableError as exc:
+        pytest.skip(f"host cannot run nsjail: {exc}")
+    return runtime
+
+
+def spec(**kwargs) -> SandboxSpec:
+    kwargs.setdefault("timeout_s", 30)
+    return SandboxSpec(user_id="alice", thread_id="s1", session_dir=ALICE_DIR, **kwargs)
+
+
+# ── the two security regressions ─────────────────────────────────────────────
+
+
+async def test_cross_user_file_is_invisible(workspace: Path) -> None:
+    """Alice's code must not be able to read Bob's file by absolute path.
+
+    Not merely permission-denied: the path must not exist in the sandbox's
+    mount namespace at all.
+    """
+    runtime = _nsjail_or_skip(workspace)
+    bob_file = workspace / "users/bob/sessions/s2/private.xlsx"
+    result = await runtime.execute(
+        spec(
+            code=(
+                "try:\n"
+                f"    print('LEAK:' + open({str(bob_file)!r}).read())\n"
+                "except Exception as exc:\n"
+                "    print('blocked:' + type(exc).__name__)\n"
+            )
+        )
+    )
+    assert "LEAK" not in result.stdout, result.stdout
+    assert "blocked:FileNotFoundError" in result.stdout
+    # And Bob's file is untouched on the host.
+    assert bob_file.read_text() == BOB_SECRET
+
+
+async def test_traversal_out_of_session_is_blocked(workspace: Path) -> None:
+    runtime = _nsjail_or_skip(workspace)
+    result = await runtime.execute(
+        spec(
+            code=(
+                "import os\n"
+                "print('entries:', sorted(os.listdir('/workspace')))\n"
+                "try:\n"
+                "    os.listdir('/workspace/../bob')\n"
+                "    print('LEAK')\n"
+                "except Exception as exc:\n"
+                "    print('blocked:' + type(exc).__name__)\n"
+            )
+        )
+    )
+    assert "LEAK" not in result.stdout
+    assert "blocked:FileNotFoundError" in result.stdout
+
+
+@pytest.mark.parametrize("runtime_name", ["nsjail", "inprocess"])
+async def test_no_state_bleeds_between_executions(workspace: Path, runtime_name: str) -> None:
+    """A variable set by one execution must not exist in the next.
+
+    Guards the old module-global ``_session_globals``, which shared one
+    namespace across every user and session.
+    """
+    runtime: SandboxRuntime = (
+        _nsjail_or_skip(workspace) if runtime_name == "nsjail" else InProcessRuntime(workspace)
+    )
+    await runtime.execute(spec(code="SECRET_TOKEN = 'alice-private'"))
+    result = await runtime.execute(
+        spec(
+            code=(
+                "try:\n    print('LEAK:' + SECRET_TOKEN)\nexcept NameError:\n    print('clean')\n"
+            )
+        )
+    )
+    assert "LEAK" not in result.stdout
+    assert "clean" in result.stdout
+
+
+# ── containment of the execution itself ──────────────────────────────────────
+
+
+async def test_network_denied_by_default(workspace: Path) -> None:
+    runtime = _nsjail_or_skip(workspace)
+    result = await runtime.execute(
+        spec(
+            network=NetworkPolicy.DENY,
+            code=(
+                "import socket\n"
+                "try:\n"
+                "    socket.create_connection(('1.1.1.1', 80), timeout=3)\n"
+                "    print('LEAK')\n"
+                "except Exception as exc:\n"
+                "    print('blocked:' + type(exc).__name__)\n"
+            ),
+        )
+    )
+    assert "LEAK" not in result.stdout
+    assert "blocked:" in result.stdout
+
+
+async def test_host_environment_is_not_inherited(workspace: Path) -> None:
+    """Secrets in the host env (API keys, session secrets, DATABASE_URL) must not
+    reach code the model wrote."""
+    runtime = _nsjail_or_skip(workspace)
+    result = await runtime.execute(spec(code="import os; print(sorted(os.environ))"))
+    for leaked in ("OPENAI_API_KEY", "SESSION_SECRET", "DATABASE_URL", "AWS_SECRET"):
+        assert leaked not in result.stdout
+
+
+async def test_timeout_terminates_runaway_code(workspace: Path) -> None:
+    runtime = _nsjail_or_skip(workspace)
+    result = await runtime.execute(spec(code="while True: pass", timeout_s=3))
+    assert not result.ok
+
+
+async def test_rlimit_cannot_be_raised_by_sandboxed_code(workspace: Path) -> None:
+    runtime = _nsjail_or_skip(workspace)
+    result = await runtime.execute(
+        spec(
+            code=(
+                "import resource\n"
+                "try:\n"
+                "    resource.setrlimit(resource.RLIMIT_AS,\n"
+                "        (resource.RLIM_INFINITY, resource.RLIM_INFINITY))\n"
+                "    print('LEAK')\n"
+                "except Exception as exc:\n"
+                "    print('blocked:' + type(exc).__name__)\n"
+            )
+        )
+    )
+    assert "LEAK" not in result.stdout
+    assert "blocked:" in result.stdout
+
+
+# ── the features that must still work inside the sandbox ─────────────────────
+
+
+@pytest.mark.parametrize("runtime_name", ["nsjail", "inprocess"])
+async def test_generated_file_persists_to_host(workspace: Path, runtime_name: str) -> None:
+    """The session dir doubles as durable storage: what the sandbox writes must
+    land on the host volume, where the file-serve endpoint and versioning read."""
+    runtime: SandboxRuntime = (
+        _nsjail_or_skip(workspace) if runtime_name == "nsjail" else InProcessRuntime(workspace)
+    )
+    result = await runtime.execute(spec(code="open('report.csv', 'w').write('a,b\\n1,2\\n')"))
+    assert result.ok, result.stderr
+    assert (workspace / ALICE_DIR / "report.csv").read_text().startswith("a,b")
+    assert "report.csv" in [f["name"] for f in result.output_files]
+
+
+@pytest.mark.parametrize("runtime_name", ["nsjail", "inprocess"])
+async def test_shell_command_path(workspace: Path, runtime_name: str) -> None:
+    """The `command` tool parameter (ls, wc, ...) runs in the session dir."""
+    runtime: SandboxRuntime = (
+        _nsjail_or_skip(workspace) if runtime_name == "nsjail" else InProcessRuntime(workspace)
+    )
+    (workspace / ALICE_DIR / "data.txt").write_text("x\n")
+    result = await runtime.execute(spec(argv=["ls", "-1"]))
+    assert result.ok, result.stderr
+    assert result.stdout.split() == ["data.txt"]
+
+
+async def test_session_dir_traversal_is_rejected(workspace: Path) -> None:
+    """A malformed session_dir must never resolve outside the workspace root."""
+    runtime = NsjailRuntime(workspace)
+    for bad in ("../../etc", "users/../../etc", ""):
+        with pytest.raises(ValueError):
+            await runtime.execute(
+                SandboxSpec(user_id="alice", thread_id="s1", session_dir=bad, code="pass")
+            )
+
+
+async def test_missing_code_and_command_is_an_error(workspace: Path) -> None:
+    runtime = InProcessRuntime(workspace)
+    result = await runtime.execute(spec())
+    assert not result.ok
+    assert "No code or command" in result.stderr or result.exit_code != 0
+
+
+# ── the unsafe runtime is honest about being unsafe ──────────────────────────
+
+
+async def test_inprocess_runtime_does_not_isolate(workspace: Path) -> None:
+    """Documents the known trade-off: InProcessRuntime is for tests only, and it
+    can reach other users' files. If this ever starts passing as 'blocked',
+    someone has added isolation and this test should become a real guarantee."""
+    runtime = InProcessRuntime(workspace)
+    bob_file = workspace / "users/bob/sessions/s2/private.xlsx"
+    result = await runtime.execute(spec(code=f"print(open({str(bob_file)!r}).read())"))
+    assert BOB_SECRET in result.stdout
+
+
+# ── agent-private overlay ────────────────────────────────────────────────────
+
+
+async def test_agent_private_overlay_is_writable_at_runtime(workspace: Path) -> None:
+    """code_interpreter can write into its own agent-private mount; nothing
+    outside it is affected."""
+    runtime = _nsjail_or_skip(workspace)
+    private_dir = "tenants/t/conversations/s1/workspace/agents/a/private"
+    result = await runtime.execute(
+        spec(
+            extra={"private_dir": private_dir},
+            code="open('/workspace/private/scratch.txt', 'w').write('private')\n",
+        )
+    )
+    assert result.exit_code == 0, result.stderr
+    assert (workspace / private_dir / "scratch.txt").read_text() == "private"
+
+
+# ── the reason nsjail exists over rlimits alone: a real per-sandbox cap ──────
+
+
+async def test_nsjail_caps_process_count_rlimits_cannot(workspace: Path) -> None:
+    """RLIMIT_NPROC caps processes per-*UID system-wide*, not per-sandbox, so
+    it cannot contain a fork bomb without also capping every other sandbox
+    sharing that UID. nsjail's cgroup pids controller scopes the cap to just
+    this sandbox — a fork bomb here must be capped, not merely slow."""
+    # 32, not 8: the sandbox's own Python startup preamble imports
+    # matplotlib (-> numpy -> an OpenBLAS thread pool sized to the host's
+    # core count), which by itself counts against the pids cgroup and would
+    # exhaust a cap of 8 on any host with >=8 cores before the fork loop
+    # below ever runs. 32 leaves headroom for that startup cost on typical
+    # dev/CI hardware while still capping the 200-iteration fork bomb well
+    # short of completion.
+    runtime = NsjailRuntime(workspace, max_pids=32)
+    try:
+        runtime.preflight()
+    except SandboxUnavailableError as exc:
+        pytest.skip(f"host cannot run nsjail: {exc}")
+    result = await runtime.execute(
+        spec(
+            timeout_s=10,
+            code=(
+                "import os\n"
+                "n = 0\n"
+                "try:\n"
+                "    for _ in range(200):\n"
+                "        pid = os.fork()\n"
+                "        if pid == 0:\n"
+                "            os._exit(0)\n"
+                "        n += 1\n"
+                "except OSError:\n"
+                "    pass\n"
+                "print('forked', n)\n"
+            ),
+        )
+    )
+    assert "forked" in result.stdout
+    forked = int(result.stdout.split()[1])
+    assert forked < 200, "fork bomb was not capped by the sandbox's cgroup"
+
+
+# ── a second workspace beside the first: a group's drive at /groups/<label> ──────────────────────────────────────────────────────────────
+
+GROUP_DIR = "g/group-1/main"
+
+
+def _mount(label: str = "trip", session_dir: str = GROUP_DIR):
+    from loamz.agents.stores.workspace.scope import WorkspaceScope
+    from loamz.agents.toolkit.code.runtimes.base import Mount
+
+    return Mount(
+        label=label,
+        session_dir=session_dir,
+        scope=WorkspaceScope(tenant_id="t", user_id="alice", conversation_id="group-1"),
+    )
+
+
+async def test_a_mounted_workspace_is_at_groups_label_read_write_and_reported_with_its_path(
+    workspace: Path,
+) -> None:
+    runtime = _nsjail_or_skip(workspace)
+    (workspace / GROUP_DIR).mkdir(parents=True)
+    (workspace / GROUP_DIR / "brief.txt").write_text("shared brief")
+
+    result = await runtime.execute(
+        spec(
+            mounts=(_mount(),),
+            code=(
+                "print(open('/groups/trip/brief.txt').read())\n"
+                "open('/groups/trip/plan.txt', 'w').write('the plan')\n"
+                "open('/workspace/mine.txt', 'w').write('mine')\n"
+            ),
+        )
+    )
+
+    assert result.ok, result.stderr
+    assert "shared brief" in result.stdout
+    assert (workspace / GROUP_DIR / "plan.txt").read_text() == "the plan"
+    assert (workspace / ALICE_DIR / "mine.txt").read_text() == "mine"
+    assert not (workspace / ALICE_DIR / "plan.txt").exists()  # each file lands in its own workspace
+    assert sorted(f["name"] for f in result.output_files) == [
+        "groups/trip/plan.txt",
+        "mine.txt",
+    ]  # the brief it only read is not reported
+
+
+async def test_a_mounted_workspace_is_the_only_extra_thing_the_code_can_reach(
+    workspace: Path,
+) -> None:
+    runtime = _nsjail_or_skip(workspace)
+    (workspace / GROUP_DIR).mkdir(parents=True)
+
+    result = await runtime.execute(
+        spec(
+            mounts=(_mount(),),
+            code="import os\nprint(sorted(os.listdir('/groups')))\nprint(os.path.exists('/groups/trip/../../users'))\n",
+        )
+    )
+
+    assert result.ok, result.stderr
+    assert "['trip']" in result.stdout and "False" in result.stdout
+
+
+@pytest.mark.parametrize("runtime_name", ["nsjail", "inprocess"])
+async def test_a_mount_name_or_path_cannot_carry_a_mount_option_or_climb(
+    workspace: Path, runtime_name: str
+) -> None:
+    runtime: SandboxRuntime = (
+        _nsjail_or_skip(workspace) if runtime_name == "nsjail" else InProcessRuntime(workspace)
+    )
+    for label, session_dir in [
+        ("a:b", GROUP_DIR),
+        ("trip", "g:x/main"),
+        ("trip", "../outside"),
+        ("../trip", GROUP_DIR),
+    ]:
+        with pytest.raises(ValueError):
+            await runtime.execute(spec(mounts=(_mount(label, session_dir),), code="print(1)"))
+
+
+async def test_a_runtime_that_cannot_mount_says_so_rather_than_running_without(
+    workspace: Path,
+) -> None:
+    (workspace / GROUP_DIR).mkdir(parents=True)
+    with pytest.raises(ValueError, match="mount"):
+        await InProcessRuntime(workspace).execute(spec(mounts=(_mount(),), code="print(1)"))
+
+
+# ── governed data: a socket and a token file, no network ─────────────────────
+
+
+def test_a_data_mount_must_be_an_absolute_path_that_cannot_add_a_mount_option(
+    tmp_path: Path,
+) -> None:
+    from loamz.agents.toolkit.code.runtimes.base import DataMount
+
+    DataMount(socket_dir=str(tmp_path), token="t")
+    for bad in ("relative/dir", f"{tmp_path}:/etc", ""):
+        with pytest.raises(ValueError):
+            DataMount(socket_dir=bad, token="t")
+    with pytest.raises(ValueError):
+        DataMount(socket_dir=str(tmp_path), token="")
+    assert "secret-token" not in repr(DataMount(socket_dir=str(tmp_path), token="secret-token"))
+
+
+def test_nsjail_shows_data_access_read_only_and_never_puts_the_token_in_argv(
+    workspace: Path, tmp_path: Path
+) -> None:
+    from loamz.agents.toolkit.code.runtimes.base import DataMount
+
+    runtime = NsjailRuntime(workspace)
+    token_file = tmp_path / "token"
+    base = runtime._nsjail_argv(spec(code="1"), tmp_path)
+    assert "/run/loamz-data" not in " ".join(base)  # nothing unless asked
+
+    mounted = runtime._nsjail_argv(
+        spec(code="1", data=DataMount(socket_dir=str(tmp_path), token="super-secret")),
+        tmp_path,
+        token_file,
+    )
+    joined = " ".join(mounted)
+    assert f"-R {tmp_path}:/run/loamz-data" in joined
+    assert f"-R {token_file}:/run/loamz-data/token" in joined
+    assert "super-secret" not in joined
+    assert "--disable_clone_newnet" not in mounted  # the network namespace stays closed
+    assert runtime.supports_data is True
+    assert getattr(InProcessRuntime(workspace), "supports_data", False) is False
+
+
+async def test_a_run_reaches_data_only_through_the_mounted_socket(
+    workspace: Path,
+) -> None:
+    """Real nsjail: a unix socket and a token file cross the closed network namespace; nothing else does."""
+    import asyncio
+    import tempfile
+
+    from loamz.agents.toolkit.code.runtimes.base import DataMount
+
+    runtime = _nsjail_or_skip(workspace)
+    socket_dir = Path(tempfile.mkdtemp(prefix="data-relay-", dir="/var/tmp"))
+
+    async def serve(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        await reader.read(1024)
+        writer.write(b"pong")
+        await writer.drain()
+        writer.close()
+
+    server = await asyncio.start_unix_server(serve, path=str(socket_dir / "api.sock"))
+    try:
+        result = await runtime.execute(
+            spec(
+                data=DataMount(socket_dir=str(socket_dir), token="run-token"),
+                code=(
+                    "import socket, pathlib\n"
+                    "print('token:', pathlib.Path('/run/loamz-data/token').read_text())\n"
+                    "s = socket.socket(socket.AF_UNIX); s.connect('/run/loamz-data/api.sock')\n"
+                    "s.sendall(b'ping'); print('reply:', s.recv(16).decode())\n"
+                    "try:\n"
+                    "    socket.create_connection(('1.1.1.1', 443), timeout=3); print('internet: OPEN')\n"
+                    "except OSError:\n"
+                    "    print('internet: closed')\n"
+                    "try:\n"
+                    "    open('/run/loamz-data/token', 'w').write('x'); print('token: WRITABLE')\n"
+                    "except OSError:\n"
+                    "    print('token: read-only')\n"
+                ),
+            )
+        )
+        assert result.ok, result.stderr
+        assert "token: run-token" in result.stdout
+        assert "reply: pong" in result.stdout
+        assert "internet: closed" in result.stdout
+        assert "token: read-only" in result.stdout
+    finally:
+        server.close()
+        await server.wait_closed()
+        import shutil as _shutil
+
+        _shutil.rmtree(socket_dir, ignore_errors=True)
+
+
+def test_the_sandbox_bounds_data_library_thread_pools_and_still_leaks_no_host_environment(
+    monkeypatch,
+) -> None:
+    from loamz.agents.toolkit.code.runtimes.nsjail import _sandbox_env
+
+    monkeypatch.setenv("DATABASE_URL", "postgresql://secret")
+    env = _sandbox_env()
+    assert "DATABASE_URL" not in env
+    assert int(env["POLARS_MAX_THREADS"]) <= 8 and int(env["OMP_NUM_THREADS"]) <= 8
+    assert "ARROW_IO_THREADS" in env

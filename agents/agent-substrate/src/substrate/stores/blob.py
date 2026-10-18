@@ -9,7 +9,7 @@ deliberately different shapes over the same S3-compatible substrate:
   Redis/S3 with TTL-based expiry.
 - ``FileStore`` is *keyed* — the caller picks the key (a path-shaped
   string), and can list/copy/delete by prefix. Concrete implementations:
-  ``Files`` (local filesystem) and ``S3FileStore``.
+  ``Files`` (local filesystem) and ``DataFileStore`` (substrate-data).
 
 ``Files`` does **not** implement ``BlobStore`` — it has no
 ``store``/``resolve``/``pin``/``unpin`` surface, only keyed upload/download.

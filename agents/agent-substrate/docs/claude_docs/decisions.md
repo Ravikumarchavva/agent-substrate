@@ -1,5 +1,43 @@
 # Decisions — Check Here Before Re-litigating
 
+## Production files are substrate-data's Files domain: `DataFileStore`, no S3 in the library or the platform (2026-10-18)
+
+**Context.** ADR 0004/0005: governed content has one object store and one owner. The platform kept `S3FileStore`, a local `PendingFileStore`, three ORM
+tables (`file_metadata`, `file_versions`, `workspace_quotas`) and S3 credentials in its settings. This step moves every file the agent runtime or the
+platform touches onto the data service's Files API.
+
+* **`agent-substrate[data]`** (`substrate-data-client>=0.2,<0.3`) holds `integrations/data/`: `DataFilesConnection` (one pooled `AsyncDataClient`, the
+  volume resolver, the token provider), `DataFileStore` (the `FileStore` for one `RunScope`, plus `initiate_upload`/`complete_upload`, `upload_many`/
+  `download_many` over batch `:sign`, versions, usage, quota), `KeyScopedFileStore` and `DataUploadSessions`. Only that folder names the client
+  (invariant row in `test_structure.py`), and importing `substrate` never loads it.
+* **Identity is per run.** The token provider is the existing seam (`substrate_cloud.data_access.DataTokenMinter`): a delegated (`act`) token, `files:write`,
+  under a second issuer name (`DATA_FILES_TOKEN_ISSUER`, registered on the data service as `read_only=false`; the read-only issuer can never write whatever
+  its tokens say), groups `tenant-<id>` and `org:<id>` (the group `POST /api/v1/tenants` grants the workspace volume to). The data service, not this code,
+  enforces `users/{sub}/**`.
+* **Reads hide existence.** A foreign user's folder (`403 path-forbidden`) and a volume the caller cannot see read as `ObjectNotFoundError`, like an absent
+  key; a refused write is `ScopeViolationError`; a quota is `WorkspaceQuotaExceededError`; `429`/`5xx`/unreachable are the transient
+  `RateLimitedError`/`ServiceUnavailableError`; a missing scope or token is `AuthError`; a failed precondition or incomplete upload is `FileConflictError`.
+* **Key to volume:** `tenants/{t}/{path}` is path `{path}` in `tenant_<alias>.workspace.files`, alias = the tenant id lower-cased with other characters as `_`
+  (`tenant_alias`), or an explicit mapping. The provisioner must use the same alias.
+* **Consumers built once (documents, artifacts, the sandbox's blobs) take `KeyScopedFileStore`**: each call acts as the owner the key names
+  (`users/{u}` is user `u`; anything else is the platform's service principal). Code that knows its run (routes, tools) builds a `DataFileStore` for it.
+  Threading `RunScope` through `Library`/`ArtifactStore`/`StagedSandboxRuntime` is left for the documents domain.
+* **No files table.** What the platform adds to an upload (name, conversation, staging state) is a small JSON record beside the bytes in the owner's own
+  folder (`file_records.py`), so another user's file id is not found *by the data service's own rule*; workspace version history is an `index.json`
+  beside the snapshots (`monolith/file_versioning.py`). An unsent attachment is an ordinary file in the owner's uploads folder, and `DataUploadSessions` is
+  there for uploads that have no destination yet; the cross-user startup sweeps (`sweep_stale_pending_uploads`, `sweep_stuck_staging_uploads`) are gone, and
+  an upload whose staging never finished is filed by the message that needs it once it is older than `STAGING_RECONCILIATION_TTL_MINUTES`.
+* **Browsers upload straight to signed URLs**: `POST /files/uploads` signs, the browser `PUT`s, `POST /files/uploads/{id}/complete` finishes. `POST /files/upload`
+  stays for small, server-relayed uploads.
+* **Deleted:** `S3FileStore`, `S3Connector`, the local `PendingFileStore`, the `[s3]` extra, `FILE_STORE_BACKEND/BUCKET/ENDPOINT/REGION/ACCESS_KEY/SECRET_KEY/
+  PREFIX`, `FILE_ENCRYPTION_MODE`, `FILE_KEK_HEX`, `PENDING_UPLOAD_*`, the three ORM models and their RLS rows, `scripts/migrate_to_object_store.py`. A deployment
+  with `DATA_SERVICE_URL` holds no object-store credential; admin quotas are the volume's (`DATA_ADMIN_*` is an OIDC client for the admin storage page).
+* **Known gaps:** a tenant erasure deletes each known user's folder and the shared `knowledge/` and `groups/` folders, but unregistering the volume is the
+  control plane's; admin reads of another user's conversation files are made as that user (the platform mints the token); `GET /files/{id}` of an admin for
+  someone else's id is not supported (records are per user).
+
+---
+
 ## Ports refactor: lazy store parts, a `DocumentLibrary` port, enrichment over the port (2026-10-18)
 
 **Context.** ADR 0004 splits governed content (documents, vectors, memory, files) from the runtime's operational state. The code still assumed one

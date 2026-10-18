@@ -98,7 +98,7 @@ class DataRefStore:
     redis_url
         Redis connection string.
     s3_store
-        Optional ``S3FileStore`` instance for data above the size threshold.
+        Optional ``FileStore`` (object storage) for data above the size threshold.
     size_threshold
         Byte count above which data is routed to S3 instead of Redis.
     s3_bucket

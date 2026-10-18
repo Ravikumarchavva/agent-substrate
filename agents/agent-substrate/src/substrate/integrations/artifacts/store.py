@@ -56,7 +56,7 @@ _MAX_SLUG_LEN = 60
 
 class _BlobStore(Protocol):
     """The subset of the file-store surface this needs — structural, so both
-    ``Files`` and ``S3FileStore`` satisfy it without a base class."""
+    ``Files`` and ``DataFileStore`` satisfy it without a base class."""
 
     async def upload(
         self, key: str, data: bytes, *, content_type: str = ...

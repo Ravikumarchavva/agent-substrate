@@ -140,7 +140,7 @@ src/substrate/
 │   ├── events/           EventBus (Redis pub/sub) + EventEnvelope (wire format)
 │   ├── tts/              text-to-speech provider adapters
 │   ├── memory/           RedisSessionStore (cache), CachedShortTermMemory, MemoryManager, exposure policy
-│   ├── storage/          S3Connector (raw client) + S3FileStore (FileStore Protocol impl built on top)
+│   ├── data/             DataFileStore + KeyScopedFileStore + DataUploadSessions: the FileStore over substrate-data's Files domain (the `[data]` extra)
 │   ├── database/         PostgresDatabase + postgres_store(dsn) (the engine's whole state on PostgreSQL/pgvector),
 │   │                     PostgresConnector (asyncpg pool for direct queries)
 │   ├── cache/            RedisConnector

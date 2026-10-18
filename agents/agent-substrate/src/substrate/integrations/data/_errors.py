@@ -11,12 +11,14 @@ from __future__ import annotations
 from typing import NoReturn
 
 from substrate_data_client import (
+    Conflict,
     DataError,
     Forbidden,
     InsufficientScope,
     InvalidRequest,
     NotFound,
     PayloadTooLarge,
+    PreconditionFailed,
     QuotaExceeded,
     RateLimited,
     Unauthorized,
@@ -37,6 +39,11 @@ from substrate.types.errors import (
 
 class FileTooLargeError(PermanentError):
     """The service refused a file over its size limit."""
+
+
+class FileConflictError(PermanentError):
+    """The write does not fit the file's state: an upload that is incomplete or the wrong size, or a precondition (create-only,
+    compare-and-swap) that no longer holds. Reload and decide again."""
 
 
 def raise_read(exc: DataError, key: str) -> NoReturn:
@@ -70,6 +77,10 @@ def raise_for(exc: DataError, key: str, *, tenant_id: str = "") -> NoReturn:
         ) from exc
     if isinstance(exc, InvalidRequest):
         raise WorkspacePathError(exc.detail or f"invalid key {key!r}") from exc
+    if isinstance(exc, (Conflict, PreconditionFailed)):
+        raise FileConflictError(
+            exc.detail or f"{key!r} changed or is incomplete"
+        ) from exc
     if isinstance(exc, PayloadTooLarge):
         raise FileTooLargeError(exc.detail or f"{key!r} is too large") from exc
     if isinstance(exc, RateLimited):

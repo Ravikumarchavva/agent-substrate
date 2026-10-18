@@ -22,7 +22,7 @@ ravi/
 │   │                        Includes: core/agents/ (_tool_execution, _guardrail_runner, _stream_handler)
 │   ├── integrations/    ← External adapters (LLM, audio, MCP, Spotify) + concrete backends
 │   │                        Includes: integrations/memory/ (RedisMemory, PostgresMemory)
-│   │                                  integrations/storage/ (S3FileStore)
+│   │                                  integrations/data/ (DataFileStore: governed files via substrate-data)
 │   ├── catalog/         ← Unified capability system (tools/, skills/, connectors/, _skill_*.py)
 │   ├── shared/          ← Cross-service contracts, auth, events, database, observability (incl. logger.py)
 │   ├── server/          ← Monolith FastAPI server (app.py, _lifespan.py, routes/, security/, services/, sse/)
@@ -172,7 +172,7 @@ Never add inline comments after integer values.
 | **Image input** | `core/messages/_types.py` | Use `ImageContent(url=...)`, `ImageContent(file_id=...)`, or `ImageContent(data=bytes)` in `UserMessage.content`. PIL `Image.Image` also accepted. |
 | **Image generation** | `integrations/llm/openai/openai_client.py` | `await client.generate_image(prompt, model="dall-e-3")` — check `client.supports_image_generation` first. Returns `list[str]` (URLs or data URLs). |
 | **Memory backends** | `integrations/memory/` | `RedisMemory`, `PostgresMemory` — concrete SDK-backed stores. |
-| **S3 storage** | `integrations/storage/s3.py` | `S3FileStore` — concrete aiobotocore adapter. |
+| **Governed files** | `integrations/data/files.py` | `DataFileStore` — the `FileStore` over substrate-data's Files domain (`agent-substrate[data]`). |
 | **Skills infra** | `catalog/_skill_manager.py`, `_skill_loader.py`, `_skill_models.py` | Import via `from agent_substratecatalog import SkillManager` |
 | **Logging** | `shared/observability/logger.py` | `setup_logging()` — structured JSON + pretty formatter. |
 - Event factory functions only — never build event dicts manually.

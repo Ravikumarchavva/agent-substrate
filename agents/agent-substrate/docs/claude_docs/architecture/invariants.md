@@ -9,7 +9,7 @@ sentence in a docstring. A row is *enforced* when its test passes today, and
 marked `xfail(strict=True)`, so the build fails the moment one starts passing
 and the marker has to come off. That is what keeps this document honest.
 
-**131 enforced · 0 pending · 131 total**
+**133 enforced · 0 pending · 133 total**
 
 ## approvals
 
@@ -241,6 +241,10 @@ and the marker has to come off. That is what keeps this document honest.
   `test_i26_the_core_imports_only_its_allowed_third_party_set`
 - ✅ **``pypdfium2`` (base) and ``rapidocr`` (the ``ocr`` extra) are parsers of untrusted bytes and a model runtime. They may be named only under ``documents/reading/`` and only inside a function, so that importing ``substrate`` loads neither, and so that the host process never has PDFium in it unless it chose to read in-process.**
   `test_the_document_parsers_are_imported_lazily_and_only_by_the_reader`
+- ✅ **Governed storage is the data service's (ADR 0004): the library reaches it only through ``integrations/data/``, behind the ``agent-substrate[data]`` extra. No other module may name ``substrate_data_client``, and importing ``substrate`` (or its ``integrations`` package) must not load it -- a plain install does not have it.**
+  `test_the_data_client_is_named_only_by_its_adapter_and_importing_the_engine_never_loads_it`
+- ✅ **Files are the data service's and clients upload on URLs it signs, so the library holds no object-store credentials: no S3 client (``aiobotocore``/``boto3``/``botocore``) is named anywhere in it and the package declares no ``s3`` extra.**
+  `test_no_object_store_credentials_or_s3_client_belong_to_the_library`
 - ✅ **The core is what every integration and application builds on, so it can name none of them.**
   `test_the_core_imports_nothing_outside_itself`
 - ✅ **``CORE`` is ordered bottom-up: types, then tools, models, stores … up to agents. A concept that imported one above it would make the order a cycle, and the bottom of the engine would drag the top along. Imports made only for type checking are exempt — they never run.**

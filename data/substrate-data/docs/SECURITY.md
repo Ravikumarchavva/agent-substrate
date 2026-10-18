@@ -57,11 +57,19 @@ configuration functions, `COPY`, `ATTACH`, `PRAGMA`, `SET` and DDL are refused a
 
 | Identity | Can | Cannot |
 | --- | --- | --- |
-| Control plane | Commit Iceberg metadata (`s3tables:*` on the warehouse), sign staging uploads | (reads no data) |
-| Worker | Read and write warehouse data files, read staging | Commit table metadata, write staging, use the catalog |
+| Control plane | Commit Iceberg metadata (`s3tables:*` on the warehouse), sign staging uploads, sign and copy objects in the volumes bucket | (reads no table data) |
+| Worker | Read and write warehouse data files, read staging | Commit table metadata, write staging, use the catalog, **touch the volumes bucket (user files)** |
 
 Uploads go browser/SDK → presigned URL → staging bucket, scoped to one key, one hour. SeaweedFS allows only
 the UI origin for browser uploads.
+
+## Files
+
+User files ([FILES.md](FILES.md)) sit in their own bucket under opaque keys; every access is a presigned URL issued
+after grants (`READ_VOLUME` / `WRITE_VOLUME`), delegated-token scopes (`files:read` / `files:write`) and the
+path policy (`users/{sub}/**` belongs to that subject for agent tokens). Paths are normalised and traversal is
+refused. Mutations are audited with ids and path hashes only. Tenant provisioning needs an admin or the
+provisioner group and is closed to delegated tokens.
 
 ## Boundaries and secrets
 

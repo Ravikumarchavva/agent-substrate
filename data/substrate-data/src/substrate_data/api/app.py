@@ -20,11 +20,13 @@ from substrate_data.api.publications import Publisher
 from substrate_data.api.routes import (
     assets,
     catalog,
+    files,
     imports,
     maintenance,
     materialized,
     policies,
     statements,
+    tenants,
     views,
     workloads,
 )
@@ -36,6 +38,7 @@ from substrate_data.core import http
 from substrate_data.core.errors import Problem
 from substrate_data.core.models import Settings
 from substrate_data.core.tls import internal_client_context
+from substrate_data.files.service import sweep_files
 from substrate_data.sql.planner import Planner
 from substrate_data.tables.credentials import CredentialVendor
 from substrate_data.tables.iceberg import TableService
@@ -113,10 +116,12 @@ def create_app(settings: Settings | None = None, services: Services | None = Non
         retention = asyncio.create_task(
             enforce_retention(svc.store, settings.history_retention_days)
         )
+        # Expires pending uploads and purges old file versions (docs/FILES.md).
+        sweeper = asyncio.create_task(sweep_files(files.files_service_for(app)))
         try:
             yield
         finally:
-            for background in (task, retention):
+            for background in (task, retention, sweeper):
                 background.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
                     await background
@@ -149,6 +154,8 @@ def create_app(settings: Settings | None = None, services: Services | None = Non
         imports,
         workloads,
         assets,
+        files,
+        tenants,
     ):
         app.include_router(module.router)
 

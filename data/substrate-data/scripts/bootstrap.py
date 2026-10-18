@@ -32,6 +32,7 @@ PUBLIC = {
     "SUBSTRATE_DATA_WAREHOUSE": "warehouse",
     "SUBSTRATE_DATA_STORAGE_ID": "dev-warehouse",
     "SUBSTRATE_DATA_STAGING_BUCKET": "substrate-staging",
+    "SUBSTRATE_DATA_VOLUMES_BUCKET": "substrate-volumes",
     "SUBSTRATE_DATA_OIDC_ISSUER": "http://127.0.0.1:18080/realms/substrate",
     "SUBSTRATE_DATA_OIDC_AUDIENCE": "substrate-data",
     "SUBSTRATE_DATA_ADMIN_GROUP": "data-admins",
@@ -90,10 +91,12 @@ def environment() -> dict[str, str]:
 
 def seaweed_identities(env: dict[str, str]) -> None:
     warehouse, staging = env["SUBSTRATE_DATA_WAREHOUSE"], env["SUBSTRATE_DATA_STAGING_BUCKET"]
+    volumes = env["SUBSTRATE_DATA_VOLUMES_BUCKET"]
     body = {
         "identities": [
             {
-                # Control plane: commits table metadata and signs upload URLs. Never reads data.
+                # Control plane: commits table metadata and signs upload URLs. Never reads table data.
+                # It alone holds the volumes bucket (user files): it signs URLs and copies objects there.
                 "name": "substrate-control",
                 "credentials": [
                     {
@@ -105,11 +108,13 @@ def seaweed_identities(env: dict[str, str]) -> None:
                     f"s3tables:*:{warehouse}",
                     *(f"{a}:{warehouse}" for a in ("Read", "Write", "List")),
                     *(f"{a}:{staging}" for a in ("Read", "Write", "List")),
+                    *(f"{a}:{volumes}" for a in ("Read", "Write", "List")),
                 ],
             },
             {
                 # Attached compute: reads tables, writes new data files, reads staged uploads.
-                # No catalog actions, so it cannot commit or alter table metadata.
+                # No catalog actions, so it cannot commit or alter table metadata, and no action at all on
+                # the volumes bucket: a compromised worker cannot read users' files.
                 "name": "substrate-worker",
                 "credentials": [
                     {

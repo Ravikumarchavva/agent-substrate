@@ -56,11 +56,12 @@ def main() -> None:
     )
     output = weed_shell(
         f"s3.bucket.create -name {values['SUBSTRATE_DATA_STAGING_BUCKET']}\n"
+        f"s3.bucket.create -name {values['SUBSTRATE_DATA_VOLUMES_BUCKET']}\n"
         f"s3tables.bucket -create -name {values['SUBSTRATE_DATA_WAREHOUSE']} -account 000000000000"
     )
     if "error" in output.lower() and "exist" not in output.lower():
         raise SystemExit("Bucket creation failed:\n" + output[-2000:])
-    print("Staging bucket and warehouse table bucket ready")
+    print("Staging, volumes and warehouse table buckets ready")
 
 
 if __name__ == "__main__":

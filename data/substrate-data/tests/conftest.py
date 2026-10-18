@@ -57,6 +57,8 @@ class StaticJWKS:
 
 
 AGENT_ISSUER = "agent-substrate-test"
+# The same agent-substrate keys, trusted for tokens that may change data (files:write); AGENT_ISSUER is read-only.
+AGENT_ISSUER_WRITABLE = "agent-substrate-test-writable"
 
 
 class IssuerKeys:
@@ -109,12 +111,21 @@ class Identity:
         tenant: str = "acme",
         *,
         key: Any = None,
-        issuer: str = AGENT_ISSUER,
+        issuer: str | None = None,
         audience: str = "substrate-data",
         expires_in: int = 120,
+        scopes: tuple[str, ...] | None = None,
         **extra: Any,
     ) -> str:
-        """A token as agent-substrate mints it for one run: signed by its own key, read-only."""
+        """A token as agent-substrate mints it for one run: signed by its own key.
+
+        `scopes` defaults to `data:read`. A token holding a files:* scope is minted by the writable issuer
+        (the read-only issuer's tokens can never change anything, whatever they claim)."""
+        if issuer is None:
+            writable = scopes and any(s.startswith("files:") for s in scopes)
+            issuer = AGENT_ISSUER_WRITABLE if writable else AGENT_ISSUER
+        if scopes is not None:
+            extra.setdefault("scope", " ".join(scopes))
         now = int(time.time())
         claims = {
             "iss": issuer,
@@ -199,23 +210,38 @@ class Seaweed:
     access_key: str
     secret_key: str
     sts_role: str = STS_ROLE
+    # What attached compute holds: reads/writes the warehouse, reads staging, nothing on the volumes bucket.
+    worker_access_key: str = ""
+    worker_secret_key: str = ""
 
 
-def write_storage_config(directory: Path, access: str, secret: str) -> None:
+VOLUMES_BUCKET = "substrate-volumes"
+
+
+def write_storage_config(
+    directory: Path, access: str, secret: str, worker: tuple[str, str] = ("", "")
+) -> None:
     """S3 identities plus an STS role that can read anything; session policies narrow it per call."""
-    (directory / "s3.json").write_text(
-        json.dumps(
+    identities = [
+        {
+            "name": "admin",
+            "credentials": [{"accessKey": access, "secretKey": secret}],
+            "actions": ["Admin", "Read", "Write", "List", "Tagging"],
+        }
+    ]
+    if worker[0]:
+        # Like scripts/bootstrap.py: compute works on the warehouse and staging, never on user files.
+        identities.append(
             {
-                "identities": [
-                    {
-                        "name": "admin",
-                        "credentials": [{"accessKey": access, "secretKey": secret}],
-                        "actions": ["Admin", "Read", "Write", "List", "Tagging"],
-                    }
-                ]
+                "name": "substrate-worker",
+                "credentials": [{"accessKey": worker[0], "secretKey": worker[1]}],
+                "actions": [
+                    *(f"{a}:warehouse" for a in ("Read", "Write", "List")),
+                    *(f"{a}:substrate-staging" for a in ("Read", "List")),
+                ],
             }
         )
-    )
+    (directory / "s3.json").write_text(json.dumps({"identities": identities}))
     (directory / "iam.json").write_text(
         json.dumps(
             {
@@ -274,7 +300,8 @@ def seaweed(tmp_path_factory) -> Seaweed:
     access, secret = "TEST" + secrets.token_hex(8).upper(), secrets.token_urlsafe(24)
     name = f"substrate-test-{uuid4().hex[:8]}"
     config = tmp_path_factory.mktemp("storage-config")
-    write_storage_config(config, access, secret)
+    worker = ("TESTW" + secrets.token_hex(8).upper(), secrets.token_urlsafe(24))
+    write_storage_config(config, access, secret, worker)
     subprocess.run(
         [
             "docker",
@@ -313,7 +340,25 @@ def seaweed(tmp_path_factory) -> Seaweed:
     else:
         subprocess.run(["docker", "rm", "-f", name], capture_output=True)
         pytest.fail("SeaweedFS did not start")
-    yield Seaweed(f"http://127.0.0.1:{s3_port}", f"http://127.0.0.1:{iceberg_port}", access, secret)
+    import boto3
+    from botocore.client import Config
+
+    boto3.client(
+        "s3",
+        endpoint_url=f"http://127.0.0.1:{s3_port}",
+        aws_access_key_id=access,
+        aws_secret_access_key=secret,
+        region_name="us-east-1",
+        config=Config(signature_version="s3v4", s3={"addressing_style": "path"}),
+    ).create_bucket(Bucket=VOLUMES_BUCKET)
+    yield Seaweed(
+        f"http://127.0.0.1:{s3_port}",
+        f"http://127.0.0.1:{iceberg_port}",
+        access,
+        secret,
+        worker_access_key=worker[0],
+        worker_secret_key=worker[1],
+    )
     subprocess.run(["docker", "rm", "-f", name], capture_output=True)
 
 
@@ -360,6 +405,7 @@ class Stack:
         return DataClient(self.api, token=lambda: self.token(name, *groups))
 
     def agent_client(self, user: str, tenant: str = "acme", **claims: Any):
+        """A client holding an agent's delegated token; `scopes=("files:write", …)` sets its scopes."""
         from substrate_data_client import DataClient
 
         return DataClient(self.api, token=lambda: self.identity.agent_token(user, tenant, **claims))
@@ -486,7 +532,13 @@ def stack(seaweed, identity, ticket_keys, tmp_path_factory, postgres) -> Stack:
     controller_settings = Settings(**base, controller_token=SecretStr(controller_token))
     controller = Served(create_control_app(controller_settings))
     worker_settings = Settings(
-        **base, worker_token=SecretStr(worker_token), ticket_public_key_file=public
+        **{
+            **base,
+            "s3_access_key_id": SecretStr(seaweed.worker_access_key),
+            "s3_secret_access_key": SecretStr(seaweed.worker_secret_key),
+        },
+        worker_token=SecretStr(worker_token),
+        ticket_public_key_file=public,
     )
     keyless = worker_settings.model_copy(
         update={"s3_access_key_id": SecretStr(""), "s3_secret_access_key": SecretStr("")}
@@ -517,7 +569,12 @@ def stack(seaweed, identity, ticket_keys, tmp_path_factory, postgres) -> Stack:
         controller_url=controller.url,
         controller_token=SecretStr(controller_token),
         ticket_private_key_file=private,
-        trusted_issuers=[TrustedIssuer(issuer=AGENT_ISSUER, jwks_uri=identity.agent_keys.uri)],
+        trusted_issuers=[
+            TrustedIssuer(issuer=AGENT_ISSUER, jwks_uri=identity.agent_keys.uri),
+            TrustedIssuer(
+                issuer=AGENT_ISSUER_WRITABLE, jwks_uri=identity.agent_keys.uri, read_only=False
+            ),
+        ],
         **({"storage_sts_role_arn": seaweed.sts_role} if USE_VENDING else {}),
     )
     services = build_services(settings, verifier=TokenVerifier(settings, jwks=identity.jwks))

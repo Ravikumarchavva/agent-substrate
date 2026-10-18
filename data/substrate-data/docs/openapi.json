@@ -168,6 +168,74 @@
         "title": "ColumnSpec",
         "type": "object"
       },
+      "CompleteUpload": {
+        "additionalProperties": false,
+        "properties": {
+          "parts": {
+            "items": {
+              "$ref": "#/components/schemas/PartETag"
+            },
+            "maxItems": 10000,
+            "title": "Parts",
+            "type": "array"
+          },
+          "upload_id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Upload Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "upload_id"
+        ],
+        "title": "CompleteUpload",
+        "type": "object"
+      },
+      "CopyPrefix": {
+        "additionalProperties": false,
+        "properties": {
+          "dest_prefix": {
+            "maxLength": 1024,
+            "minLength": 1,
+            "title": "Dest Prefix",
+            "type": "string"
+          },
+          "overwrite": {
+            "default": true,
+            "title": "Overwrite",
+            "type": "boolean"
+          },
+          "source_prefix": {
+            "maxLength": 1024,
+            "minLength": 1,
+            "title": "Source Prefix",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_prefix",
+          "dest_prefix"
+        ],
+        "title": "CopyPrefix",
+        "type": "object"
+      },
+      "DeletePrefix": {
+        "additionalProperties": false,
+        "properties": {
+          "prefix": {
+            "maxLength": 1024,
+            "minLength": 1,
+            "title": "Prefix",
+            "type": "string"
+          }
+        },
+        "required": [
+          "prefix"
+        ],
+        "title": "DeletePrefix",
+        "type": "object"
+      },
       "DocumentCreate": {
         "additionalProperties": false,
         "properties": {
@@ -449,6 +517,52 @@
           "files"
         ],
         "title": "ImportCreate",
+        "type": "object"
+      },
+      "InitiateUpload": {
+        "additionalProperties": false,
+        "properties": {
+          "content_type": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Type"
+          },
+          "path": {
+            "maxLength": 1024,
+            "minLength": 1,
+            "title": "Path",
+            "type": "string"
+          },
+          "sha256": {
+            "anyOf": [
+              {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sha256"
+          },
+          "size": {
+            "minimum": 0.0,
+            "title": "Size",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "path",
+          "size"
+        ],
+        "title": "InitiateUpload",
         "type": "object"
       },
       "MaterializedViewCreate": {
@@ -780,6 +894,58 @@
         "title": "PolicyBody",
         "type": "object"
       },
+      "Promote": {
+        "additionalProperties": false,
+        "properties": {
+          "parts": {
+            "items": {
+              "$ref": "#/components/schemas/PartETag"
+            },
+            "maxItems": 10000,
+            "title": "Parts",
+            "type": "array"
+          },
+          "path": {
+            "maxLength": 1024,
+            "minLength": 1,
+            "title": "Path",
+            "type": "string"
+          },
+          "volume": {
+            "pattern": "^[^.]+\\.[^.]+\\.[^.]+$",
+            "title": "Volume",
+            "type": "string"
+          }
+        },
+        "required": [
+          "volume",
+          "path"
+        ],
+        "title": "Promote",
+        "type": "object"
+      },
+      "QuotaSet": {
+        "additionalProperties": false,
+        "properties": {
+          "max_bytes": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Bytes"
+          }
+        },
+        "required": [
+          "max_bytes"
+        ],
+        "title": "QuotaSet",
+        "type": "object"
+      },
       "ResourceAttach": {
         "additionalProperties": false,
         "properties": {
@@ -842,6 +1008,25 @@
         "title": "ResourceAttach",
         "type": "object"
       },
+      "Restore": {
+        "additionalProperties": false,
+        "properties": {
+          "version": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          }
+        },
+        "title": "Restore",
+        "type": "object"
+      },
       "SchemaCreate": {
         "additionalProperties": false,
         "properties": {
@@ -867,6 +1052,125 @@
           "name"
         ],
         "title": "SchemaCreate",
+        "type": "object"
+      },
+      "SessionCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "content_type": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Type"
+          },
+          "sha256": {
+            "anyOf": [
+              {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sha256"
+          },
+          "size": {
+            "minimum": 0.0,
+            "title": "Size",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "size"
+        ],
+        "title": "SessionCreate",
+        "type": "object"
+      },
+      "SignItem": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "enum": [
+              "get",
+              "put"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "content_type": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Type"
+          },
+          "path": {
+            "maxLength": 1024,
+            "minLength": 1,
+            "title": "Path",
+            "type": "string"
+          },
+          "sha256": {
+            "anyOf": [
+              {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sha256"
+          },
+          "size": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size"
+          }
+        },
+        "required": [
+          "path",
+          "action"
+        ],
+        "title": "SignItem",
+        "type": "object"
+      },
+      "SignRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SignItem"
+            },
+            "maxItems": 200,
+            "minItems": 1,
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "SignRequest",
         "type": "object"
       },
       "StatementRequest": {
@@ -990,6 +1294,27 @@
           "columns"
         ],
         "title": "TableCreate",
+        "type": "object"
+      },
+      "TenantEnsure": {
+        "additionalProperties": false,
+        "properties": {
+          "alias": {
+            "pattern": "^[a-z][a-z0-9_]{0,55}$",
+            "title": "Alias",
+            "type": "string"
+          },
+          "tenant_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "alias"
+        ],
+        "title": "TenantEnsure",
         "type": "object"
       },
       "Update": {
@@ -5023,6 +5348,1034 @@
         "summary": "Cancel",
         "tags": [
           "statements"
+        ]
+      }
+    },
+    "/api/v1/tenants": {
+      "post": {
+        "operationId": "ensure_tenant_api_v1_tenants_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TenantEnsure"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Ensure Tenant",
+        "tags": [
+          "tenants"
+        ]
+      }
+    },
+    "/api/v1/upload-sessions": {
+      "post": {
+        "description": "A pending upload not yet in any volume: send the bytes, then promote it into a volume path.",
+        "operationId": "create_session_api_v1_upload_sessions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Session",
+        "tags": [
+          "files"
+        ]
+      }
+    },
+    "/api/v1/upload-sessions/{session_id}:promote": {
+      "post": {
+        "operationId": "promote_session_api_v1_upload_sessions__session_id__promote_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-None-Match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-None-Match"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Promote"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Promote Session",
+        "tags": [
+          "files"
+        ]
+      }
+    },
+    "/api/v1/volumes/{volume}/files": {
+      "get": {
+        "operationId": "list_files_api_v1_volumes__volume__files_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "volume",
+            "required": true,
+            "schema": {
+              "title": "Volume",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "prefix",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 1024,
+              "title": "Prefix",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "delimiter",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^/$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Delimiter"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Page Token"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Page Size"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Files",
+        "tags": [
+          "files"
+        ]
+      }
+    },
+    "/api/v1/volumes/{volume}/files/{path}": {
+      "delete": {
+        "description": "Soft delete: the file disappears from listings; its versions stay until purged.",
+        "operationId": "delete_file_api_v1_volumes__volume__files__path__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "volume",
+            "required": true,
+            "schema": {
+              "title": "Volume",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "title": "Path",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete File",
+        "tags": [
+          "files"
+        ]
+      },
+      "get": {
+        "operationId": "file_metadata_api_v1_volumes__volume__files__path__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "volume",
+            "required": true,
+            "schema": {
+              "title": "Volume",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "title": "Path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "File Metadata",
+        "tags": [
+          "files"
+        ]
+      }
+    },
+    "/api/v1/volumes/{volume}/files/{path}/versions": {
+      "get": {
+        "operationId": "list_versions_api_v1_volumes__volume__files__path__versions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "volume",
+            "required": true,
+            "schema": {
+              "title": "Volume",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "title": "Path",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Page Token"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Page Size"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Versions",
+        "tags": [
+          "files"
+        ]
+      }
+    },
+    "/api/v1/volumes/{volume}/files/{path}:download-url": {
+      "get": {
+        "operationId": "download_url_api_v1_volumes__volume__files__path__download_url_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "volume",
+            "required": true,
+            "schema": {
+              "title": "Volume",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "title": "Path",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Version"
+            }
+          },
+          {
+            "in": "query",
+            "name": "expires_in",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 604800,
+                  "minimum": 30,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Expires In"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Download Url",
+        "tags": [
+          "files"
+        ]
+      }
+    },
+    "/api/v1/volumes/{volume}/files/{path}:restore": {
+      "post": {
+        "description": "Undelete a file, or (with `version`) make an older version current again as a new version.",
+        "operationId": "restore_file_api_v1_volumes__volume__files__path__restore_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "volume",
+            "required": true,
+            "schema": {
+              "title": "Volume",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "title": "Path",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Restore"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Restore File",
+        "tags": [
+          "files"
+        ]
+      }
+    },
+    "/api/v1/volumes/{volume}/files:complete-upload": {
+      "post": {
+        "operationId": "complete_upload_api_v1_volumes__volume__files_complete_upload_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "volume",
+            "required": true,
+            "schema": {
+              "title": "Volume",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-None-Match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-None-Match"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompleteUpload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Complete Upload",
+        "tags": [
+          "files"
+        ]
+      }
+    },
+    "/api/v1/volumes/{volume}/files:copy-prefix": {
+      "post": {
+        "description": "Copy a folder inside the volume (a fork or a promotion). The stored objects are shared, so it\nis instant and costs no storage; the copies are independent files afterwards.",
+        "operationId": "copy_prefix_api_v1_volumes__volume__files_copy_prefix_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "volume",
+            "required": true,
+            "schema": {
+              "title": "Volume",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CopyPrefix"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Copy Prefix",
+        "tags": [
+          "files"
+        ]
+      }
+    },
+    "/api/v1/volumes/{volume}/files:delete-prefix": {
+      "post": {
+        "operationId": "delete_prefix_api_v1_volumes__volume__files_delete_prefix_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "volume",
+            "required": true,
+            "schema": {
+              "title": "Volume",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeletePrefix"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Prefix",
+        "tags": [
+          "files"
+        ]
+      }
+    },
+    "/api/v1/volumes/{volume}/files:initiate-upload": {
+      "post": {
+        "operationId": "initiate_upload_api_v1_volumes__volume__files_initiate_upload_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "volume",
+            "required": true,
+            "schema": {
+              "title": "Volume",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-None-Match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-None-Match"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InitiateUpload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Initiate Upload",
+        "tags": [
+          "files"
+        ]
+      }
+    },
+    "/api/v1/volumes/{volume}/files:sign": {
+      "post": {
+        "description": "Batch presigned URLs: `get` returns a download URL, `put` an upload to finish with\n`files:complete-upload`. Each item succeeds or carries its own `error`.",
+        "operationId": "sign_api_v1_volumes__volume__files_sign_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "volume",
+            "required": true,
+            "schema": {
+              "title": "Volume",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Sign",
+        "tags": [
+          "files"
+        ]
+      }
+    },
+    "/api/v1/volumes/{volume}/quotas": {
+      "put": {
+        "description": "Set (or with `null` remove) the volume's hard byte quota. Owner or admin only.",
+        "operationId": "set_quota_api_v1_volumes__volume__quotas_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "volume",
+            "required": true,
+            "schema": {
+              "title": "Volume",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuotaSet"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Quota",
+        "tags": [
+          "files"
+        ]
+      }
+    },
+    "/api/v1/volumes/{volume}/usage": {
+      "get": {
+        "operationId": "usage_api_v1_volumes__volume__usage_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "volume",
+            "required": true,
+            "schema": {
+              "title": "Volume",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "prefix",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 1024,
+              "title": "Prefix",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Usage",
+        "tags": [
+          "files"
         ]
       }
     }

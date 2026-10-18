@@ -4875,7 +4875,7 @@ dependencies = [
     { name = "pyjwt", extra = ["crypto"] },
     { name = "python-multipart" },
     { name = "sqlglot" },
-    { name = "substrate-data-client" },
+    { name = "substrate-data-client", extra = ["arrow"] },
     { name = "substrate-identity" },
     { name = "uvicorn" },
 ]
@@ -4908,7 +4908,7 @@ requires-dist = [
     { name = "pyjwt", extras = ["crypto"], specifier = ">=2.10" },
     { name = "python-multipart", specifier = ">=0.0.20" },
     { name = "sqlglot", specifier = ">=27,<29" },
-    { name = "substrate-data-client", editable = "data/substrate-data-client" },
+    { name = "substrate-data-client", extras = ["arrow"], editable = "data/substrate-data-client" },
     { name = "substrate-identity", editable = "identity/substrate-identity" },
     { name = "uvicorn", specifier = ">=0.34,<1" },
 ]
@@ -4923,19 +4923,44 @@ dev = [
 
 [[package]]
 name = "substrate-data-client"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "data/substrate-data-client" }
 dependencies = [
     { name = "httpx" },
+]
+
+[package.optional-dependencies]
+arrow = [
     { name = "polars" },
     { name = "pyarrow" },
+]
+http2 = [
+    { name = "httpx", extra = ["http2"] },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "polars" },
+    { name = "pyarrow" },
+    { name = "pytest" },
+    { name = "ruff" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "httpx", specifier = ">=0.28,<1" },
+    { name = "httpx", extras = ["http2"], marker = "extra == 'http2'", specifier = ">=0.28,<1" },
+    { name = "polars", marker = "extra == 'arrow'", specifier = ">=1.44.2,<2" },
+    { name = "pyarrow", marker = "extra == 'arrow'", specifier = ">=22,<27" },
+]
+provides-extras = ["arrow", "http2"]
+
+[package.metadata.requires-dev]
+dev = [
     { name = "polars", specifier = ">=1.44.2,<2" },
     { name = "pyarrow", specifier = ">=22,<27" },
+    { name = "pytest", specifier = ">=8" },
+    { name = "ruff", specifier = ">=0.11" },
 ]
 
 [[package]]

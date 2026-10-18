@@ -38,6 +38,11 @@ class Feature:
         context, feature = self.name.split(".")
         return f"loamz.agents.features.{context}.{feature}"
 
+    def service(self, container: Container) -> object:
+        """The feature's service (its provider function is named like the feature: `service.preferences`)."""
+        module = importlib.import_module(f"{self.module}.service")
+        return container.get(getattr(module, self.name.split(".")[1]))
+
     def router(self) -> APIRouter:
         """The feature's `api.router`, imported when the server asks (only the server loads `api.py`)."""
         return importlib.import_module(f"{self.module}.api").router

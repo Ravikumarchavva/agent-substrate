@@ -1,0 +1,63 @@
+{{- if .Values.networkPolicy.enabled }}
+{{- $sel := dict "app.kubernetes.io/instance" .Release.Name }}
+# Everything in the release may talk to everything in the release; nothing else reaches it, except the ingress
+# controller, which may reach the components that have a public address.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "cell.fullname" . }}-internal
+  labels: {{- include "cell.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels: {{- toYaml $sel | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: {{- toYaml $sel | nindent 14 }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "cell.fullname" . }}-from-ingress
+  labels: {{- include "cell.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/instance
+        operator: In
+        values: [{{ .Release.Name }}]
+      - key: app.kubernetes.io/component
+        operator: In
+        values: [ui, data-web, data-api, keycloak, seaweedfs, {{ ternary "agent-server" "agent-gateway" (eq .Values.mode "monolith") }}]
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector: {{- toYaml .Values.networkPolicy.ingressNamespaceSelector | nindent 12 }}
+---
+# Only the control plane (and the post-install Job) may reach the controller; workers answer only the controller.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "cell.fullname" . }}-compute
+  labels: {{- include "cell.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/instance
+        operator: In
+        values: [{{ .Release.Name }}]
+      - key: app.kubernetes.io/component
+        operator: In
+        values: [data-controller, data-worker-sql, data-worker-jobs, data-worker-rag]
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/component
+                operator: In
+                values: [data-api, data-controller]
+        - podSelector:
+            matchLabels: { job-name: {{ include "cell.fullname" . }}-data-attach }
+{{- end }}

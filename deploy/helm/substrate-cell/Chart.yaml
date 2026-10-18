@@ -1,0 +1,9 @@
+apiVersion: v2
+name: substrate-cell
+description: One Substrate cell (ADR 0006) - Keycloak, the agent server (monolith or microservices), substrate-data, the two web UIs, PostgreSQL, Redis and S3-compatible storage.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+kubeVersion: ">=1.27.0-0"
+keywords: [substrate, agents, data, keycloak]
+home: https://github.com/agent-substrate/agent-substrate

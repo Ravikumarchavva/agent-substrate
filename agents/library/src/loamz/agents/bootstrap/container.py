@@ -14,6 +14,8 @@ from typing import Any
 from loamz.agents.bootstrap.settings import Settings
 from loamz.agents.kernel.events import EventBus, InMemoryEventBus
 from loamz.agents.kernel.models import ChatModel
+from loamz.agents.kernel.ports.counters import Counters
+from loamz.agents.kernel.ports.files import FileStore
 from loamz.agents.kernel.telemetry import set_capture_content
 from loamz.agents.stores import AgentStore
 from loamz.data.storage.sql import Database, postgres, sqlite
@@ -52,9 +54,34 @@ class Container:
         return database
 
     @cached_property
+    def file_store(self) -> FileStore:
+        """File bytes: a local folder (`files.path`) unless a data service is configured.
+
+        TODO(integration): the [data] extra swaps in `loamz.agents.data.DataFileStore` (governed, versioned).
+        """
+        from loamz.agents.providers.files import LocalFileStore
+
+        return LocalFileStore(self.settings.files.path)
+
+    @cached_property
     def agent_store(self) -> AgentStore:
         """The agent's own state (threads and their headers, tasks, session state, graph, runs) in `database`."""
-        return AgentStore(self.database)
+        return AgentStore(self.database, files=self.file_store)
+
+    @cached_property
+    def counters(self) -> Counters:
+        """Rate-limit windows and daily quotas: shared through Redis when configured, otherwise this process's."""
+        if not self.settings.redis.url:
+            from loamz.agents.providers.limits.memory import MemoryCounters
+
+            return MemoryCounters()
+        import redis.asyncio as aioredis
+
+        from loamz.agents.providers.limits.redis import RedisCounters
+
+        client = aioredis.from_url(self.settings.redis.url, decode_responses=True)
+        self.on_close(client.aclose)
+        return RedisCounters(client)
 
     @cached_property
     def event_bus(self) -> EventBus:

@@ -1,1 +1,7 @@
-"""People: what belongs to a person across conversations: preferences, notifications, memory view, usage, export."""
+"""The people context."""
+
+from __future__ import annotations
+
+from loamz.agents.features.feature import Feature, feature
+
+FEATURES: tuple[Feature, ...] = (feature("people.preferences", "gateway"),)

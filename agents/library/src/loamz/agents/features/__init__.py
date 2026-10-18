@@ -12,25 +12,25 @@ A feature uses another only through that feature's `service.py`. `server/` is th
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from dataclasses import dataclass
-
-from fastapi import APIRouter
-
-
-@dataclass(frozen=True)
-class Feature:
-    name: str
-    roles: frozenset[str]
-    router: Callable[[], APIRouter]
-
-
-def _people_preferences() -> APIRouter:
-    from loamz.agents.features.people.preferences.api import router
-
-    return router
-
+from loamz.agents.features.automation import FEATURES as AUTOMATION
+from loamz.agents.features.conversations import FEATURES as CONVERSATIONS
+from loamz.agents.features.directory import FEATURES as DIRECTORY
+from loamz.agents.features.feature import Feature
+from loamz.agents.features.governance import FEATURES as GOVERNANCE
+from loamz.agents.features.groups import FEATURES as GROUPS
+from loamz.agents.features.knowledge import FEATURES as KNOWLEDGE
+from loamz.agents.features.people import FEATURES as PEOPLE
+from loamz.agents.features.workspace import FEATURES as WORKSPACE
 
 FEATURES: tuple[Feature, ...] = (
-    Feature("people.preferences", frozenset({"gateway"}), _people_preferences),
+    *CONVERSATIONS,
+    *WORKSPACE,
+    *KNOWLEDGE,
+    *DIRECTORY,
+    *GROUPS,
+    *AUTOMATION,
+    *PEOPLE,
+    *GOVERNANCE,
 )
+
+__all__ = ["FEATURES", "Feature"]

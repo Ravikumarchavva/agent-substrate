@@ -80,6 +80,104 @@ class TelemetrySettings(BaseModel):
 
 class HttpSettings(BaseModel):
     cors_origins: list[str] = Field(default_factory=list)
+    frontend_url: str = Field(
+        default="http://127.0.0.1:3000",
+        description="Where links in notifications and e-mails point.",
+    )
+
+
+class FilesSettings(BaseModel):
+    path: str = Field(
+        default="./.loamz/files",
+        description="Folder holding file bytes when no data service is configured.",
+    )
+    max_upload_bytes: int = Field(default=200 * 1024 * 1024, ge=1)
+    user_quota_bytes: int = Field(default=1024**3, ge=0, description="Per user; 0 is unlimited.")
+    user_delete_allowed: bool = True
+    staging_ttl_minutes: float = Field(
+        default=10.0,
+        description="An upload whose staging started but never finished is staged again once this old.",
+    )
+
+
+class ChatSettings(BaseModel):
+    context_window: int = Field(
+        default=40, ge=1, description="Messages of history the model is shown."
+    )
+    max_iterations: int = Field(default=30, ge=1)
+    disable_tool_approvals: bool = False
+    attachment_pdf_max_chars: int = 20000
+    knowledge_base: str = Field(
+        default="default", description="The knowledge base the chat `knowledge` tool searches."
+    )
+    group_triage_model: str = Field(
+        default="",
+        description="Small model an agent in a group uses for its quick look at a message not for it; empty: the chat model.",
+    )
+
+
+class AudioSettings(BaseModel):
+    stt_model: str = "whisper-1"
+    tts_model: str = "local/kokoro-82m"
+    tts_voice: str = "Kore"
+    realtime_model: str = "gpt-4o-realtime-preview-2024-12-17"
+    realtime_voice: str = "coral"
+
+
+class DocumentSettings(BaseModel):
+    max_pages: int = 300
+    max_mb: int = 5
+    summary_enabled: bool = True
+    summary_model: str = Field(default="", description="Empty: the chat model.")
+    summary_concurrency: int = 4
+    summary_timeout_s: int = 180
+    summary_daily_tokens: int = Field(
+        default=5_000_000, description="Per tenant per day; 0 is no cap."
+    )
+    daily_doc_limit: int = 20
+    daily_upload_attempt_limit: int = 100
+
+
+class NotificationSettings(BaseModel):
+    resend_api_key: str = Field(
+        default="", description="With no key nothing is e-mailed; the in-app notice is still made."
+    )
+    from_email: str = "Assistant <notifications@localhost>"
+
+
+class SchedulerSettings(BaseModel):
+    catch_up: bool = Field(
+        default=True,
+        description="On start, run once each scheduled task whose firing came due while the server was down.",
+    )
+
+
+class RateLimitSettings(BaseModel):
+    enabled: bool = True
+    authed_rpm: int = 60
+    anon_rpm: int = 5
+    window_seconds: int = 60
+    fail_open: bool = Field(
+        default=False, description="Allow traffic when the counters are unavailable (dev only)."
+    )
+
+
+class SafetySettings(BaseModel):
+    text_guard: bool = True
+    text_threshold: float = 0.9
+    image_nsfw_threshold: float = 0.5
+    image_nsfl_threshold: float = 0.3
+
+
+class SandboxSettings(BaseModel):
+    runtime: str = Field(default="nsjail", description="nsjail | k8s | inprocess (tests only)")
+    network_policy: str = "deny"
+    timeout_seconds: int = 60
+    memory_bytes: int = 2 * 1024**3
+    scratch_root: str = ""
+    python: str = ""
+    runtime_class: str = ""
+    workspace_pvc_claim: str = ""
 
 
 class Settings(BaseSettings):
@@ -92,6 +190,15 @@ class Settings(BaseSettings):
     http: HttpSettings = Field(default_factory=HttpSettings)
     llm: LlmSettings = Field(default_factory=LlmSettings)
     redis: RedisSettings = Field(default_factory=RedisSettings)
+    files: FilesSettings = Field(default_factory=FilesSettings)
+    chat: ChatSettings = Field(default_factory=ChatSettings)
+    audio: AudioSettings = Field(default_factory=AudioSettings)
+    documents: DocumentSettings = Field(default_factory=DocumentSettings)
+    notifications: NotificationSettings = Field(default_factory=NotificationSettings)
+    scheduler: SchedulerSettings = Field(default_factory=SchedulerSettings)
+    rate_limit: RateLimitSettings = Field(default_factory=RateLimitSettings)
+    safety: SafetySettings = Field(default_factory=SafetySettings)
+    sandbox: SandboxSettings = Field(default_factory=SandboxSettings)
     telemetry: TelemetrySettings = Field(default_factory=TelemetrySettings)
     roles: list[str] = Field(
         default_factory=lambda: ["all"],

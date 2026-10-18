@@ -1,0 +1,51 @@
+name: PR title
+
+on:
+  pull_request_target:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  pull-requests: read
+
+jobs:
+  conventional-title:
+    name: Conventional commit title
+    runs-on: ubuntu-latest
+    steps:
+      # pull_request_target is safe here: nothing from the PR is checked out or executed.
+      - uses: amannn/action-semantic-pull-request@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: |
+            feat
+            fix
+            perf
+            refactor
+            docs
+            test
+            build
+            ci
+            chore
+            revert
+          scopes: |
+            agent-substrate
+            substrate-cloud
+            substrate-ui
+            substrate-data
+            substrate-data-client
+            substrate-data-web
+            document-intelligence
+            embedding-reranker
+            inference-pool
+            contracts
+            identity
+            deploy
+            docs
+            adr
+            ci
+            deps
+            repo
+          requireScope: false
+          subjectPattern: ^(?![A-Z]).+$
+          subjectPatternError: The subject "{subject}" must not start with an uppercase letter.

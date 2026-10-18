@@ -1,0 +1,308 @@
+name: CI
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+  push:
+    branches: [main]
+  merge_group:
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "22"
+
+jobs:
+  # ── Path filter: which packages changed, including their dependents ───────
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      python: ${{ steps.plan.outputs.python }}
+      js: ${{ steps.plan.outputs.js }}
+      document-intelligence: ${{ steps.plan.outputs.document-intelligence }}
+      substrate-data: ${{ steps.plan.outputs.substrate-data }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        if: github.event_name == 'pull_request'
+        with:
+          list-files: none
+          filters: |
+            # Anything in `shared` affects every package.
+            shared: &shared
+              - 'contracts/**'
+              - 'identity/**'
+              - 'pyproject.toml'
+              - 'uv.lock'
+              - '.github/workflows/ci.yml'
+              - '.editorconfig'
+            # Anything in `js-shared` affects every JS package.
+            js-shared: &js-shared
+              - 'package.json'
+              - 'pnpm-workspace.yaml'
+              - 'pnpm-lock.yaml'
+              - '.npmrc'
+            # Dependents of agent-substrate: substrate-cloud, embedding-reranker,
+            # inference-pool, document-intelligence, substrate-data.
+            agent-substrate:
+              - *shared
+              - 'agents/agent-substrate/**'
+              - 'data/substrate-data-client/**' # the [data] adapter tests
+            # substrate-data-client -> substrate-data and agent-substrate's [data] adapter tests.
+            substrate-data-client:
+              - *shared
+              - 'agents/agent-substrate/**'
+              - 'data/substrate-data-client/**'
+            inference-pool:
+              - *shared
+              - 'agents/agent-substrate/**'
+              - 'data/inference-pool/**'
+            embedding-reranker:
+              - *shared
+              - 'agents/agent-substrate/**'
+              - 'data/inference-pool/**'
+              - 'data/embedding-reranker/**'
+            substrate-cloud:
+              - *shared
+              - 'agents/agent-substrate/**'
+              - 'agents/substrate-cloud/**'
+            substrate-data:
+              - *shared
+              - 'agents/agent-substrate/**'
+              - 'data/substrate-data-client/**'
+              - 'data/substrate-data/**'
+            document-intelligence:
+              - *shared
+              - 'agents/agent-substrate/**'
+              - 'data/inference-pool/**'
+              - 'data/document-intelligence/**'
+            substrate-ui:
+              - *shared
+              - *js-shared
+              - 'agents/substrate-ui/**'
+            substrate-data-web:
+              - *shared
+              - *js-shared
+              - 'data/substrate-data-web/**'
+      # Pushes to main and merge-queue runs always test everything.
+      - name: Build job plan
+        id: plan
+        env:
+          EVENT: ${{ github.event_name }}
+          FILTERED: ${{ steps.filter.outputs.changes }}
+        run: |
+          ALL='["agent-substrate","substrate-data-client","inference-pool","embedding-reranker","substrate-cloud","substrate-data","document-intelligence","substrate-ui","substrate-data-web"]'
+          CHANGED="${FILTERED:-[]}"
+          if [ "$EVENT" != "pull_request" ]; then CHANGED="$ALL"; fi
+          PY='["agent-substrate","substrate-data-client","inference-pool","embedding-reranker","substrate-cloud","substrate-data"]'
+          JS='["substrate-ui","substrate-data-web"]'
+          echo "python=$(jq -c --argjson s "$PY" '[.[] | select(. as $x | $s | index($x))]' <<<"$CHANGED")" >> "$GITHUB_OUTPUT"
+          echo "js=$(jq -c --argjson s "$JS" '[.[] | select(. as $x | $s | index($x))]' <<<"$CHANGED")" >> "$GITHUB_OUTPUT"
+          echo "document-intelligence=$(jq -r 'index("document-intelligence") != null' <<<"$CHANGED")" >> "$GITHUB_OUTPUT"
+          echo "substrate-data=$(jq -r 'index("substrate-data") != null' <<<"$CHANGED")" >> "$GITHUB_OUTPUT"
+
+  # ── Python packages in the uv workspace (one lock, Python 3.14) ───────────
+  python:
+    name: Python / ${{ matrix.package }}
+    needs: changes
+    if: needs.changes.outputs.python != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        package: ${{ fromJSON(needs.changes.outputs.python) }}
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: agentdb
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+    env:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/agentdb
+      REDIS_URL: redis://localhost:6379/0
+      OPENAI_API_KEY: sk-test-placeholder
+      JWT_SECRET: test-jwt-secret-not-for-production-use-0000000000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - name: Resolve package directory
+        run: |
+          case "${{ matrix.package }}" in
+            agent-substrate|substrate-cloud) d="agents/${{ matrix.package }}" ;;
+            *) d="data/${{ matrix.package }}" ;;
+          esac
+          echo "PKG_DIR=$d" >> "$GITHUB_ENV"
+      - name: Install (frozen lock, all workspace packages)
+        run: uv sync --frozen --all-packages
+      # ruff comes from uv.lock, so the version used here is the locked one.
+      - name: Ruff check
+        working-directory: ${{ env.PKG_DIR }}
+        run: uv run --frozen ruff check .
+      - name: Ruff format
+        working-directory: ${{ env.PKG_DIR }}
+        run: uv run --frozen ruff format --check .
+      - name: Import boundaries (import-linter)
+        if: matrix.package == 'agent-substrate' || matrix.package == 'substrate-cloud'
+        working-directory: ${{ env.PKG_DIR }}
+        run: uv run --frozen lint-imports
+      - name: Pyright (non-blocking, as before)
+        if: matrix.package == 'agent-substrate'
+        continue-on-error: true
+        working-directory: ${{ env.PKG_DIR }}
+        run: uv run --frozen --with pyright pyright src/
+      - name: Dependency audit (non-blocking, as before)
+        if: matrix.package == 'agent-substrate'
+        continue-on-error: true
+        working-directory: ${{ env.PKG_DIR }}
+        run: uv run --frozen --with pip-audit pip-audit --skip-editable
+      - name: Tests
+        working-directory: ${{ env.PKG_DIR }}
+        env:
+          # Docker-backed integration tests run in the separate `integration` job.
+          SUBSTRATE_DATA_SKIP_INTEGRATION: "1"
+        run: |
+          if [ -d tests ]; then
+            uv run --frozen pytest --tb=short -q --junitxml=test-results.xml
+          else
+            echo "no tests directory in $PKG_DIR"
+          fi
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.package }}
+          path: ${{ env.PKG_DIR }}/test-results.xml
+          if-no-files-found: ignore
+
+  # ── substrate-data tests that need Docker (SeaweedFS, Iceberg catalog, ...) ─
+  integration:
+    name: substrate-data integration
+    needs: changes
+    if: >-
+      needs.changes.outputs.substrate-data == 'true' &&
+      (github.event_name == 'merge_group' ||
+       contains(github.event.pull_request.labels.*.name, 'run-integration'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - run: uv sync --frozen --all-packages
+      - name: Integration tests
+        working-directory: data/substrate-data
+        run: uv run --frozen pytest -q tests
+
+  # ── document-intelligence: Python 3.13, its own project, not in the workspace ─
+  document-intelligence:
+    name: Python / document-intelligence
+    needs: changes
+    if: needs.changes.outputs.document-intelligence == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: data/document-intelligence
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: data/document-intelligence/pyproject.toml
+          python-version: "3.13"
+      # No data/document-intelligence/uv.lock is committed yet; once it is, switch to `uv sync --frozen`.
+      - name: Install
+        run: uv sync
+      - name: Ruff check
+        run: uv run ruff check .
+      - name: Ruff format
+        run: uv run ruff format --check .
+      - name: Tests
+        run: uv run pytest --tb=short -q
+
+  # ── JavaScript apps (pnpm workspace) ───────────────────────────────────────
+  js:
+    name: JS / ${{ matrix.package }}
+    needs: changes
+    if: needs.changes.outputs.js != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        package: ${{ fromJSON(needs.changes.outputs.js) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4 # pnpm version comes from "packageManager" in the root package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - name: Resolve package directory
+        run: |
+          case "${{ matrix.package }}" in
+            substrate-ui) d="./agents/substrate-ui" ;;
+            *) d="./data/substrate-data-web" ;;
+          esac
+          echo "PKG=$d" >> "$GITHUB_ENV"
+      - run: pnpm install --frozen-lockfile
+      - name: Lint
+        run: pnpm --filter "$PKG" lint
+      - name: Typecheck
+        run: pnpm --filter "$PKG" typecheck
+      - name: Design-system ratchet
+        if: matrix.package == 'substrate-ui'
+        run: pnpm --filter "$PKG" check:design
+      - name: Unit tests (vitest)
+        run: pnpm --filter "$PKG" test
+      - name: Build
+        env:
+          NEXT_PUBLIC_API_URL: ""
+        run: pnpm --filter "$PKG" build
+
+  # ── The only required status check ─────────────────────────────────────────
+  ci-ok:
+    name: ci-ok
+    if: always()
+    needs: [changes, python, integration, document-intelligence, js]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail if any needed job failed or was cancelled (skipped is fine)
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          echo "$RESULTS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          echo "$RESULTS" | jq -e '[.[] | .result] | all(. == "success" or . == "skipped")' > /dev/null

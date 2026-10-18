@@ -1,0 +1,112 @@
+name: Release
+
+# release-please opens one release PR per component (separate-pull-requests). Merging a release PR
+# creates the tag `<component>-v<version>` and a GitHub release; this workflow then publishes artifacts
+# for that component from the tag.
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  release-please:
+    name: release-please
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      agent-substrate-released: ${{ steps.rp.outputs['agents/agent-substrate--release_created'] }}
+      agent-substrate-tag: ${{ steps.rp.outputs['agents/agent-substrate--tag_name'] }}
+      substrate-data-client-released: ${{ steps.rp.outputs['data/substrate-data-client--release_created'] }}
+      substrate-data-client-tag: ${{ steps.rp.outputs['data/substrate-data-client--tag_name'] }}
+      substrate-data-released: ${{ steps.rp.outputs['data/substrate-data--release_created'] }}
+      substrate-data-tag: ${{ steps.rp.outputs['data/substrate-data--tag_name'] }}
+      substrate-data-version: ${{ steps.rp.outputs['data/substrate-data--version'] }}
+      substrate-ui-released: ${{ steps.rp.outputs['agents/substrate-ui--release_created'] }}
+      substrate-ui-tag: ${{ steps.rp.outputs['agents/substrate-ui--tag_name'] }}
+      substrate-ui-version: ${{ steps.rp.outputs['agents/substrate-ui--version'] }}
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: rp
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  # ── PyPI (trusted publishing, OIDC; no API tokens) ─────────────────────────
+  publish-agent-substrate:
+    name: PyPI / agent-substrate
+    needs: release-please
+    if: needs.release-please.outputs.agent-substrate-released == 'true'
+    runs-on: ubuntu-latest
+    environment: pypi-agent-substrate
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release-please.outputs.agent-substrate-tag }}
+      - uses: astral-sh/setup-uv@v6
+      - run: uv build --package agent-substrate
+      - run: uv publish
+
+  publish-substrate-data-client:
+    name: PyPI / substrate-data-client
+    needs: release-please
+    if: needs.release-please.outputs.substrate-data-client-released == 'true'
+    runs-on: ubuntu-latest
+    environment: pypi-substrate-data-client
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release-please.outputs.substrate-data-client-tag }}
+      - uses: astral-sh/setup-uv@v6
+      - run: uv build --package substrate-data-client
+      - run: uv publish
+
+  # ── Container images (GHCR) ────────────────────────────────────────────────
+  # Only components that have a Dockerfile are listed. Missing: substrate-cloud (only an mcp_server
+  # Dockerfile, not the service) and substrate-data-web (no Dockerfile). Add a job here when they exist.
+  image-substrate-data:
+    name: Image / substrate-data
+    needs: release-please
+    if: needs.release-please.outputs.substrate-data-released == 'true'
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    uses: ./.github/workflows/_image.yml
+    with:
+      image: substrate-data
+      ref: ${{ needs.release-please.outputs.substrate-data-tag }}
+      version: ${{ needs.release-please.outputs.substrate-data-version }}
+      context: data/substrate-data
+      file: data/substrate-data/deployment/compute.Dockerfile
+
+  image-substrate-ui:
+    name: Image / substrate-ui
+    needs: release-please
+    if: needs.release-please.outputs.substrate-ui-released == 'true'
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    uses: ./.github/workflows/_image.yml
+    with:
+      image: substrate-ui
+      ref: ${{ needs.release-please.outputs.substrate-ui-tag }}
+      version: ${{ needs.release-please.outputs.substrate-ui-version }}
+      context: agents/substrate-ui
+      file: agents/substrate-ui/Dockerfile

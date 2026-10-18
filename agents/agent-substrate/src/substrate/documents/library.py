@@ -83,6 +83,7 @@ from substrate.stores import textsearch
 from substrate.models.protocols import EmbeddingModel, Modality, Reranker
 from substrate.models.remote import RemoteEmbedder, RemoteReranker
 from substrate.stores.database import Database, Tx
+from substrate.stores.database import under as db_under
 from substrate.stores.vector import Document
 from substrate.types.content import MediaBlock, TextBlock
 from substrate.types.errors import ContextLengthError, ServiceUnavailableError
@@ -689,11 +690,13 @@ class Library:
         """``(collection, document count)`` for every collection at or under the prefix ``under``, by name."""
         under = under.strip("/")
 
+        clause, params = db_under("collection", under)
+
         async def op(tx: Tx) -> list[tuple[str, int]]:
             rows = await tx.fetchall(
-                "SELECT collection, COUNT(*) AS n FROM library_documents WHERE collection = ? OR collection LIKE ? GROUP BY collection ORDER BY collection",
-                under, under + "/%",
-            )  # fmt: skip
+                f"SELECT collection, COUNT(*) AS n FROM library_documents WHERE {clause} GROUP BY collection ORDER BY collection",  # noqa: S608
+                *params,
+            )
             return [(row["collection"], int(row["n"])) for row in rows]
 
         return await self._run(op)
@@ -1106,12 +1109,12 @@ class Library:
         document's bundle, and each collection's index. Only what this library wrote — other files under ``prefix`` are not touched.
         Returns the number of documents removed."""
         prefix = prefix.strip("/")
+        clause, params = db_under("collection", prefix)
 
         async def op(tx: Tx) -> list[tuple[str, str]]:
             rows = await tx.fetchall(
-                "SELECT collection, document FROM library_documents WHERE collection = ? OR collection LIKE ?",
-                prefix,
-                prefix + "/%",
+                f"SELECT collection, document FROM library_documents WHERE {clause}",  # noqa: S608
+                *params,
             )
             for table in (
                 "library_sections",
@@ -1119,11 +1122,7 @@ class Library:
                 "library_documents",
                 *_ENRICHMENT_TABLES,
             ):
-                await tx.execute(
-                    f"DELETE FROM {table} WHERE collection = ? OR collection LIKE ?",
-                    prefix,
-                    prefix + "/%",
-                )  # noqa: S608
+                await tx.execute(f"DELETE FROM {table} WHERE {clause}", *params)  # noqa: S608 — fixed names
             return [(r["collection"], r["document"]) for r in rows]
 
         removed = await self._run(op)

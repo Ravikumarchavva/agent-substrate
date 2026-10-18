@@ -7,6 +7,8 @@
     │   └── ServiceUnavailableError   a service reached by URL is down, timed out or answered 5xx
     └── PermanentError         trying again cannot help
         ├── InvalidRequestError       the input breaks a rule
+        │   ├── ContextLengthError    longer than a model takes
+        │   └── UnsupportedContentError   content a component cannot take
         ├── NotFoundError             nothing there (also what another tenant's or user's object looks like)
         ├── ForbiddenError            known caller, not allowed
         ├── UnauthenticatedError      no or bad credentials
@@ -89,9 +91,27 @@ class RateLimitedError(TransientError):
 class ServiceUnavailableError(TransientError):
     code: ClassVar[str] = "unavailable"
 
+    def __init__(self, message: str = "service unavailable", *, url: str | None = None) -> None:
+        super().__init__(message)
+        self.url = url  # for logs only: an internal address is never shown to a caller
+
 
 class InvalidRequestError(PermanentError):
     pass
+
+
+class ContextLengthError(InvalidRequestError):
+    """An input longer than a model takes (an embedder's or a chat model's context window)."""
+
+    def __init__(
+        self, message: str = "context length exceeded", *, limit: int | None = None
+    ) -> None:
+        super().__init__(message)
+        self.limit = limit
+
+
+class UnsupportedContentError(InvalidRequestError):
+    """Content a component cannot take (an image for a text-only embedder): refused, never silently dropped."""
 
 
 class NotFoundError(PermanentError):
@@ -158,6 +178,7 @@ def http_status(error: BaseException) -> int:
 __all__ = [
     "HTTP_STATUS",
     "ConflictError",
+    "ContextLengthError",
     "ForbiddenError",
     "InvalidRequestError",
     "LoamzError",
@@ -170,6 +191,7 @@ __all__ = [
     "ServiceUnavailableError",
     "TransientError",
     "UnauthenticatedError",
+    "UnsupportedContentError",
     "VectorSpaceError",
     "http_status",
 ]

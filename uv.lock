@@ -2416,6 +2416,10 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+ocr = [
+    { name = "onnxruntime" },
+    { name = "rapidocr" },
+]
 pdf = [
     { name = "pypdfium2" },
 ]
@@ -2425,6 +2429,9 @@ postgres = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "asyncpg" },
+    { name = "httpx" },
+    { name = "pypdfium2" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-timeout" },
@@ -2434,13 +2441,18 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "asyncpg", marker = "extra == 'postgres'", specifier = ">=0.31.0" },
+    { name = "onnxruntime", marker = "extra == 'ocr'", specifier = ">=1.23.0" },
     { name = "pydantic", specifier = ">=2.12" },
-    { name = "pypdfium2", marker = "extra == 'pdf'", specifier = ">=4.30" },
+    { name = "pypdfium2", marker = "extra == 'pdf'", specifier = ">=5.0.0" },
+    { name = "rapidocr", marker = "extra == 'ocr'", specifier = ">=3.0.0" },
 ]
-provides-extras = ["postgres", "pdf"]
+provides-extras = ["postgres", "pdf", "ocr"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "asyncpg", specifier = ">=0.31.0" },
+    { name = "httpx", specifier = ">=0.28,<1" },
+    { name = "pypdfium2", specifier = ">=5.0.0" },
     { name = "pytest", specifier = ">=9" },
     { name = "pytest-asyncio", specifier = ">=1.4" },
     { name = "pytest-timeout", specifier = ">=2.3" },

@@ -113,7 +113,7 @@ async def test_upload_scoped_key_and_workspace_management(tmp_path) -> None:
             app.dependency_overrides[get_current_user] = lambda: _claims_for(user_id)
             try:
                 async with AsyncClient(
-                    transport=ASGITransport(app=app), base_url="http://test"
+                    transport=ASGITransport(app=app), base_url="http://test/api/v1"
                 ) as client:
                     # Upload without a thread_id -> tenants/{tid}/users/{uid}/uploads/...
                     resp = await client.post(
@@ -179,7 +179,7 @@ async def test_upload_auto_creates_missing_user_row(tmp_path) -> None:
         )
         try:
             async with AsyncClient(
-                transport=ASGITransport(app=app), base_url="http://test"
+                transport=ASGITransport(app=app), base_url="http://test/api/v1"
             ) as client:
                 resp = await client.post(
                     "/files/upload",
@@ -218,7 +218,7 @@ async def test_thread_scoped_upload_and_cross_user_isolation(tmp_path) -> None:
                 app.dependency_overrides[get_current_user] = lambda: _claims_for(user_1)
                 try:
                     async with AsyncClient(
-                        transport=ASGITransport(app=app), base_url="http://test"
+                        transport=ASGITransport(app=app), base_url="http://test/api/v1"
                     ) as client:
                         resp = await client.post(
                             "/files/upload",
@@ -240,7 +240,7 @@ async def test_thread_scoped_upload_and_cross_user_isolation(tmp_path) -> None:
                 app.dependency_overrides[get_current_user] = lambda: _claims_for(user_2)
                 try:
                     async with AsyncClient(
-                        transport=ASGITransport(app=app), base_url="http://test"
+                        transport=ASGITransport(app=app), base_url="http://test/api/v1"
                     ) as client:
                         files = (await client.get("/workspace/files")).json()["files"]
                         assert all(f["path"] != key for f in files)
@@ -278,7 +278,7 @@ async def test_serve_and_save_file_deny_a_same_tenant_stranger(tmp_path) -> None
                 app.dependency_overrides[get_current_user] = lambda: _claims_for(user_1)
                 try:
                     async with AsyncClient(
-                        transport=ASGITransport(app=app), base_url="http://test"
+                        transport=ASGITransport(app=app), base_url="http://test/api/v1"
                     ) as client:
                         upload_resp = await client.post(
                             "/files/upload",
@@ -294,7 +294,7 @@ async def test_serve_and_save_file_deny_a_same_tenant_stranger(tmp_path) -> None
                 app.dependency_overrides[get_current_user] = lambda: _claims_for(user_2)
                 try:
                     async with AsyncClient(
-                        transport=ASGITransport(app=app), base_url="http://test"
+                        transport=ASGITransport(app=app), base_url="http://test/api/v1"
                     ) as client:
                         read = await client.get(
                             "/workspace/file",
@@ -315,7 +315,7 @@ async def test_serve_and_save_file_deny_a_same_tenant_stranger(tmp_path) -> None
                 app.dependency_overrides[get_current_user] = lambda: _claims_for(user_1)
                 try:
                     async with AsyncClient(
-                        transport=ASGITransport(app=app), base_url="http://test"
+                        transport=ASGITransport(app=app), base_url="http://test/api/v1"
                     ) as client:
                         still = await client.get(
                             "/workspace/file",
@@ -350,7 +350,7 @@ async def test_delete_file_locks_the_owners_own_thread(tmp_path) -> None:
                 )
                 try:
                     async with AsyncClient(
-                        transport=ASGITransport(app=app), base_url="http://test"
+                        transport=ASGITransport(app=app), base_url="http://test/api/v1"
                     ) as client:
                         upload_resp = await client.post(
                             "/files/upload",
@@ -397,7 +397,7 @@ async def test_list_files_lists_each_conversation_file_once(tmp_path) -> None:
                 )
                 try:
                     async with AsyncClient(
-                        transport=ASGITransport(app=app), base_url="http://test"
+                        transport=ASGITransport(app=app), base_url="http://test/api/v1"
                     ) as client:
                         resp = await client.post(
                             "/files/upload",
@@ -454,7 +454,7 @@ async def test_serve_file_sets_etag_and_honors_if_none_match(tmp_path) -> None:
                 )
                 try:
                     async with AsyncClient(
-                        transport=ASGITransport(app=app), base_url="http://test"
+                        transport=ASGITransport(app=app), base_url="http://test/api/v1"
                     ) as client:
                         upload_resp = await client.post(
                             "/files/upload",
@@ -512,7 +512,7 @@ async def test_serve_file_pinned_version_is_cached_immutable(tmp_path) -> None:
                 )
                 try:
                     async with AsyncClient(
-                        transport=ASGITransport(app=app), base_url="http://test"
+                        transport=ASGITransport(app=app), base_url="http://test/api/v1"
                     ) as client:
                         upload_resp = await client.post(
                             "/files/upload",

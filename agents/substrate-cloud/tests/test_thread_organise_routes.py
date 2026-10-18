@@ -31,7 +31,7 @@ async def session():
         tenant, user = f"threadtest-{suffix}", f"user-{suffix}"
         app.dependency_overrides[get_current_user] = lambda: claims(user, tenant)
         async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
+            transport=ASGITransport(app=app), base_url="http://test/api/v1"
         ) as c:
             c.tenant, c.user = tenant, user
             try:

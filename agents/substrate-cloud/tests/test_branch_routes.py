@@ -89,7 +89,7 @@ async def test_list_and_fork_branches():
                 try:
                     transport = ASGITransport(app=app)
                     async with AsyncClient(
-                        transport=transport, base_url="http://test"
+                        transport=transport, base_url="http://test/api/v1"
                     ) as client:
                         # 1. List branches -> should return at least "main"
                         res = await client.get(f"/threads/{thread_id}/branches")
@@ -186,7 +186,7 @@ async def test_fork_points_new_branch_at_the_same_workspace_snapshot():
 
                     transport = ASGITransport(app=app)
                     async with AsyncClient(
-                        transport=transport, base_url="http://test"
+                        transport=transport, base_url="http://test/api/v1"
                     ) as client:
                         fork_res = await client.post(
                             f"/threads/{thread_id}/branches/fork",
@@ -218,7 +218,7 @@ async def test_delete_branch_removes_it_and_rejects_main():
                 try:
                     transport = ASGITransport(app=app)
                     async with AsyncClient(
-                        transport=transport, base_url="http://test"
+                        transport=transport, base_url="http://test/api/v1"
                     ) as client:
                         fork_res = await client.post(
                             f"/threads/{thread_id}/branches/fork",
@@ -256,7 +256,7 @@ async def test_branch_messages_ancestry():
                 try:
                     transport = ASGITransport(app=app)
                     async with AsyncClient(
-                        transport=transport, base_url="http://test"
+                        transport=transport, base_url="http://test/api/v1"
                     ) as client:
                         # Initially empty
                         msg_res = await client.get(
@@ -343,7 +343,7 @@ async def test_checkpoints_endpoints():
                 try:
                     transport = ASGITransport(app=app)
                     async with AsyncClient(
-                        transport=transport, base_url="http://test"
+                        transport=transport, base_url="http://test/api/v1"
                     ) as client:
                         # Append a node first so we have an anchor
                         history = bind_threads(
@@ -404,7 +404,7 @@ async def test_tenant_and_owner_isolation():
                 app.dependency_overrides[get_current_user] = lambda: stranger_claims
                 try:
                     async with AsyncClient(
-                        transport=transport, base_url="http://test"
+                        transport=transport, base_url="http://test/api/v1"
                     ) as client:
                         res = await client.get(f"/threads/{thread_id}/branches")
                         assert res.status_code == 404
@@ -415,7 +415,7 @@ async def test_tenant_and_owner_isolation():
                 app.dependency_overrides[get_current_user] = lambda: cross_tenant_claims
                 try:
                     async with AsyncClient(
-                        transport=transport, base_url="http://test"
+                        transport=transport, base_url="http://test/api/v1"
                     ) as client:
                         res = await client.get(f"/threads/{thread_id}/branches")
                         assert res.status_code == 404

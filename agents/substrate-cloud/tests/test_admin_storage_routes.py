@@ -61,7 +61,7 @@ async def test_storage_routes_require_admin_role(tmp_path) -> None:
         app.dependency_overrides[get_current_user] = lambda: _user_claims("u1")
         try:
             async with AsyncClient(
-                transport=ASGITransport(app=app), base_url="http://test"
+                transport=ASGITransport(app=app), base_url="http://test/api/v1"
             ) as client:
                 resp = await client.get("/admin/storage")
                 assert resp.status_code == 403
@@ -93,7 +93,7 @@ async def test_list_storage_tenants_and_conversations(tmp_path) -> None:
         app.dependency_overrides[get_current_user] = lambda: _admin_claims()
         try:
             async with AsyncClient(
-                transport=ASGITransport(app=app), base_url="http://test"
+                transport=ASGITransport(app=app), base_url="http://test/api/v1"
             ) as client:
                 resp = await client.get("/admin/storage")
                 assert resp.status_code == 200
@@ -131,7 +131,7 @@ async def test_set_quota_persists_and_takes_effect_immediately(tmp_path) -> None
         async with _no_quota_row("tenant1"):
             try:
                 async with AsyncClient(
-                    transport=ASGITransport(app=app), base_url="http://test"
+                    transport=ASGITransport(app=app), base_url="http://test/api/v1"
                 ) as client:
                     resp = await client.put(
                         "/admin/storage/tenant1/quota", json={"quota_bytes": 42}
@@ -179,7 +179,7 @@ async def test_storage_routes_501_for_non_workspace_backend() -> None:
         app.dependency_overrides[get_current_user] = lambda: _admin_claims()
         try:
             async with AsyncClient(
-                transport=ASGITransport(app=app), base_url="http://test"
+                transport=ASGITransport(app=app), base_url="http://test/api/v1"
             ) as client:
                 resp = await client.get("/admin/storage")
                 assert resp.status_code == 501

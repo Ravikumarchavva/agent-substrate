@@ -155,7 +155,7 @@ async def test_scheduled_tasks_crud_endpoints(database_url: str) -> None:
 
     async with app.router.lifespan_context(app):
         async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
+            transport=ASGITransport(app=app), base_url="http://test/api/v1"
         ) as client:
             # 1. Create a task
             payload = {
@@ -211,7 +211,9 @@ async def test_scheduled_tasks_crud_endpoints(database_url: str) -> None:
 @pytest.mark.asyncio
 async def test_scheduled_parse_endpoint() -> None:
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
+    async with AsyncClient(
+        transport=transport, base_url="http://test/api/v1"
+    ) as client:
         # We query the NLP parser. Since LLM is used, we can mock or make a request.
         # Here we just verify that it handles requests, but since LLM might run live,
         # we check for 200 or correct format if LLM credentials are set.

@@ -46,7 +46,7 @@ async def test_list_memories_returns_only_this_users_facts() -> None:
         app.dependency_overrides[get_current_user] = lambda: _claims_for(user_a)
         try:
             async with AsyncClient(
-                transport=ASGITransport(app=app), base_url="http://test"
+                transport=ASGITransport(app=app), base_url="http://test/api/v1"
             ) as client:
                 resp = await client.get("/me/memories")
                 assert resp.status_code == 200
@@ -70,7 +70,7 @@ async def test_delete_memory_removes_it() -> None:
         app.dependency_overrides[get_current_user] = lambda: _claims_for(user_id)
         try:
             async with AsyncClient(
-                transport=ASGITransport(app=app), base_url="http://test"
+                transport=ASGITransport(app=app), base_url="http://test/api/v1"
             ) as client:
                 resp = await client.delete(f"/me/memories/{mem_id}")
                 assert resp.status_code == 204
@@ -97,7 +97,7 @@ async def test_delete_memory_owned_by_another_user_is_not_found() -> None:
         app.dependency_overrides[get_current_user] = lambda: _claims_for(attacker)
         try:
             async with AsyncClient(
-                transport=ASGITransport(app=app), base_url="http://test"
+                transport=ASGITransport(app=app), base_url="http://test/api/v1"
             ) as client:
                 resp = await client.delete(f"/me/memories/{mem_id}")
                 assert resp.status_code == 404
@@ -115,7 +115,7 @@ async def test_delete_missing_memory_returns_404() -> None:
         app.dependency_overrides[get_current_user] = lambda: _claims_for("no-such-user")
         try:
             async with AsyncClient(
-                transport=ASGITransport(app=app), base_url="http://test"
+                transport=ASGITransport(app=app), base_url="http://test/api/v1"
             ) as client:
                 resp = await client.delete("/me/memories/does-not-exist")
                 assert resp.status_code == 404

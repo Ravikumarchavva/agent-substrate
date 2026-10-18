@@ -6,8 +6,9 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.utils import get_openapi
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
 from substrate_cloud.shared.settings import settings
@@ -70,6 +71,9 @@ from substrate_cloud.shared.observability.telemetry import (
     configure_opentelemetry,
     shutdown_opentelemetry,
 )
+from substrate_cloud.monolith.routes.entitlements import router as entitlements_router
+from substrate_cloud.shared.auth.verifier import build_verifier
+from substrate_cloud.shared.problem import install_problem_handlers
 from substrate_cloud.shared.rate_limit import rate_limit_settings
 
 logger = logging.getLogger(__name__)
@@ -139,7 +143,8 @@ async def lifespan(app: FastAPI):
             removed_rows,
         )
 
-    app.state.jwt_secret = settings.JWT_SECRET
+    # Every request is verified against the realm; fail at startup rather than answer 503 to all of them.
+    app.state.token_verifier = build_verifier(settings)
 
     from substrate_cloud.documents_library import (
         EnrichmentQueue,
@@ -419,12 +424,50 @@ async def lifespan(app: FastAPI):
     shutdown_opentelemetry()
 
 
+API_PREFIX = "/api/v1"
+
+
+def _openapi(app: FastAPI) -> dict:
+    """The OpenAPI document with the bearer scheme every /api/v1 route requires."""
+    if app.openapi_schema is None:
+        schema = get_openapi(
+            title="Substrate Agent API",
+            version="1.0.0",
+            routes=app.routes,
+            description=app.description,
+        )
+        schema.setdefault("components", {}).setdefault("securitySchemes", {})[
+            "oidc"
+        ] = {
+            "type": "http",
+            "scheme": "bearer",
+            "bearerFormat": "JWT",
+            "description": "A Keycloak access token (RS256) of the cell's realm, audience agent-substrate.",
+        }
+        schema["components"].setdefault("schemas", {})["Problem"] = {
+            "type": "object",
+            "description": "RFC 9457 problem details, served as application/problem+json for every error.",
+            "required": ["type", "title", "status", "detail"],
+            "properties": {
+                "type": {"type": "string", "format": "uri"},
+                "title": {"type": "string"},
+                "status": {"type": "integer"},
+                "detail": {"type": "string"},
+                "instance": {"type": "string"},
+            },
+            "additionalProperties": True,
+        }
+        schema["security"] = [{"oidc": []}]
+        app.openapi_schema = schema
+    return app.openapi_schema
+
+
 def create_app() -> FastAPI:
     quiet_polls()
     """Build and return the FastAPI application."""
     app = FastAPI(
-        title="Agent Framework Chat Server",
-        version="0.1.0",
+        title="Substrate Agent API",
+        version="1.0.0",
         lifespan=lifespan,
     )
 
@@ -436,40 +479,50 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    app.include_router(admin_router)
-    app.include_router(workspace_oauth_router)
-    app.include_router(agents_router)
-    app.include_router(groups_router)
-    app.include_router(feed_router)
-    app.include_router(agent_view_router)
-    app.include_router(threads_router)
-    app.include_router(branches_router)
-    app.include_router(memory_router)
-    app.include_router(artifacts_router)
-    app.include_router(chat_router)
-    app.include_router(cancel_router)
-    app.include_router(hitl_router)
-    app.include_router(feedback_router)
-    app.include_router(audio_router)
-    app.include_router(mcp_apps_router)
-    app.include_router(connector_tokens_router)
-    app.include_router(tasks_router)
-    app.include_router(pipelines_router)
-    app.include_router(triggers_router)
-    app.include_router(shared_router)
-    app.include_router(preferences_router)
-    app.include_router(notifications_router)
-    app.include_router(health_router)
-    app.include_router(data_keys_router)
-    app.include_router(usage_router)
-    app.include_router(export_router)
-    app.include_router(scheduled_router)
-    app.include_router(rag_router)
-    app.include_router(files_router)
-    app.include_router(workspace_router)
-    app.include_router(gdpr_router)
-    app.include_router(knowledge_router)
-    app.include_router(rate_limit_router)
+    # The Agent API: everything but the liveness probes is under /api/v1 (contracts/agents/v1/openapi.json).
+    api = APIRouter(prefix=API_PREFIX)
+    api.include_router(admin_router)
+    api.include_router(workspace_oauth_router)
+    api.include_router(agents_router)
+    api.include_router(groups_router)
+    api.include_router(feed_router)
+    api.include_router(agent_view_router)
+    api.include_router(threads_router)
+    api.include_router(branches_router)
+    api.include_router(memory_router)
+    api.include_router(artifacts_router)
+    api.include_router(chat_router)
+    api.include_router(cancel_router)
+    api.include_router(hitl_router)
+    api.include_router(feedback_router)
+    api.include_router(audio_router)
+    api.include_router(mcp_apps_router)
+    api.include_router(connector_tokens_router)
+    api.include_router(tasks_router)
+    api.include_router(pipelines_router)
+    api.include_router(triggers_router)
+    api.include_router(shared_router)
+    api.include_router(preferences_router)
+    api.include_router(notifications_router)
+    api.include_router(usage_router)
+    api.include_router(export_router)
+    api.include_router(scheduled_router)
+    api.include_router(rag_router)
+    api.include_router(files_router)
+    api.include_router(workspace_router)
+    api.include_router(gdpr_router)
+    api.include_router(knowledge_router)
+    api.include_router(rate_limit_router)
+    api.include_router(entitlements_router)
+    app.include_router(api)
+    app.include_router(
+        data_keys_router
+    )  # /.well-known/data-token-jwks.json: a well-known path, not part of the versioned API
+    app.include_router(
+        health_router
+    )  # /health and /health/ready: unversioned infrastructure probes
+    install_problem_handlers(app)
+    app.openapi = lambda: _openapi(app)  # type: ignore[method-assign]
 
     @app.get("/health", tags=["infra"])
     async def health():

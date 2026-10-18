@@ -50,7 +50,7 @@ async def session():
         real = app.state.ctx.runtime
         try:
             async with AsyncClient(
-                transport=ASGITransport(app=app), base_url="http://test"
+                transport=ASGITransport(app=app), base_url="http://test/api/v1"
             ) as c:
                 c.tenant = tenant
                 yield c

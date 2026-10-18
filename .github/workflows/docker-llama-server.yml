@@ -8,7 +8,7 @@ on:
   push:
     branches: [main]
     paths:
-      - deploy/legacy-agents/docker/llama-server*.Dockerfile
+      - deploy/docker/llama-server*.Dockerfile
       - .github/workflows/docker-llama-server.yml
   workflow_dispatch:
 
@@ -31,9 +31,9 @@ jobs:
       matrix:
         include:
           - variant: cpu
-            dockerfile: deploy/legacy-agents/docker/llama-server.Dockerfile
+            dockerfile: deploy/docker/llama-server.Dockerfile
           - variant: gpu
-            dockerfile: deploy/legacy-agents/docker/llama-server.gpu.Dockerfile
+            dockerfile: deploy/docker/llama-server.gpu.Dockerfile
     steps:
       - uses: actions/checkout@v4
       - name: Lowercase image path
@@ -46,7 +46,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - uses: docker/build-push-action@v6
         with:
-          context: deploy/legacy-agents/docker
+          context: deploy/docker
           file: ${{ matrix.dockerfile }}
           push: true
           tags: |

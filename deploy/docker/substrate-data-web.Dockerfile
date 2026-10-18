@@ -4,6 +4,7 @@
 #
 # Build (context = monorepo root):
 #   docker build -f deploy/docker/substrate-data-web.Dockerfile -t substrate-data-web:local .
+# No unauthenticated route exists to probe, so the health check is a TCP connect.
 # Runtime configuration: DATA_API_URL, SUBSTRATE_DATA_OIDC_ISSUER, WEB_PUBLIC_URL, WEB_CLIENT_ID, WEB_CLIENT_SECRET, WEB_SESSION_SECRET.
 FROM node:22-alpine AS base
 RUN corepack enable && corepack prepare pnpm@11.1.1 --activate
@@ -33,5 +34,5 @@ COPY --from=build --chown=nextjs:nodejs /out ./
 USER nextjs
 EXPOSE 3011
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
-    CMD wget -q -O /dev/null http://127.0.0.1:3011/ || exit 1
+    CMD nc -z 127.0.0.1 3011 || exit 1
 CMD ["node_modules/.bin/next", "start", "--hostname", "0.0.0.0", "--port", "3011"]

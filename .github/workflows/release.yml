@@ -75,8 +75,7 @@ jobs:
       - run: uv publish
 
   # ── Container images (GHCR) ────────────────────────────────────────────────
-  # Only components that have a Dockerfile are listed. Missing: substrate-cloud (only an mcp_server
-  # Dockerfile, not the service) and substrate-data-web (no Dockerfile). Add a job here when they exist.
+  # Per-component images on a component release. The whole cell (all images, one tag) is released by release-images.yml.
   image-substrate-data:
     name: Image / substrate-data
     needs: release-please
@@ -91,8 +90,8 @@ jobs:
       image: substrate-data
       ref: ${{ needs.release-please.outputs.substrate-data-tag }}
       version: ${{ needs.release-please.outputs.substrate-data-version }}
-      context: data/substrate-data
-      file: data/substrate-data/deployment/compute.Dockerfile
+      context: .
+      file: deploy/docker/substrate-data.Dockerfile
 
   image-substrate-ui:
     name: Image / substrate-ui
@@ -108,5 +107,5 @@ jobs:
       image: substrate-ui
       ref: ${{ needs.release-please.outputs.substrate-ui-tag }}
       version: ${{ needs.release-please.outputs.substrate-ui-version }}
-      context: agents/substrate-ui
-      file: agents/substrate-ui/Dockerfile
+      context: .
+      file: deploy/docker/substrate-ui.Dockerfile

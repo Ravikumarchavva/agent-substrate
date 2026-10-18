@@ -1,0 +1,92 @@
+name: Release cell images
+
+# Builds every image of the cell from one tag and pushes them to GHCR with SBOM, provenance and a keyless
+# signature (see _image.yml). Start it by pushing a tag `cell-vX.Y.Z` or by running it by hand against a ref.
+# It never runs on pull requests.
+on:
+  push:
+    tags: ["cell-v*"]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Git ref to build
+        required: true
+        default: main
+      version:
+        description: Image version tag (no leading v), e.g. 0.1.0
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      ref: ${{ steps.v.outputs.ref }}
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - id: v
+        env:
+          EVENT: ${{ github.event_name }}
+          INPUT_REF: ${{ inputs.ref }}
+          INPUT_VERSION: ${{ inputs.version }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [ "$EVENT" = "push" ]; then
+            echo "ref=$REF_NAME" >> "$GITHUB_OUTPUT"
+            echo "version=${REF_NAME#cell-v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "ref=$INPUT_REF" >> "$GITHUB_OUTPUT"
+            echo "version=$INPUT_VERSION" >> "$GITHUB_OUTPUT"
+          fi
+
+  image:
+    name: Image / ${{ matrix.image }}
+    needs: plan
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { image: substrate-agent-server, file: deploy/docker/agent-server.Dockerfile }
+          - { image: substrate-data, file: deploy/docker/substrate-data.Dockerfile }
+          - { image: substrate-ui, file: deploy/docker/substrate-ui.Dockerfile }
+          - { image: substrate-data-web, file: deploy/docker/substrate-data-web.Dockerfile }
+          - { image: embedding-reranker, file: deploy/docker/embedding-reranker.Dockerfile }
+          - { image: document-intelligence, file: deploy/docker/document-intelligence.Dockerfile }
+          - { image: llama-server, file: deploy/docker/llama-server.Dockerfile }
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    uses: ./.github/workflows/_image.yml
+    with:
+      image: ${{ matrix.image }}
+      ref: ${{ needs.plan.outputs.ref }}
+      version: ${{ needs.plan.outputs.version }}
+      context: .
+      file: ${{ matrix.file }}
+
+  chart:
+    name: Chart / substrate-cell
+    needs: [plan, image]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.plan.outputs.ref }}
+      - uses: azure/setup-helm@v4
+      - name: Package and push the chart (OCI) with the images' version
+        env:
+          VERSION: ${{ needs.plan.outputs.version }}
+          ACTOR: ${{ github.actor }}
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          echo "$TOKEN" | helm registry login ghcr.io -u "$ACTOR" --password-stdin
+          helm package deploy/helm/substrate-cell --version "$VERSION" --app-version "$VERSION"
+          helm push "substrate-cell-${VERSION}.tgz" "oci://ghcr.io/${owner}/charts"

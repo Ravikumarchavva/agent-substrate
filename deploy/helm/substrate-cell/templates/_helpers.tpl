@@ -162,11 +162,11 @@ spec:
             {{- toYaml . | nindent 12 }}
           {{- end }}
           readinessProbe:
-            httpGet: { path: {{ .probePath }}, port: http, scheme: {{ .scheme | default "HTTP" }} }
+            {{ if .probeTcp }}tcpSocket: { port: http }{{ else }}httpGet: { path: {{ .probePath }}, port: http, scheme: {{ .scheme | default "HTTP" }} }{{ end }}
             periodSeconds: 10
             failureThreshold: 6
           livenessProbe:
-            httpGet: { path: {{ .probePath }}, port: http, scheme: {{ .scheme | default "HTTP" }} }
+            {{ if .probeTcp }}tcpSocket: { port: http }{{ else }}httpGet: { path: {{ .probePath }}, port: http, scheme: {{ .scheme | default "HTTP" }} }{{ end }}
             initialDelaySeconds: 30
             periodSeconds: 20
             failureThreshold: 6

@@ -21,4 +21,4 @@
 - name: WEB_SESSION_SECRET
   valueFrom: { %s }
 - { name: WEB_PUBLIC_URL, value: %s }` (include "cell.fullname" .) (include "cell.issuer" . | quote) (include "cell.secretRef" (dict "root" . "key" "data-web-client-secret")) (include "cell.secretRef" (dict "root" . "key" "web-session-secret")) (.Values.publicUrls.dataWeb | quote) }}
-{{- include "cell.workload" (dict "root" . "component" "data-web" "repo" "substrate-data-web" "override" .Values.dataWeb.image "port" 3011 "probePath" "/" "cfg" .Values.dataWeb "env" $webEnv "writable" (list (dict "name" "next-cache" "path" "/app/.next/cache"))) }}
+{{- include "cell.workload" (dict "root" . "component" "data-web" "repo" "substrate-data-web" "override" .Values.dataWeb.image "port" 3011 "probeTcp" true "probePath" "/" "cfg" .Values.dataWeb "env" $webEnv "writable" (list (dict "name" "next-cache" "path" "/app/.next/cache"))) }}

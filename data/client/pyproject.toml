@@ -8,10 +8,20 @@ requires-python = ">=3.14"
 dependencies = ["httpx>=0.28,<1", "loamz-identity"]
 
 [project.optional-dependencies]
-arrow = ["pyarrow>=18"]
+# Arrow/Polars results (`ld.sql`, `ld.arrow`, `ld.stream`); the code-interpreter sandbox image installs this extra.
+arrow = ["polars>=1.44.2,<2", "pyarrow>=22,<27"]
+# HTTP/2 multiplexing for the async client, used automatically when installed.
+http2 = ["httpx[http2]>=0.28,<1"]
 
 [dependency-groups]
-dev = ["pytest>=9", "pytest-asyncio>=1.4", "pytest-xdist>=3.6", "pytest-timeout>=2.3"]
+dev = [
+    "pytest>=9",
+    "pytest-asyncio>=1.4",
+    "pytest-xdist>=3.6",
+    "pytest-timeout>=2.3",
+    "polars>=1.44.2,<2",
+    "pyarrow>=22,<27",
+]
 
 [build-system]
 requires = ["uv_build>=0.11.16,<0.12"]

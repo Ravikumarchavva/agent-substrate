@@ -22,6 +22,8 @@ import pytest
 from tests.invariants._harness.crash import Mode, Observation, crash_matrix, report
 from tests.invariants._harness.scenarios import one_tool_call, spawn_and_join
 
+pytestmark = pytest.mark.slow
+
 MODES: list[Mode] = ["blip", "death"]
 
 

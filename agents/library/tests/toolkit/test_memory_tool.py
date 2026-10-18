@@ -6,15 +6,15 @@ from types import SimpleNamespace
 
 import pytest
 
-from loamz.agents.kernel.ports.memory import (
+from loamz.agents.kernel.types.content import content_blocks_to_str
+from loamz.agents.kernel.types.run import RunScope
+from loamz.agents.toolkit.memory import MemoryTool
+from loamz.data.storage.memory import (
     MemoryMatch,
     MemoryNamespace,
     MemoryQuery,
     MemoryRecord,
 )
-from loamz.agents.kernel.types.content import content_blocks_to_str
-from loamz.agents.kernel.types.run import RunScope
-from loamz.agents.toolkit.memory import MemoryTool
 
 
 class FakeShortTermMemory:

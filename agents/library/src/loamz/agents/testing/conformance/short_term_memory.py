@@ -12,7 +12,7 @@ import asyncio
 
 import pytest
 
-from loamz.agents.kernel.ports.memory import ShortTermMemory
+from loamz.data.storage.memory import ShortTermMemory
 
 _HOSTILE = [
     "x' OR '1'='1",

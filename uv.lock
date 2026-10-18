@@ -2515,11 +2515,17 @@ dependencies = [
 
 [package.optional-dependencies]
 arrow = [
+    { name = "polars" },
     { name = "pyarrow" },
+]
+http2 = [
+    { name = "httpx", extra = ["http2"] },
 ]
 
 [package.dev-dependencies]
 dev = [
+    { name = "polars" },
+    { name = "pyarrow" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-timeout" },
@@ -2529,13 +2535,17 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "httpx", specifier = ">=0.28,<1" },
+    { name = "httpx", extras = ["http2"], marker = "extra == 'http2'", specifier = ">=0.28,<1" },
     { name = "loamz-identity", editable = "identity/python" },
-    { name = "pyarrow", marker = "extra == 'arrow'", specifier = ">=18" },
+    { name = "polars", marker = "extra == 'arrow'", specifier = ">=1.44.2,<2" },
+    { name = "pyarrow", marker = "extra == 'arrow'", specifier = ">=22,<27" },
 ]
-provides-extras = ["arrow"]
+provides-extras = ["arrow", "http2"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "polars", specifier = ">=1.44.2,<2" },
+    { name = "pyarrow", specifier = ">=22,<27" },
     { name = "pytest", specifier = ">=9" },
     { name = "pytest-asyncio", specifier = ">=1.4" },
     { name = "pytest-timeout", specifier = ">=2.3" },
@@ -2547,13 +2557,35 @@ name = "loamz-data-server"
 version = "0.1.0"
 source = { editable = "data/server" }
 dependencies = [
-    { name = "loamz-data-client" },
-    { name = "loamz-data-storage", extra = ["postgres"] },
+    { name = "boto3" },
+    { name = "duckdb" },
+    { name = "fastapi" },
+    { name = "httpx" },
+    { name = "loamz-data-storage", extra = ["pdf", "postgres"] },
     { name = "loamz-identity", extra = ["fastapi"] },
+    { name = "orjson" },
+    { name = "polars" },
+    { name = "psycopg", extra = ["binary", "pool"] },
+    { name = "pyarrow" },
+    { name = "pydantic-settings" },
+    { name = "pyiceberg", extra = ["pyarrow"] },
+    { name = "pyjwt", extra = ["crypto"] },
+    { name = "python-multipart" },
+    { name = "sqlglot" },
+    { name = "uvicorn" },
+]
+
+[package.optional-dependencies]
+gpu = [
+    { name = "nvidia-ml-py" },
+]
+inference = [
+    { name = "pillow" },
 ]
 
 [package.dev-dependencies]
 dev = [
+    { name = "loamz-data-client", extra = ["arrow"] },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-timeout" },
@@ -2562,13 +2594,30 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "loamz-data-client", editable = "data/client" },
-    { name = "loamz-data-storage", extras = ["postgres"], editable = "data/storage" },
+    { name = "boto3", specifier = ">=1.40" },
+    { name = "duckdb", specifier = ">=1.4,<2" },
+    { name = "fastapi", specifier = ">=0.115,<1" },
+    { name = "httpx", specifier = ">=0.28,<1" },
+    { name = "loamz-data-storage", extras = ["postgres", "pdf"], editable = "data/storage" },
     { name = "loamz-identity", extras = ["fastapi"], editable = "identity/python" },
+    { name = "nvidia-ml-py", marker = "extra == 'gpu'", specifier = ">=12.0" },
+    { name = "orjson", specifier = ">=3.10" },
+    { name = "pillow", marker = "extra == 'inference'", specifier = ">=12.0.0" },
+    { name = "polars", specifier = ">=1.44.2,<2" },
+    { name = "psycopg", extras = ["binary", "pool"], specifier = ">=3.2,<4" },
+    { name = "pyarrow", specifier = ">=22,<27" },
+    { name = "pydantic-settings", specifier = ">=2.8,<3" },
+    { name = "pyiceberg", extras = ["pyarrow"], specifier = ">=0.10,<0.13" },
+    { name = "pyjwt", extras = ["crypto"], specifier = ">=2.10" },
+    { name = "python-multipart", specifier = ">=0.0.20" },
+    { name = "sqlglot", specifier = ">=27,<29" },
+    { name = "uvicorn", specifier = ">=0.34,<1" },
 ]
+provides-extras = ["inference", "gpu"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "loamz-data-client", extras = ["arrow"], editable = "data/client" },
     { name = "pytest", specifier = ">=9" },
     { name = "pytest-asyncio", specifier = ">=1.4" },
     { name = "pytest-timeout", specifier = ">=2.3" },
@@ -2584,6 +2633,10 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+ocr = [
+    { name = "onnxruntime" },
+    { name = "rapidocr" },
+]
 pdf = [
     { name = "pypdfium2" },
 ]
@@ -2593,6 +2646,10 @@ postgres = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "asyncpg" },
+    { name = "httpx" },
+    { name = "hypothesis" },
+    { name = "pypdfium2" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-timeout" },
@@ -2602,13 +2659,19 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "asyncpg", marker = "extra == 'postgres'", specifier = ">=0.31.0" },
+    { name = "onnxruntime", marker = "extra == 'ocr'", specifier = ">=1.23.0" },
     { name = "pydantic", specifier = ">=2.12" },
-    { name = "pypdfium2", marker = "extra == 'pdf'", specifier = ">=4.30" },
+    { name = "pypdfium2", marker = "extra == 'pdf'", specifier = ">=5.0.0" },
+    { name = "rapidocr", marker = "extra == 'ocr'", specifier = ">=3.0.0" },
 ]
-provides-extras = ["postgres", "pdf"]
+provides-extras = ["postgres", "pdf", "ocr"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "asyncpg", specifier = ">=0.31.0" },
+    { name = "httpx", specifier = ">=0.28,<1" },
+    { name = "hypothesis", specifier = ">=6.100" },
+    { name = "pypdfium2", specifier = ">=5.0.0" },
     { name = "pytest", specifier = ">=9" },
     { name = "pytest-asyncio", specifier = ">=1.4" },
     { name = "pytest-timeout", specifier = ">=2.3" },

@@ -1,9 +1,5 @@
 """Cognitive memory architecture contracts — short-term and multi-tier long-term memory.
 
-Long-term memory is Loamz Data's (its memory engine implements ``MemoryStore``); the agent store implements only
-``ShortTermMemory`` (session state). TODO(integration): when ``loamz.data.storage`` ships its memory engine, check
-these models against its types and keep one definition.
-
 Memory Taxonomy:
     DIRECTIVE   — Standing rules, user constraints, preferences (prioritized in prompt context).
     SEMANTIC    — Distilled facts, entity attributes, world knowledge (retrieved on-demand).
@@ -30,12 +26,8 @@ Write Semantics:
 
 Lifecycle signal (not enforced here):
     ``MemoryRecord.importance``/``last_accessed_at``/``access_count`` carry the
-    recency/frequency/importance signal a future capabilities-layer memory
-    consolidator needs to exist at all. Kernel only carries the fields —
-    no decay or consolidation algorithm lives here (that belongs in
-    ``providers/redis/``, same boundary as everything else memory-related).
-    Nothing reads them yet; this is a deliberate, flagged trade-off, not an
-    oversight — see the plan that introduced them.
+    recency/frequency/importance signal a memory consolidator needs. Storage only
+    carries the fields; no decay or consolidation algorithm lives here.
 """
 
 from __future__ import annotations
@@ -47,16 +39,15 @@ from typing import Any, Protocol, runtime_checkable
 
 from pydantic import Field, field_validator
 
-from loamz.agents.kernel.types.content import (
+from loamz.data.storage.types import (
     BlockList,
     ContentBlock,
     JsonObject,
     KernelModel,
     TextBlock,
     content_blocks_to_str,
+    new_id,
 )
-from loamz.agents.kernel.types.identity import Actor
-from loamz.agents.kernel.types.ids import new_id
 
 
 class MemoryCategory(StrEnum):
@@ -149,25 +140,6 @@ class MemoryNamespace(KernelModel):
             and (boundary.session_id is None or self.session_id == boundary.session_id)
         )
 
-    @classmethod
-    def from_actor(
-        cls,
-        actor: Actor,
-        *,
-        tenant_id: str = "default",
-        session_id: str | None = None,
-    ) -> MemoryNamespace:
-        """Derive a namespace from a Kernel Actor identity."""
-        if actor.type == "user":
-            return cls(tenant_id=tenant_id, user_id=actor.key, session_id=session_id)
-        if actor.type == "agent":
-            return cls(tenant_id=tenant_id, agent_id=actor.key, session_id=session_id)
-        return cls(
-            tenant_id=tenant_id,
-            agent_id=f"{actor.type}:{actor.key}",
-            session_id=session_id,
-        )
-
 
 class MemoryProvenance(KernelModel):
     """Auditability, extraction attribution, and DAG branch awareness."""
@@ -182,7 +154,7 @@ class MemoryProvenance(KernelModel):
 
 
 class MemoryRecord(KernelModel):
-    """Canonical immutable memory currency across Loamz.
+    """The one immutable memory record every Loamz package stores and reads.
 
     Score is intentionally excluded from this record because ranking is
     a property of a query, not the record's intrinsic identity.

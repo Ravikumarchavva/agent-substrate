@@ -89,6 +89,17 @@ Script = str | Callable[["Database"], str]
 """A migration: SQL, or a function of the database that returns it, for a part whose DDL differs by dialect."""
 
 
+async def version(database: Database, component: str) -> int:
+    """The version ``component``'s tables are at in this database (0: it has none). Asking creates none of them."""
+    await database.start()
+    await database.script(_MIGRATIONS_TABLE)
+    async with database.transaction() as tx:
+        rows = await tx.fetchall(
+            "SELECT version FROM loamz_migrations WHERE component = ?", component
+        )
+    return max((int(row["version"]) for row in rows), default=0)
+
+
 async def migrate(database: Database, component: str, scripts: Sequence[Script]) -> None:
     """Bring ``component``'s tables up to ``len(scripts)``.
 
@@ -97,20 +108,14 @@ async def migrate(database: Database, component: str, scripts: Sequence[Script])
     the two — or two processes starting together — just runs it again. Scripts are never edited once
     shipped; a change is a new script.
     """
-    await database.start()
-    await database.script(_MIGRATIONS_TABLE)
-    async with database.transaction() as tx:
-        rows = await tx.fetchall(
-            "SELECT version FROM loamz_migrations WHERE component = ?", component
-        )
-    applied = max((int(row["version"]) for row in rows), default=0)
+    applied = await version(database, component)
     if applied > len(scripts):
         raise SchemaVersionError(
             f"{component} is at version {applied} in this database, but this build only "
             f"understands up to {len(scripts)}; it was written by a newer version"
         )
-    for version in range(applied + 1, len(scripts) + 1):
-        script = scripts[version - 1]
+    for number in range(applied + 1, len(scripts) + 1):
+        script = scripts[number - 1]
         ddl = script(database) if callable(script) else script
         await database.script(ddl.replace("{pk}", database.auto_pk))
         async with database.transaction() as tx:
@@ -118,9 +123,9 @@ async def migrate(database: Database, component: str, scripts: Sequence[Script])
                 "INSERT INTO loamz_migrations (component, version, applied_at) VALUES (?, ?, ?) "
                 "ON CONFLICT DO NOTHING",
                 component,
-                version,
+                number,
                 time.time(),
             )
 
 
-__all__ = ["Database", "Row", "Script", "SchemaVersionError", "Tx", "migrate"]
+__all__ = ["Database", "Row", "Script", "SchemaVersionError", "Tx", "migrate", "version"]

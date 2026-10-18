@@ -6,9 +6,9 @@ from collections.abc import Sequence
 
 from loamz.agents.kernel.context.protocols import ContextBuilder, ContextWindow
 from loamz.agents.kernel.context.tokens import DEFAULT_CHARS_PER_TOKEN, estimate_tokens
-from loamz.agents.kernel.ports.memory import ContextMemoryInjection
 from loamz.agents.kernel.ports.threads import HistoryCheckpoint, MessageNode
 from loamz.agents.kernel.types.content import ChatMessage, Role, TextBlock
+from loamz.data.storage.memory import ContextMemoryInjection
 
 
 class DefaultContextBuilder(ContextBuilder):

@@ -15,7 +15,6 @@ from typing import TYPE_CHECKING
 
 from loamz.agents.kernel.ports.files import FileStore
 from loamz.agents.kernel.ports.graph import GraphStore
-from loamz.agents.kernel.ports.memory import ShortTermMemory
 from loamz.agents.kernel.ports.tasks import TaskStore
 from loamz.agents.kernel.ports.threads import ThreadStore
 from loamz.agents.kernel.types.scope import Scope
@@ -27,6 +26,7 @@ from loamz.agents.stores.scoped import (
     bind_threads,
     fence_objects,
 )
+from loamz.data.storage.memory import ShortTermMemory
 
 if TYPE_CHECKING:
     from loamz.agents.stores.store import AgentStore

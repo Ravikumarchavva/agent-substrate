@@ -1426,8 +1426,7 @@
             "enum": [
               "sql",
               "jobs",
-              "rag",
-              "inference"
+              "documents"
             ],
             "title": "Role",
             "type": "string"
@@ -1853,14 +1852,59 @@
         "title": "Target",
         "type": "object"
       },
-      "TenantEnsure": {
-        "additionalProperties": false,
+      "Tenant": {
         "properties": {
           "alias": {
-            "pattern": "^[a-z][a-z0-9_]{0,55}$",
             "title": "Alias",
             "type": "string"
           },
+          "catalog": {
+            "title": "Catalog",
+            "type": "string"
+          },
+          "created": {
+            "title": "Created",
+            "type": "boolean"
+          },
+          "group": {
+            "title": "Group",
+            "type": "string"
+          },
+          "schemas": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Schemas",
+            "type": "array"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "volumes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Volumes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "alias",
+          "catalog",
+          "schemas",
+          "volumes",
+          "group",
+          "created"
+        ],
+        "title": "Tenant",
+        "type": "object"
+      },
+      "TenantEnsure": {
+        "additionalProperties": false,
+        "description": "The tenant (a Keycloak organization id). Its alias and every name are derived from it (`tenancy`).",
+        "properties": {
           "tenant_id": {
             "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
             "title": "Tenant Id",
@@ -1868,8 +1912,7 @@
           }
         },
         "required": [
-          "tenant_id",
-          "alias"
+          "tenant_id"
         ],
         "title": "TenantEnsure",
         "type": "object"
@@ -2035,13 +2078,13 @@
     },
     "securitySchemes": {
       "oidc": {
-        "openIdConnectUrl": "http://127.0.0.1:18080/realms/substrate/.well-known/openid-configuration",
+        "openIdConnectUrl": "http://127.0.0.1:18080/realms/loamz/.well-known/openid-configuration",
         "type": "openIdConnect"
       }
     }
   },
   "info": {
-    "title": "Substrate Data",
+    "title": "Loamz Data",
     "version": "1.0.0"
   },
   "openapi": "3.1.0",
@@ -7415,7 +7458,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Tenant"
+                }
               }
             },
             "description": "Successful Response"

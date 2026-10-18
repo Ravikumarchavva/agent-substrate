@@ -145,7 +145,10 @@ class SqliteDatabase:
     async def script(self, ddl: str) -> None:
         assert self._conn is not None, "database not started"
         db = self._conn
-        await db.call(lambda: db.conn.executescript(ddl))
+        async with (
+            self._lock
+        ):  # executescript commits first: never inside another task's open transaction
+            await db.call(lambda: db.conn.executescript(ddl))
 
     @asynccontextmanager
     async def transaction(self) -> AsyncGenerator[Tx]:

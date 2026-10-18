@@ -12,7 +12,7 @@ from loamz.agents.kernel.ports.threads import HistoryCheckpoint, MessageNode
 from loamz.agents.kernel.types.content import ChatMessage, ContentBlock, KernelModel
 
 if TYPE_CHECKING:
-    from loamz.agents.kernel.ports.memory import ContextMemoryInjection
+    from loamz.data.storage.memory import ContextMemoryInjection
 
 
 class ContextWindow(KernelModel):

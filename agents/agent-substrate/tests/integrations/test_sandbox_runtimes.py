@@ -155,11 +155,11 @@ async def test_network_denied_by_default(workspace: Path) -> None:
 
 
 async def test_host_environment_is_not_inherited(workspace: Path) -> None:
-    """Secrets in the host env (API keys, JWT_SECRET, DATABASE_URL) must not
+    """Secrets in the host env (API keys, session secrets, DATABASE_URL) must not
     reach code the model wrote."""
     runtime = _nsjail_or_skip(workspace)
     result = await runtime.execute(spec(code="import os; print(sorted(os.environ))"))
-    for leaked in ("OPENAI_API_KEY", "JWT_SECRET", "DATABASE_URL", "AWS_SECRET"):
+    for leaked in ("OPENAI_API_KEY", "SESSION_SECRET", "DATABASE_URL", "AWS_SECRET"):
         assert leaked not in result.stdout
 
 

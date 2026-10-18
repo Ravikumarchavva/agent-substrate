@@ -86,9 +86,9 @@ Concurrent requests share one refresh, because rotated refresh tokens are single
 
 ## Deliberately not done here
 
-- **agent-substrate still verifies HS256** (`JWT_SECRET`, `ENGINE_JWT_SECRET`) and still mints those tokens; removing them and adopting
-  `substrate-identity` there is Track D's job. This change adds no code to `agents/`.
-- **The agents UI (`substrate-ui`) still has its own session and user tables**; only `substrate-data-web` consumes `@substrate/oidc-bff` so far.
+- **Who consumes what:** substrate-cloud (the monolith and each microservice) verifies with `substrate-identity` through one dependency
+  (`shared/auth`); both web apps (`substrate-ui`, `substrate-data-web`) use `@substrate/oidc-bff`. The shared-secret scheme is gone and a
+  repository guard (`scripts/check_no_shared_secrets.py`) keeps it gone.
 - substrate-data keeps `require_organization=False`: its catalog is not tenant-scoped yet, so organization claims are carried into the audit
   `context.tenant_id` but do not gate access. Trusted issuer `allowed_scopes` is a new optional setting (`SUBSTRATE_DATA_TRUSTED_ISSUERS`).
 - RS384/RS512/PS*/ES384 tokens are no longer accepted (the allowed set is RS256, ES256, EdDSA); Keycloak signs RS256 by default.

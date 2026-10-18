@@ -175,7 +175,7 @@ data/inference-pool/     llama-server supervision + hardware detection, shared b
 | Service | Key ORM Model | Responsibility |
 |---|---|---|
 | `gateway` | — | BFF proxy, single external ingress |
-| `identity` | `User` | JWT issuance, OAuth, user auth |
+| `identity` | `IdentityUser` | Profile mirror of Keycloak users (no token issuance) |
 | `policy` | `Policy` | RBAC — authorize actions |
 | `conversation` | `Thread`, `Message` | Thread + message persistence |
 | `job_controller` | `JobRun` | Job lifecycle: dispatch → complete/fail |
@@ -478,8 +478,9 @@ CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:3002
 # Observability
 OTLP_ENDPOINT=http://localhost:4318
 
-# Auth
-JWT_SECRET=<32+ char random string — required>
+# Identity: the Keycloak realm whose access tokens every request carries (ADR 0007)
+OIDC_ISSUER=https://id.example.com/realms/substrate
+OIDC_AUDIENCE=agent-substrate
 
 # Code interpreter sandbox: "nsjail" (default, Linux namespaces + cgroups on
 # this host, no container) | "k8s" (one agent-sandbox pod per session) | "inprocess"

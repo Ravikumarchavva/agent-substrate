@@ -439,14 +439,14 @@
       "frontchannelLogout": true,
       "rootUrl": "${SUBSTRATE_UI_URL:http://127.0.0.1:3000}",
       "redirectUris": [
-        "${SUBSTRATE_UI_URL:http://127.0.0.1:3000}/auth/callback"
+        "${SUBSTRATE_UI_URL:http://127.0.0.1:3000}/chat/auth/callback"
       ],
       "webOrigins": [
         "${SUBSTRATE_UI_URL:http://127.0.0.1:3000}"
       ],
       "attributes": {
         "pkce.code.challenge.method": "S256",
-        "post.logout.redirect.uris": "${SUBSTRATE_UI_URL:http://127.0.0.1:3000}/*"
+        "post.logout.redirect.uris": "${SUBSTRATE_UI_URL:http://127.0.0.1:3000}/chat/*"
       },
       "defaultClientScopes": [
         "basic",

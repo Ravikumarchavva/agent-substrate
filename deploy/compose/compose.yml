@@ -12,11 +12,11 @@ name: ${COMPOSE_PROJECT_NAME:-substrate-cell}
 x-data-env: &data-env
   # The services are on one private Docker network behind (optionally) a TLS-terminating proxy; plain HTTP to these
   # named hosts is an explicit opt-in in substrate-data, and the proxy flag lets it listen beyond loopback.
-  SUBSTRATE_DATA_INSECURE_HTTP_HOSTS: '["seaweedfs","keycloak","agent-server"]'
+  SUBSTRATE_DATA_INSECURE_HTTP_HOSTS: '["seaweedfs","keycloak","keycloak.localhost","s3.localhost","agent-server"]'
   # Controller and workers serve HTTPS with the cell's private CA (cell-init); the API trusts it.
   SUBSTRATE_DATA_INTERNAL_CA_FILE: /tls/ca.crt
   SUBSTRATE_DATA_BEHIND_TLS_PROXY: "true"
-  SUBSTRATE_DATA_OIDC_ISSUER: ${KEYCLOAK_PUBLIC_URL:-http://keycloak:8080}/realms/substrate
+  SUBSTRATE_DATA_OIDC_ISSUER: ${KEYCLOAK_PUBLIC_URL:-http://keycloak.localhost:8080}/realms/substrate
   SUBSTRATE_DATA_OIDC_AUDIENCE: substrate-data
   SUBSTRATE_DATA_S3_ENDPOINT_URL: http://seaweedfs:8333
   SUBSTRATE_DATA_ICEBERG_CATALOG_URL: http://seaweedfs:8181
@@ -68,7 +68,7 @@ x-agent-env: &agent-env
   OIDC_ADMIN_CLIENT_ID: agent-membership
   OIDC_ADMIN_CLIENT_SECRET: ${AGENT_MEMBERSHIP_CLIENT_SECRET:?run ./gen-env.sh}
   # Keycloak resource-server settings (the verifier in the agent server reads these).
-  OIDC_ISSUER: ${KEYCLOAK_PUBLIC_URL:-http://keycloak:8080}/realms/substrate
+  OIDC_ISSUER: ${KEYCLOAK_PUBLIC_URL:-http://keycloak.localhost:8080}/realms/substrate
   OIDC_AUDIENCE: agent-substrate
   # Keycloak is on the cell's private network over plain http (TLS terminates at the proxy in front, if any).
   OIDC_INSECURE_HTTP: "true"
@@ -174,6 +174,8 @@ services:
     restart: unless-stopped
 
   seaweedfs:
+    # The public name (s3.localhost) reaches this container from inside the cell too: one address for browsers and services.
+    networks: { default: { aliases: ['s3.localhost'] } }
     image: chrislusf/seaweedfs:4.48@sha256:4e61d15fd35994cb1e43e1e553dff106794841fd9a99ade2fc8c8bfce4d7872d
     command:
       - server
@@ -226,8 +228,10 @@ services:
 
   # ── Identity ────────────────────────────────────────────────────────────────
   keycloak:
+    # The public name (keycloak.localhost) reaches this container from inside the cell too: one address for browsers and services.
+    networks: { default: { aliases: ['keycloak.localhost'] } }
     image: quay.io/keycloak/keycloak:26.8.1
-    command: ["start", "--import-realm", "--http-enabled=true", "--hostname=${KEYCLOAK_PUBLIC_URL:-http://keycloak:8080}", "--hostname-strict=true", "--health-enabled=true", "--proxy-headers=xforwarded"]
+    command: ["start", "--import-realm", "--http-enabled=true", "--hostname=${KEYCLOAK_PUBLIC_URL:-http://keycloak.localhost:8080}", "--hostname-strict=true", "--health-enabled=true", "--proxy-headers=xforwarded"]
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USER:-admin}
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?run ./gen-env.sh}
@@ -269,7 +273,7 @@ services:
       SUBSTRATE_DATA_S3_ACCESS_KEY_ID: ${CONTROL_S3_ACCESS_KEY_ID}
       SUBSTRATE_DATA_S3_SECRET_ACCESS_KEY: ${CONTROL_S3_SECRET_ACCESS_KEY}
       SUBSTRATE_DATA_TICKET_PRIVATE_KEY_FILE: /keys/ticket.pem
-      SUBSTRATE_DATA_VOLUMES_PUBLIC_ENDPOINT_URL: ${S3_PUBLIC_URL:-http://seaweedfs:8333}
+      SUBSTRATE_DATA_VOLUMES_PUBLIC_ENDPOINT_URL: ${S3_PUBLIC_URL:-http://s3.localhost:8333}
       SUBSTRATE_DATA_MASK_SALT: ${MASK_SALT:-}
       # The documents and memory index (ADR 0008): its own database, with pgvector. The folder holds only scratch (no bundles).
       SUBSTRATE_DATA_RETRIEVAL_URL: postgresql://${POSTGRES_USER:-substrate}:${POSTGRES_PASSWORD}@postgres:5432/data_retrieval?sslmode=require
@@ -412,7 +416,7 @@ services:
     environment:
       BACKEND_API_URL: http://${AGENT_UPSTREAM:-agent-server:8000}
       DATABASE_URL: postgresql://${POSTGRES_USER:-substrate}:${POSTGRES_PASSWORD}@postgres:5432/substrate_ui?sslmode=require
-      OIDC_ISSUER: ${KEYCLOAK_PUBLIC_URL:-http://keycloak:8080}/realms/substrate
+      OIDC_ISSUER: ${KEYCLOAK_PUBLIC_URL:-http://keycloak.localhost:8080}/realms/substrate
       OIDC_CLIENT_ID: substrate-ui
       OIDC_CLIENT_SECRET: ${SUBSTRATE_UI_CLIENT_SECRET:?}
       SESSION_SECRET: ${UI_SESSION_SECRET:?}
@@ -428,7 +432,7 @@ services:
     build: { context: ../.., dockerfile: deploy/docker/substrate-data-web.Dockerfile }
     environment:
       DATA_API_URL: http://data-api:8020
-      SUBSTRATE_DATA_OIDC_ISSUER: ${KEYCLOAK_PUBLIC_URL:-http://keycloak:8080}/realms/substrate
+      SUBSTRATE_DATA_OIDC_ISSUER: ${KEYCLOAK_PUBLIC_URL:-http://keycloak.localhost:8080}/realms/substrate
       WEB_CLIENT_ID: substrate-data-web
       WEB_CLIENT_SECRET: ${SUBSTRATE_DATA_WEB_CLIENT_SECRET:?}
       WEB_SESSION_SECRET: ${WEB_SESSION_SECRET:?}

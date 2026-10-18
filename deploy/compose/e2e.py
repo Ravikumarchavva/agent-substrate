@@ -19,7 +19,7 @@ REALM = f"{KC}/realms/substrate"
 AGENT = "http://localhost:8000/api/v1"
 DATA = "http://localhost:8021/api/v1"
 # Keycloak only answers for its configured hostname; browsers and containers know it as keycloak:8080.
-KC_HOST = {"Host": "keycloak:8080"}
+KC_HOST = {"Host": ENV.get("KEYCLOAK_PUBLIC_URL", "http://keycloak.localhost:8080").split("://", 1)[1]}
 http = httpx.Client(timeout=60)
 
 

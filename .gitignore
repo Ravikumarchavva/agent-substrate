@@ -24,3 +24,8 @@ node_modules
 next-env.d.ts
 *.tsbuildinfo
 data/substrate-data-web/public/monaco/
+
+# runtime artifacts
+*.log
+.substrate/
+*.db

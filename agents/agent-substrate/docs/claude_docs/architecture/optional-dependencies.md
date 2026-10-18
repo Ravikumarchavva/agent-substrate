@@ -67,10 +67,12 @@ Without it the base install OCRs with the **`tesseract` program** if it is on th
 CLI, so it costs no Python package at all; with neither, a page that is only a picture is reported in `needs_ocr`, never returned silently
 empty. Both engines run in the reader's isolated worker process. For layout, tables and charts use the document server below.
 
-## `s3`
+## `data`
 
-S3-compatible object storage backend for `FILE_STORE_BACKEND=s3` (the
-default, `"local"`, needs neither of these).
+`substrate-data-client>=0.2,<0.3` (httpx only): `substrate.integrations.data`, the `FileStore` adapter over Substrate Data's Files domain
+(`DataFileStore`, `KeyScopedFileStore`, `DataUploadSessions`). Files are governed, versioned and quota'd by the data service; bytes move between
+clients and object storage on URLs it signs, so the host holds no object-store credentials (ADR 0004 and 0005). Replaces the old `s3` extra: the library
+has no S3 client. Only `integrations/data/` imports the client and importing `substrate` never loads it (invariant `test_structure.py`).
 
 ## `safety`
 
@@ -95,9 +97,9 @@ Everything the reference monolith server (`substrate up && uv run start`)
 needs beyond the base install — the base `dependencies` already cover
 Postgres, Redis, FastAPI, and Pillow (this is a *deployable app* package,
 not a headless library), so `server` only adds the optional features layered
-on top: web search/browsing, the K8s sandbox runtime, S3 storage,
+on top: web search/browsing, the K8s sandbox runtime, governed files through the data service,
 the safety guardrail, and the code-interpreter's data-science packages.
-Shorthand for `agent-substrate[web,code,s3,safety,sandbox]`.
+Shorthand for `agent-substrate[web,code,data,safety,sandbox]`.
 
 ## `logging`
 

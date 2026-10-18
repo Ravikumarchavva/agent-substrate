@@ -1,11 +1,8 @@
 """Workspace storage management — usage, listing, and deletion for the
 tenant-scoped filesystem backing uploads and code-interpreter artifacts.
 
-Works against any file store that can enumerate a prefix — both
-``Files`` (``FILE_STORE_BACKEND=local``, a filesystem tree) and
-``S3FileStore`` (``=s3``, object storage keyed on the same
-``tenants/{tenant_id}/...`` layout, see ``agents/workspace/layout.py``)
-qualify. Stores that can't 501 here.
+Works against the caller's file store: the data service's Files domain (``DATA_SERVICE_URL``) or the store's own folder, both
+keyed on the same ``tenants/{tenant_id}/...`` layout (``agents/workspace/layout.py``).
 
 Routes:
   GET    /workspace/usage   – bytes used vs. quota for the caller's tenant
@@ -18,7 +15,7 @@ from __future__ import annotations
 import mimetypes
 import uuid
 from datetime import datetime, timezone
-from typing import Protocol, runtime_checkable
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response, StreamingResponse
@@ -27,6 +24,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from substrate.stores import WorkspacePathError
+from substrate.types.errors import ObjectNotFoundError
 from substrate.workspace.layout import (
     conversation_shared_key,
     conversation_workspace_prefix,
@@ -34,6 +32,7 @@ from substrate.workspace.layout import (
 )
 from substrate_cloud.monolith.security.rls_deps import get_tenant_scoped_db
 from substrate_cloud.monolith.dependencies import ServerDependencies, get_ctx
+from substrate_cloud.file_records import key_owner
 from substrate_cloud.monolith.file_versioning import (
     VERSIONS_DIR,
     capture_bytes,
@@ -42,7 +41,7 @@ from substrate_cloud.monolith.file_versioning import (
     record_version,
     sha256_hex,
 )
-from substrate_cloud.monolith.models import FileMetadata, FileVersion, Thread
+from substrate_cloud.monolith.models import Thread
 from substrate_cloud.monolith.security.deps import get_current_user
 from substrate_cloud.monolith.services import get_owned_thread
 from substrate_cloud.monolith.services.agents.service import (
@@ -81,38 +80,13 @@ class WorkspaceFilesResponse(BaseModel):
     files: list[WorkspaceFileEntry]
 
 
-@runtime_checkable
-class _WorkspaceCapableStore(Protocol):
-    """The surface this API needs beyond plain upload/download/delete.
-
-    A capability check rather than ``isinstance(Files)``: both
-    ``Files`` (filesystem tree) and ``S3FileStore`` (object
-    storage, keyed on the same ``tenants/{tenant_id}/...`` layout) implement
-    it, and the backend is meant to be swappable without touching this API.
-    Stores that can't enumerate a prefix still get
-    a 501.
-    """
-
-    async def exists(self, key: str) -> bool: ...
-    async def usage_bytes(self, tenant_id: str, *, force: bool = False) -> int: ...
-    async def list_prefix(self, prefix: str) -> list[tuple[str, int, float]]: ...
-    async def download(self, key: str) -> bytes: ...
-    async def upload(
-        self, key: str, data: bytes, *, content_type: str = ...
-    ) -> None: ...
-    async def delete(self, key: str) -> None: ...
-
-
-def _require_workspace_store(ctx: ServerDependencies) -> _WorkspaceCapableStore:
-    store = ctx.file_store
-    if not isinstance(store, _WorkspaceCapableStore):
-        raise HTTPException(
-            status_code=501,
-            detail=(
-                "Workspace management requires a file store that can enumerate "
-                "a prefix (FILE_STORE_BACKEND=local or s3)."
-            ),
-        )
+def _workspace_store(
+    ctx: ServerDependencies, claims: AuthClaims, owner_id: str | None = None
+) -> Any:
+    """The file store for *owner_id*'s files (the caller's own unless an admin is reading someone's conversation)."""
+    store = ctx.files_for(claims.tenant_id, owner_id or claims.sub)
+    if store is None:
+        raise HTTPException(status_code=503, detail="File store not configured")
     return store
 
 
@@ -210,15 +184,14 @@ async def get_usage(
     claims: AuthClaims = Depends(get_current_user),
     ctx: ServerDependencies = Depends(get_ctx),
 ) -> WorkspaceUsageResponse:
-    store = _require_workspace_store(ctx)
+    store = _workspace_store(ctx, claims)
     # Meter quota per tenant (conversation workspaces omit user segments)
     used = await store.usage_bytes(claims.tenant_id, force=True)
-    effective_quota = getattr(store, "effective_quota", None)
-    quota = (
-        effective_quota(claims.tenant_id)
-        if effective_quota is not None
-        else ctx.workspace_user_quota_bytes
-    )
+    quota = ctx.workspace_user_quota_bytes
+    direct = ctx.direct_files_for(claims.tenant_id, claims.sub)
+    if direct is not None:
+        # The volume's hard quota is the data service's; none set means the platform default is only a display figure.
+        quota = (await direct.usage(claims.tenant_id)).quota_bytes or quota
     return WorkspaceUsageResponse(used_bytes=used, quota_bytes=quota)
 
 
@@ -228,7 +201,7 @@ async def list_files(
     db: AsyncSession = Depends(get_tenant_scoped_db),
     ctx: ServerDependencies = Depends(get_ctx),
 ) -> WorkspaceFilesResponse:
-    store = _require_workspace_store(ctx)
+    store = _workspace_store(ctx, claims)
     # Non-deleted threads owned by the caller in this tenant — a soft-deleted
     # thread's files stay in storage (see thread_service.py::delete_thread)
     # but are hidden from the owner's Storage view, same as the thread
@@ -297,21 +270,16 @@ async def list_files(
     thread_names.update({a.workspace_id: a.name for a in my_agents})
     thread_names.update({g.workspace_id: g.name for g in my_groups})
 
-    # A file is user-owned iff it has a (non-deleted) FileMetadata row: uploads
-    # go through routes/files.py which records one, while code-interpreter /
-    # assistant artifacts are written straight to the session dir with none.
-    keys = [key for key, _, _ in entries]
-    uploaded_keys: set[str] = set()
-    if keys:
-        meta_rows = (
-            await db.execute(
-                select(FileMetadata.object_key).where(
-                    FileMetadata.object_key.in_(keys),
-                    FileMetadata.deleted_at.is_(None),
-                )
-            )
-        ).all()
-        uploaded_keys = {row.object_key for row in meta_rows}
+    # A file is user-owned iff it was uploaded: uploads go to an ``uploads/`` folder (a conversation's, or the user's own), while
+    # code-interpreter / assistant artifacts are written anywhere else in the session dir.
+    def _uploaded(key: str) -> bool:
+        if _is_direct_upload_key(key):
+            return True
+        marker = "/workspace/shared/"
+        _, _, relative = key.partition(marker)
+        return relative.startswith("uploads/")
+
+    uploaded_keys = {key for key, _, _ in entries if _uploaded(key)}
 
     files = [
         WorkspaceFileEntry(
@@ -380,7 +348,7 @@ def _session_key(tenant_id: str, user_id: str, thread_id: str, path: str) -> str
 
 
 async def _resolve_session_key(
-    store: _WorkspaceCapableStore,
+    store: Any,
     tenant_id: str,
     user_id: str,
     thread_id: str,
@@ -481,21 +449,17 @@ async def serve_file(
 
     Serving the *current* file also lazily versions it: a change made outside
     our save endpoints (i.e. the agent rewrote it via code_interpreter) is
-    captured as an ``"agent"`` ``FileVersion`` here, so the panel's version
+    captured as an ``"agent"`` version here, so the panel's version
     history stays honest without a per-turn scan.
     """
-    store = _require_workspace_store(ctx)
     owner_id = await _thread_owner(db, claims, thread_id)
+    store = _workspace_store(ctx, claims, owner_id)
     key = await _resolve_session_key(store, claims.tenant_id, owner_id, thread_id, path)
 
     if seq is not None:
-        version = (
-            await db.execute(
-                select(FileVersion).where(
-                    FileVersion.object_key == key, FileVersion.seq == seq
-                )
-            )
-        ).scalar_one_or_none()
+        version = next(
+            (v for v in await list_versions(store, key) if v.seq == seq), None
+        )
         if version is None:
             raise HTTPException(status_code=404, detail="Version not found")
         source_key = version.version_key
@@ -504,22 +468,14 @@ async def serve_file(
 
     try:
         data = await store.download(source_key)
-    except (WorkspacePathError, KeyError, FileNotFoundError):
+    except (WorkspacePathError, KeyError, FileNotFoundError, ObjectNotFoundError):
         raise HTTPException(status_code=404, detail="File not found") from None
 
     name = key.rsplit("/", 1)[-1]
     checksum = sha256_hex(data)
     if seq is None and _is_versionable(name):
         # Capture an out-of-band (agent) change / the initial state.
-        await capture_bytes(
-            db,
-            store,
-            object_key=key,
-            data=data,
-            user_id=claims.sub,
-            thread_id=thread_id,
-            tenant_id=claims.tenant_id,
-        )
+        await capture_bytes(store, object_key=key, data=data)
 
     content_type = mimetypes.guess_type(name)[0] or "application/octet-stream"
     disposition = "inline" if _is_inline_type(content_type) else "attachment"
@@ -571,8 +527,8 @@ async def save_file(
     it), respond 409 so the UI can offer reload-vs-overwrite. The prior state
     is already versioned (via serve_file's lazy capture), so nothing is lost.
     """
-    store = _require_workspace_store(ctx)
     owner_id = await _thread_owner(db, claims, thread_id)
+    store = _workspace_store(ctx, claims, owner_id)
     key = await _resolve_session_key(store, claims.tenant_id, owner_id, thread_id, path)
     body = await request.body()
     base = request.headers.get("X-Base-Checksum", "")
@@ -582,11 +538,11 @@ async def save_file(
     try:
         current = await store.download(key)
         current_checksum = sha256_hex(current)
-    except (WorkspacePathError, KeyError, FileNotFoundError):
+    except (WorkspacePathError, KeyError, FileNotFoundError, ObjectNotFoundError):
         pass
 
     if base and current_checksum and base != current_checksum:
-        latest = await latest_version(db, key)
+        latest = await latest_version(store, key)
         raise HTTPException(
             status_code=409,
             detail={
@@ -598,26 +554,9 @@ async def save_file(
 
     # Ensure the pre-save state is versioned, then write + version the new one.
     if current_checksum:
-        await capture_bytes(
-            db,
-            store,
-            object_key=key,
-            data=current,
-            user_id=claims.sub,
-            thread_id=thread_id,
-            tenant_id=claims.tenant_id,
-        )
+        await capture_bytes(store, object_key=key, data=current)
     await store.upload(key, body)
-    version = await record_version(
-        db,
-        store,
-        object_key=key,
-        data=body,
-        author="user",
-        user_id=claims.sub,
-        thread_id=thread_id,
-        tenant_id=claims.tenant_id,
-    )
+    version = await record_version(store, object_key=key, data=body, author="user")
     return {"checksum": version.checksum_sha256, "seq": version.seq}
 
 
@@ -629,10 +568,10 @@ async def get_versions(
     db: AsyncSession = Depends(get_tenant_scoped_db),
     ctx: ServerDependencies = Depends(get_ctx),
 ) -> WorkspaceVersionsResponse:
-    store = _require_workspace_store(ctx)
     owner_id = await _thread_owner(db, claims, thread_id)
+    store = _workspace_store(ctx, claims, owner_id)
     key = await _resolve_session_key(store, claims.tenant_id, owner_id, thread_id, path)
-    versions = await list_versions(db, key)
+    versions = await list_versions(store, key)
     return WorkspaceVersionsResponse(
         versions=[
             WorkspaceVersionEntry(
@@ -640,7 +579,7 @@ async def get_versions(
                 author=v.author,
                 checksum_sha256=v.checksum_sha256,
                 size_bytes=v.size_bytes,
-                created_at=v.created_at.timestamp() if v.created_at else 0.0,
+                created_at=v.created_at,
                 restored_from_seq=v.restored_from_seq,
             )
             for v in versions
@@ -660,50 +599,34 @@ async def restore_version(
     file as a new ``"restore"`` version tagged with the seq it came from
     (non-destructive — the current state was already captured, so it stays in
     history too)."""
-    store = _require_workspace_store(ctx)
     owner_id = await _thread_owner(db, claims, body.thread_id)
+    store = _workspace_store(ctx, claims, owner_id)
     key = await _resolve_session_key(
         store, claims.tenant_id, owner_id, body.thread_id, body.path
     )
-    version = (
-        await db.execute(
-            select(FileVersion).where(
-                FileVersion.object_key == key, FileVersion.seq == body.seq
-            )
-        )
-    ).scalar_one_or_none()
+    version = next(
+        (v for v in await list_versions(store, key) if v.seq == body.seq), None
+    )
     if version is None:
         raise HTTPException(status_code=404, detail="Version not found")
 
     try:
         data = await store.download(version.version_key)
-    except (WorkspacePathError, KeyError, FileNotFoundError):
+    except (WorkspacePathError, KeyError, FileNotFoundError, ObjectNotFoundError):
         raise HTTPException(status_code=404, detail="Snapshot missing") from None
 
     # Capture the current state first (so restoring doesn't lose it), then write.
     try:
         current = await store.download(key)
-        await capture_bytes(
-            db,
-            store,
-            object_key=key,
-            data=current,
-            user_id=claims.sub,
-            thread_id=body.thread_id,
-            tenant_id=claims.tenant_id,
-        )
-    except (WorkspacePathError, KeyError, FileNotFoundError):
+        await capture_bytes(store, object_key=key, data=current)
+    except (WorkspacePathError, KeyError, FileNotFoundError, ObjectNotFoundError):
         pass
     await store.upload(key, data)
     new_version = await record_version(
-        db,
         store,
         object_key=key,
         data=data,
         author="restore",
-        user_id=claims.sub,
-        thread_id=body.thread_id,
-        tenant_id=claims.tenant_id,
         restored_from_seq=body.seq,
     )
     return {"checksum": new_version.checksum_sha256, "seq": new_version.seq}
@@ -720,8 +643,6 @@ async def delete_file(
         raise HTTPException(
             status_code=403, detail="Storage deletion is disabled for this deployment."
         )
-    store = _require_workspace_store(ctx)
-
     # A single-user (personal/dev) tenant has nobody else's data to protect,
     # so any owner may delete their own files there. Once a second
     # *currently-registered* user is present, deletion becomes admin-only —
@@ -778,19 +699,12 @@ async def delete_file(
         ):
             raise HTTPException(status_code=404, detail="File not found")
 
+    # The file is deleted as its owner: the data service lets no one else's token touch a user's folder.
+    store = _workspace_store(ctx, claims, key_owner(path))
     try:
         await store.delete(path)
     except WorkspacePathError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    result = await db.execute(
-        select(FileMetadata).where(
-            FileMetadata.object_key == path, FileMetadata.deleted_at.is_(None)
-        )
-    )
-    meta = result.scalar_one_or_none()
-    if meta is not None:
-        meta.deleted_at = datetime.now(timezone.utc)
 
     # Deleting a file the conversation may still reference (earlier turns,
     # agent context) makes further replies in that thread unreliable — lock

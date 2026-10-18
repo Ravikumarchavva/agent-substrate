@@ -117,6 +117,52 @@ def test_the_document_parsers_are_imported_lazily_and_only_by_the_reader() -> No
     )
 
 
+def test_the_data_client_is_named_only_by_its_adapter_and_importing_the_engine_never_loads_it() -> (
+    None
+):
+    """Governed storage is the data service's (ADR 0004): the library reaches it only through ``integrations/data/``, behind the
+    ``agent-substrate[data]`` extra. No other module may name ``substrate_data_client``, and importing ``substrate`` (or its
+    ``integrations`` package) must not load it -- a plain install does not have it."""
+    import subprocess
+
+    offenders = [
+        str(path.relative_to(REPO_ROOT))
+        for path in SRC.rglob("*.py")
+        if path.relative_to(SRC).parts[:2] != ("integrations", "data")
+        and any(m.split(".")[0] == "substrate_data_client" for m in _imports(path))
+    ]
+    assert not offenders, (
+        "only integrations/data/ may import the data client:\n  "
+        + "\n  ".join(offenders)
+    )
+    program = (
+        "import sys, substrate, substrate.integrations\n"
+        "assert 'substrate_data_client' not in sys.modules, 'importing the engine loaded the data client'\n"
+    )
+    done = subprocess.run(
+        [sys.executable, "-c", program], capture_output=True, text=True, timeout=120
+    )
+    assert done.returncode == 0, done.stderr
+
+
+def test_no_object_store_credentials_or_s3_client_belong_to_the_library() -> None:
+    """Files are the data service's and clients upload on URLs it signs, so the library holds no object-store credentials: no S3 client
+    (``aiobotocore``/``boto3``/``botocore``) is named anywhere in it and the package declares no ``s3`` extra."""
+    offenders = [
+        str(path.relative_to(REPO_ROOT))
+        for path in SRC.rglob("*.py")
+        if {m.split(".")[0] for m in _imports(path)}
+        & {"aiobotocore", "botocore", "boto3"}
+    ]
+    assert not offenders, "no S3 client in the library:\n  " + "\n  ".join(offenders)
+    import tomllib
+
+    extras = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))[
+        "project"
+    ]["optional-dependencies"]
+    assert "s3" not in extras and "data" in extras
+
+
 def test_the_core_imports_nothing_outside_itself() -> None:
     """The core is what every integration and application builds on, so it can name none of them."""
     allowed = {f"substrate.{c}" for c in CORE} | {"substrate.version", "substrate"}
@@ -318,7 +364,7 @@ def test_i30_every_implementation_of_a_port_with_a_suite_runs_it() -> None:
             "TestRedisSessionStore",
         ),
         "ThreadStore": ("TestThreads", "TestPostgresThreads"),
-        "FileStore": ("TestFiles", "TestPostgresFiles", "S3FileStore"),
+        "FileStore": ("TestFiles", "TestPostgresFiles", "DataFileStore"),
         "TaskStore": ("TestTasks", "TestPostgresTasks"),
         "WorkspaceStore": ("TestWorkspaces", "TestPostgresWorkspaces"),
         "GraphStore": ("TestGraph", "TestPostgresGraph"),

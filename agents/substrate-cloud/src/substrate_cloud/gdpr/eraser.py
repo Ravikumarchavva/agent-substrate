@@ -9,9 +9,10 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import asdict, dataclass
+from collections.abc import Callable
 from typing import Any
 
-from sqlalchemy import delete, or_, select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from substrate.stores import Erased, MemoryNamespace, Store
@@ -19,7 +20,6 @@ from substrate.workspace.layout import tenant_prefix, user_prefix
 from substrate.types import Actor
 from substrate_cloud.monolith.models import (
     Agent,
-    FileMetadata,
     Group,
     GroupMember,
     Thread,
@@ -33,7 +33,6 @@ class ErasureSummary:
     tenant_id: str
     user_id: str | None
     conversations_deleted: int
-    metadata_rows_deleted: int
     objects_deleted: int
     redis_keys_deleted: int
     documents_deleted: int
@@ -118,7 +117,6 @@ async def erase_user(
     tenant_id: str,
     user_id: str,
     cfg: Any,
-    pending_store: Any = None,
     memory_store: Any = None,
     runtime_store: Any = None,
     folder: Store | None = None,
@@ -150,25 +148,13 @@ async def erase_user(
         folder=folder,
         tenant_id=tenant_id,
     )
-    # `user_id` is the caller's own sub (the same string threads.user_identifier
-    # stores) — a `users` row only ever exists under its UUID primary key when
-    # that sub happens to parse as one (see routes/files.py::_ensure_user);
-    # non-UUID subs (e.g. an external platform's own id format) have no
-    # substrate `users` row to delete at all, only the Thread/FileMetadata
-    # rows above, which are keyed by the raw string regardless.
+    # `user_id` is the caller's own sub (the same string threads.user_identifier stores) — a `users` row only ever exists under its UUID
+    # primary key when that sub happens to parse as one; non-UUID subs (e.g. an external platform's own id format) have no substrate
+    # `users` row to delete at all. Their file records go with their files, below: they live in the user's own folder.
     try:
         user_uuid: uuid.UUID | None = uuid.UUID(user_id)
     except ValueError:
         user_uuid = None
-    ownership = [FileMetadata.thread_id.in_(thread_ids)] if thread_ids else []
-    if user_uuid is not None:
-        ownership.append(FileMetadata.user_id == user_uuid)
-    metadata_result = await db.execute(
-        delete(FileMetadata).where(
-            FileMetadata.org_id == tenant_id,
-            or_(*ownership) if ownership else False,
-        )
-    )
     # Thread deletion cascades elements, feedback and scheduled-task rows.
     if thread_ids:
         await db.execute(delete(Thread).where(Thread.id.in_(thread_ids)))
@@ -191,12 +177,8 @@ async def erase_user(
     # single prefix delete removes every conversation this user ever had
     # along with it — no separate per-conversation sweep needed, and
     # nothing to miss if a thread's ownership record were ever wrong.
+    # The user's file records and the upload tickets are in that folder too, so one delete leaves nothing of them.
     objects = await _delete_prefix(store, user_prefix(tenant_id, user_id))
-    if pending_store is not None and hasattr(pending_store, "delete_prefix"):
-        # A composer attachment never touches `store` until the message
-        # carrying it is sent (routes/files.py) — without this, one staged
-        # but never-sent survives erasure entirely.
-        objects += await pending_store.delete_prefix(user_prefix(tenant_id, user_id))
     redis_deleted = await _redis_sweep(redis, {user_id, *thread_ids})
     documents = await _erase_documents(folder, store, user_prefix(tenant_id, user_id))
     memories = (
@@ -221,7 +203,6 @@ async def erase_user(
         tenant_id,
         user_id,
         len(thread_ids),
-        metadata_result.rowcount or 0,
         objects,
         redis_deleted,
         documents,
@@ -241,11 +222,14 @@ async def erase_tenant(
     redis: Any,
     tenant_id: str,
     cfg: Any,
-    pending_store: Any = None,
+    user_store: Callable[[str], Any] | None = None,
     memory_store: Any = None,
     runtime_store: Any = None,
     folder: Store | None = None,
 ) -> ErasureSummary:
+    """Erase a tenant. ``store`` is the tenant's store. With a data service (``user_store`` given) a user's folder can only be
+    deleted as that user, so each user the tenant had is erased through ``user_store(user)``, then the tenant's shared folders
+    through ``store``; the volume itself is the data service's to unregister (the platform's deprovisioning)."""
     threads = list(
         (
             await db.execute(select(Thread).where(Thread.tenant_id == tenant_id))
@@ -253,18 +237,24 @@ async def erase_tenant(
     )
     thread_ids = {str(thread.id) for thread in threads}
     users = {thread.user_identifier for thread in threads if thread.user_identifier}
-    metadata_result = await db.execute(
-        delete(FileMetadata).where(FileMetadata.org_id == tenant_id)
-    )
     await db.execute(delete(Thread).where(Thread.tenant_id == tenant_id))
     groups_result = await db.execute(delete(Group).where(Group.tenant_id == tenant_id))
     agents_result = await db.execute(delete(Agent).where(Agent.tenant_id == tenant_id))
     await db.commit()
     # Everything the folder store holds for the tenant — conversation DAG, tasks, vectors, graph, files, memory.
     erased = await folder.tenant(tenant_id).erase() if folder is not None else Erased()
-    objects = erased.files + await _delete_prefix(store, tenant_prefix(tenant_id))
-    if pending_store is not None and hasattr(pending_store, "delete_prefix"):
-        objects += await pending_store.delete_prefix(tenant_prefix(tenant_id))
+    objects = erased.files
+    if user_store is None:
+        objects += await _delete_prefix(store, tenant_prefix(tenant_id))
+    else:
+        for user in sorted(users):
+            objects += await _delete_prefix(
+                user_store(user), user_prefix(tenant_id, user)
+            )
+        for shared in ("knowledge", "groups"):
+            objects += await _delete_prefix(
+                store, f"{tenant_prefix(tenant_id)}/{shared}/"
+            )
     redis_deleted = await _redis_sweep(redis, thread_ids | users)
     documents = await _erase_documents(folder, store, tenant_prefix(tenant_id))
     memories = erased.memories + (
@@ -279,7 +269,6 @@ async def erase_tenant(
         tenant_id,
         None,
         len(thread_ids),
-        metadata_result.rowcount or 0,
         objects,
         redis_deleted,
         documents,

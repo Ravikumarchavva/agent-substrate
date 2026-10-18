@@ -20,6 +20,7 @@ import hashlib
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
+from tests._file_rows import rows_db
 from substrate_cloud.monolith.routes.chat_context import (
     _build_file_context,
     _session_relative_path,
@@ -93,14 +94,7 @@ async def test_build_file_context_inlines_pdf_as_text(monkeypatch):
         _FIXTURE.stat().st_size,
     )
 
-    scalars_result = MagicMock()
-    scalars_result.all.return_value = [meta]
-    execute_result = MagicMock()
-    execute_result.scalars.return_value = scalars_result
-
-    db = MagicMock()
-    db.execute = AsyncMock(return_value=execute_result)
-    db.commit = AsyncMock()
+    db = rows_db([meta])
 
     file_store = MagicMock()
     file_store.download = AsyncMock(return_value=_FIXTURE.read_bytes())
@@ -109,9 +103,8 @@ async def test_build_file_context_inlines_pdf_as_text(monkeypatch):
 
     # Request code reaches the stores through the tenant fence; the fake hands back the same fakes.
 
-    ctx.files_for = lambda _tenant, ctx=ctx: ctx.file_store
+    ctx.files_for = lambda _tenant, _user=None, ctx=ctx: ctx.file_store
 
-    ctx.pending_for = lambda _tenant, ctx=ctx: ctx.pending_file_store
     ctx.file_store = file_store
     # No RAG backend configured — exercises the old inline-extraction path.
     ctx.rag_backend = None
@@ -146,14 +139,7 @@ async def test_build_file_context_falls_back_to_attachment_on_bad_pdf():
         file_id, "corrupt.pdf", f"users/u1/uploads/{file_id}/corrupt.pdf", 12
     )
 
-    scalars_result = MagicMock()
-    scalars_result.all.return_value = [meta]
-    execute_result = MagicMock()
-    execute_result.scalars.return_value = scalars_result
-
-    db = MagicMock()
-    db.execute = AsyncMock(return_value=execute_result)
-    db.commit = AsyncMock()
+    db = rows_db([meta])
 
     file_store = MagicMock()
     file_store.download = AsyncMock(return_value=b"not a real pdf")
@@ -162,9 +148,8 @@ async def test_build_file_context_falls_back_to_attachment_on_bad_pdf():
 
     # Request code reaches the stores through the tenant fence; the fake hands back the same fakes.
 
-    ctx.files_for = lambda _tenant, ctx=ctx: ctx.file_store
+    ctx.files_for = lambda _tenant, _user=None, ctx=ctx: ctx.file_store
 
-    ctx.pending_for = lambda _tenant, ctx=ctx: ctx.pending_file_store
     ctx.file_store = file_store
     # No RAG backend configured — exercises the old inline-extraction path.
     ctx.rag_backend = None
@@ -206,22 +191,14 @@ async def _run_build_file_context_for_workspace_path(object_key: str):
     file_id = "44444444-4444-4444-4444-444444444444"
     meta = _xlsx_meta(file_id, "data.xlsx", object_key, 1234)
 
-    scalars_result = MagicMock()
-    scalars_result.all.return_value = [meta]
-    execute_result = MagicMock()
-    execute_result.scalars.return_value = scalars_result
-
-    db = MagicMock()
-    db.execute = AsyncMock(return_value=execute_result)
-    db.commit = AsyncMock()
+    db = rows_db([meta])
 
     ctx = MagicMock()
 
     # Request code reaches the stores through the tenant fence; the fake hands back the same fakes.
 
-    ctx.files_for = lambda _tenant, ctx=ctx: ctx.file_store
+    ctx.files_for = lambda _tenant, _user=None, ctx=ctx: ctx.file_store
 
-    ctx.pending_for = lambda _tenant, ctx=ctx: ctx.pending_file_store
     ctx.file_store = MagicMock()
 
     body = MagicMock()
@@ -258,22 +235,14 @@ async def test_file_context_includes_thread_files_with_no_file_ids_this_turn(
         1234,
     )
 
-    scalars_result = MagicMock()
-    scalars_result.all.return_value = [meta]
-    execute_result = MagicMock()
-    execute_result.scalars.return_value = scalars_result
-
-    db = MagicMock()
-    db.execute = AsyncMock(return_value=execute_result)
-    db.commit = AsyncMock()
+    db = rows_db([meta])
 
     ctx = MagicMock()
 
     # Request code reaches the stores through the tenant fence; the fake hands back the same fakes.
 
-    ctx.files_for = lambda _tenant, ctx=ctx: ctx.file_store
+    ctx.files_for = lambda _tenant, _user=None, ctx=ctx: ctx.file_store
 
-    ctx.pending_for = lambda _tenant, ctx=ctx: ctx.pending_file_store
     ctx.file_store = MagicMock()
     ctx.rag_backend = None  # not extractable, so ingestion never runs
     ctx.library = None
@@ -325,24 +294,15 @@ async def test_new_attachments_stays_narrow_while_model_context_stays_broad():
         1234,
     )
 
-    scalars_result = MagicMock()
-    # The union query (thread_id match OR file_ids match) returns both rows
-    # regardless of which one body.file_ids actually names this turn.
-    scalars_result.all.return_value = [old_meta, new_meta]
-    execute_result = MagicMock()
-    execute_result.scalars.return_value = scalars_result
-
-    db = MagicMock()
-    db.execute = AsyncMock(return_value=execute_result)
-    db.commit = AsyncMock()
+    # The thread's files plus the ones this turn names: both rows, whichever body.file_ids names.
+    db = rows_db([old_meta, new_meta])
 
     ctx = MagicMock()
 
     # Request code reaches the stores through the tenant fence; the fake hands back the same fakes.
 
-    ctx.files_for = lambda _tenant, ctx=ctx: ctx.file_store
+    ctx.files_for = lambda _tenant, _user=None, ctx=ctx: ctx.file_store
 
-    ctx.pending_for = lambda _tenant, ctx=ctx: ctx.pending_file_store
     ctx.file_store = MagicMock()
     ctx.rag_backend = None
     ctx.library = None
@@ -372,21 +332,14 @@ async def test_file_context_still_empty_with_no_file_ids_and_no_thread_files():
     still short-circuits cleanly."""
     from substrate_cloud.monolith.routes import chat_context
 
-    scalars_result = MagicMock()
-    scalars_result.all.return_value = []
-    execute_result = MagicMock()
-    execute_result.scalars.return_value = scalars_result
-
-    db = MagicMock()
-    db.execute = AsyncMock(return_value=execute_result)
+    db = rows_db([])
 
     ctx = MagicMock()
 
     # Request code reaches the stores through the tenant fence; the fake hands back the same fakes.
 
-    ctx.files_for = lambda _tenant, ctx=ctx: ctx.file_store
+    ctx.files_for = lambda _tenant, _user=None, ctx=ctx: ctx.file_store
 
-    ctx.pending_for = lambda _tenant, ctx=ctx: ctx.pending_file_store
     ctx.file_store = MagicMock()
 
     body = MagicMock()
@@ -462,14 +415,7 @@ async def test_attachment_dict_omits_workspace_path_for_extractable_types():
         12,
     )
 
-    scalars_result = MagicMock()
-    scalars_result.all.return_value = [meta]
-    execute_result = MagicMock()
-    execute_result.scalars.return_value = scalars_result
-
-    db = MagicMock()
-    db.execute = AsyncMock(return_value=execute_result)
-    db.commit = AsyncMock()
+    db = rows_db([meta])
 
     file_store = MagicMock()
     file_store.download = AsyncMock(return_value=b"not a real pdf")
@@ -478,9 +424,8 @@ async def test_attachment_dict_omits_workspace_path_for_extractable_types():
 
     # Request code reaches the stores through the tenant fence; the fake hands back the same fakes.
 
-    ctx.files_for = lambda _tenant, ctx=ctx: ctx.file_store
+    ctx.files_for = lambda _tenant, _user=None, ctx=ctx: ctx.file_store
 
-    ctx.pending_for = lambda _tenant, ctx=ctx: ctx.pending_file_store
     ctx.file_store = file_store
     ctx.rag_backend = None
     ctx.library = None
@@ -509,14 +454,7 @@ async def test_attachment_dict_still_sets_session_path_for_extractable_types():
         12,
     )
 
-    scalars_result = MagicMock()
-    scalars_result.all.return_value = [meta]
-    execute_result = MagicMock()
-    execute_result.scalars.return_value = scalars_result
-
-    db = MagicMock()
-    db.execute = AsyncMock(return_value=execute_result)
-    db.commit = AsyncMock()
+    db = rows_db([meta])
 
     file_store = MagicMock()
     file_store.download = AsyncMock(return_value=b"not a real pdf")
@@ -525,9 +463,8 @@ async def test_attachment_dict_still_sets_session_path_for_extractable_types():
 
     # Request code reaches the stores through the tenant fence; the fake hands back the same fakes.
 
-    ctx.files_for = lambda _tenant, ctx=ctx: ctx.file_store
+    ctx.files_for = lambda _tenant, _user=None, ctx=ctx: ctx.file_store
 
-    ctx.pending_for = lambda _tenant, ctx=ctx: ctx.pending_file_store
     ctx.file_store = file_store
     ctx.rag_backend = None
     ctx.library = None
@@ -601,22 +538,14 @@ async def test_workspace_path_absent_for_a_pdf_even_with_nsjail_configured(
     meta = _pdf_meta(file_id, "report.pdf", f"users/u1/sessions/t1/{file_id}.pdf", 999)
     meta.extracted_text = "cached report contents"  # cache hit, no download needed
 
-    scalars_result = MagicMock()
-    scalars_result.all.return_value = [meta]
-    execute_result = MagicMock()
-    execute_result.scalars.return_value = scalars_result
-
-    db = MagicMock()
-    db.execute = AsyncMock(return_value=execute_result)
-    db.commit = AsyncMock()
+    db = rows_db([meta])
 
     ctx = MagicMock()
 
     # Request code reaches the stores through the tenant fence; the fake hands back the same fakes.
 
-    ctx.files_for = lambda _tenant, ctx=ctx: ctx.file_store
+    ctx.files_for = lambda _tenant, _user=None, ctx=ctx: ctx.file_store
 
-    ctx.pending_for = lambda _tenant, ctx=ctx: ctx.pending_file_store
     ctx.file_store = MagicMock()
     ctx.rag_backend = None  # exercises the old inline-extraction cache-hit path
     ctx.library = None
@@ -642,14 +571,7 @@ async def test_build_file_context_uses_cached_extracted_text_without_download():
     meta.extracted_text = "cached invoice contents"
     meta.extraction_engine = "pypdf"
 
-    scalars_result = MagicMock()
-    scalars_result.all.return_value = [meta]
-    execute_result = MagicMock()
-    execute_result.scalars.return_value = scalars_result
-
-    db = MagicMock()
-    db.execute = AsyncMock(return_value=execute_result)
-    db.commit = AsyncMock()
+    db = rows_db([meta])
 
     file_store = MagicMock()
     file_store.download = AsyncMock(
@@ -660,9 +582,8 @@ async def test_build_file_context_uses_cached_extracted_text_without_download():
 
     # Request code reaches the stores through the tenant fence; the fake hands back the same fakes.
 
-    ctx.files_for = lambda _tenant, ctx=ctx: ctx.file_store
+    ctx.files_for = lambda _tenant, _user=None, ctx=ctx: ctx.file_store
 
-    ctx.pending_for = lambda _tenant, ctx=ctx: ctx.pending_file_store
     ctx.file_store = file_store
     # No RAG backend configured — exercises the old inline-extraction path.
     ctx.rag_backend = None
@@ -687,8 +608,7 @@ def _documents_ctx(tmp_path, data: bytes):
     from substrate.stores import Store
 
     ctx = MagicMock()
-    ctx.files_for = lambda _tenant, ctx=ctx: ctx.file_store
-    ctx.pending_for = lambda _tenant, ctx=ctx: ctx.pending_file_store
+    ctx.files_for = lambda _tenant, _user=None, ctx=ctx: ctx.file_store
     ctx.file_store = MagicMock()
     ctx.file_store.download = AsyncMock(return_value=data)
     ctx.library = Library(Store.at(tmp_path / "store"), reader=Reader(isolate=False))
@@ -712,13 +632,7 @@ def _request_without_redis():
 
 
 def _db_with(meta):
-    scalars_result = MagicMock()
-    scalars_result.all.return_value = [meta]
-    execute_result = MagicMock()
-    execute_result.scalars.return_value = scalars_result
-    db = MagicMock()
-    db.execute = AsyncMock(return_value=execute_result)
-    db.commit = AsyncMock()
+    db = rows_db([meta])
     return db
 
 

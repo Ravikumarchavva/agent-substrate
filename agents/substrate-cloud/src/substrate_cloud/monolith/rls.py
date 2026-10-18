@@ -27,7 +27,7 @@ USING (
 # now created with a tenant stamped (login is required — see
 # thread_service.py::get_owned_thread), so a NULL-tenant row is never a
 # legitimate current row; the general _TENANT_COLUMN_POLICY's IS NULL clause
-# exists for other tables (file_metadata/file_versions/workspace_quotas)
+# exists for other tables (none today)
 # whose NULL-tenant cases haven't been audited the same way, so it stays as
 # a shared default there.
 _THREADS_POLICY = """
@@ -76,8 +76,6 @@ _POLICIES: list[tuple[str, str]] = [
         "agent_contacts",
         _JOIN_POLICY.format(fk="agent_id", parent="agents", parent_column="tenant_id"),
     ),
-    ("file_metadata", _TENANT_COLUMN_POLICY.format(column="org_id")),
-    ("file_versions", _TENANT_COLUMN_POLICY.format(column="tenant_id")),
     (
         "scheduled_tasks",
         _JOIN_POLICY.format(
@@ -97,7 +95,6 @@ _POLICIES: list[tuple[str, str]] = [
         )
         """,
     ),
-    ("workspace_quotas", _TENANT_COLUMN_POLICY.format(column="user_id")),
 ]
 
 _POLICY_NAME = "tenant_isolation"

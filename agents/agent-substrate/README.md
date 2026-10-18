@@ -61,7 +61,7 @@ uv add agent-substrate
 pip install agent-substrate
 ```
 
-The base install contains the complete engine (`pydantic`, `typing_extensions`, `opentelemetry-api`, `pypdfium2`, and `confusable_homoglyphs`) and stores everything in an embedded SQLite folder, so it runs with no other service. Optional integrations (vendor LLMs, Postgres, Redis, S3, OCR) are extras; see [Tech Stack](#-tech-stack-required-vs-opt-in):
+The base install contains the complete engine (`pydantic`, `typing_extensions`, `opentelemetry-api`, `pypdfium2`, and `confusable_homoglyphs`) and stores everything in an embedded SQLite folder, so it runs with no other service. Optional integrations (vendor LLMs, Postgres, Redis, governed files, OCR) are extras; see [Tech Stack](#-tech-stack-required-vs-opt-in):
 
 ```bash
 uv add "agent-substrate[openai,postgres]"
@@ -148,7 +148,7 @@ Everything below is an **extra you choose** (`uv add "agent-substrate[openai,pos
 | A model provider | `openai` (also vLLM, llama.cpp, Ollama, LM Studio), `anthropic`, `gemini` | that vendor's SDK |
 | **PostgreSQL** instead of SQLite (several workers or hosts) | `postgres` | `asyncpg`; vectors use the **pgvector** extension |
 | Redis (session cache, event bus) | `redis` | `redis` client |
-| Object storage instead of local disk | `s3` | `aiobotocore` (works with SeaweedFS, MinIO, S3) |
+| Governed, versioned files through a Substrate Data service instead of local disk | `data` | `substrate-data-client` (httpx only; bytes go straight to object storage on signed URLs) |
 | Scheduled / cron tasks | `scheduler` | `apscheduler` |
 | OCR for scanned pages without a system program | `ocr` | **RapidOCR**: PaddleOCR's own small models on ONNX Runtime, inside the wheel (~120-150 MB) |
 | Layout, tables and chart reading | the **document-intelligence service** (`make infra-up-document-intelligence`) | **PaddleOCR-VL** in a CPU container (~1 GB image), called over HTTP |
@@ -172,7 +172,7 @@ Full reasoning per extra (sizes, pins, exclusivity) is in [`optional-dependencie
 | An LLM key | Any one provider above. |
 | **Docker** | Only to run the two services above with `make infra-up`. |
 
-Optional on the platform, each off until configured: SeaweedFS or S3 for files (`FILE_STORE_BACKEND`), the document-intelligence and embedding-reranker services, ONLYOFFICE for editing Office files server-side, Resend for emailing scheduled-task results (`RESEND_API_KEY`), and Grafana, Loki and Tempo for observability.
+Optional on the platform, each off until configured: Substrate Data for files (`DATA_SERVICE_URL`; without it files are a local folder), the document-intelligence and embedding-reranker services, ONLYOFFICE for editing Office files server-side, Resend for emailing scheduled-task results (`RESEND_API_KEY`), and Grafana, Loki and Tempo for observability.
 
 ### The apps around it
 
@@ -203,7 +203,7 @@ agents         ← ReActAgent, OrchestratorAgent, UserProxyAgent, Flows (Sequent
 ```
 
 **Outside the Core:**
-*   **`substrate.integrations`**: Out-of-tree adapters for third-party vendors (OpenAI, Anthropic, Gemini, Groq, Ollama), database drivers (`PostgresDatabase`, `postgres_store`), object stores (`S3FileStore`), Redis, and sandboxes (Docker / nsjail).
+*   **`substrate.integrations`**: Out-of-tree adapters for third-party vendors (OpenAI, Anthropic, Gemini, Groq, Ollama), database drivers (`PostgresDatabase`, `postgres_store`), governed files (`DataFileStore`), Redis, and sandboxes (Docker / nsjail).
 *   **`substrate.server`**: Turn-key FastAPI HTTP and Server-Sent Events (SSE) serving layer with AG-UI wire protocol support.
 *   **`tests/invariants`**: An executable invariant register with 221 property tests verifying crash survival, replay determinism, and zero vendor leak.
 

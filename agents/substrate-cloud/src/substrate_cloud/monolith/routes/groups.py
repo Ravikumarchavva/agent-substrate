@@ -398,7 +398,7 @@ async def set_group_avatar(
     ctx: ServerDependencies = Depends(get_ctx),
 ):
     group = await _owned(db, group_id, user)
-    store = ctx.files_for(user.tenant_id)
+    store = ctx.files_for(user.tenant_id, user.sub)
     if store is None:
         raise HTTPException(503, "File storage is not configured.")
     try:
@@ -425,7 +425,7 @@ async def clear_group_avatar(
     ctx: ServerDependencies = Depends(get_ctx),
 ):
     group = await _owned(db, group_id, user)
-    store = ctx.files_for(user.tenant_id)
+    store = ctx.files_for(user.tenant_id, user.sub)
     if store is not None:
         await avatar.remove(store, group.avatar_key)
     group.avatar_key = None
@@ -477,7 +477,7 @@ async def delete_group(
     members = [agent.id for _, agent in await groups.group_members(db, group.id)]
     workspace_id = group.workspace_id
     await _store(ctx).channel_delete(group.channel)
-    files = ctx.files_for(user.tenant_id)
+    files = ctx.files_for(user.tenant_id, user.sub)
     if files is not None:
         await delete_workspace_files(
             files, user.tenant_id or "default", user.sub, workspace_id
@@ -544,7 +544,7 @@ async def upload_group_file(
 ):
     """Add a file to the group's shared files; attach it to a message by sending its ``key``."""
     group = await _owned(db, group_id, user)
-    store = ctx.files_for(user.tenant_id)
+    store = ctx.files_for(user.tenant_id, user.sub)
     if store is None:
         raise HTTPException(503, "File storage is not configured.")
     data = await file.read()
@@ -587,7 +587,7 @@ async def list_group_files(
 ):
     """Everything in the group's shared files: what you uploaded and what the agents made."""
     group = await _owned(db, group_id, user)
-    store = ctx.files_for(user.tenant_id)
+    store = ctx.files_for(user.tenant_id, user.sub)
     if store is None:
         return []
     return [

@@ -21,8 +21,14 @@ from pydantic import BaseModel
 from substrate.stores.file_tables import Files
 from substrate_cloud.monolith.security.rls_deps import get_service_scoped_db
 from substrate_cloud.monolith.dependencies import ServerDependencies, get_ctx
-from substrate_cloud.monolith.models import Thread, WorkspaceQuota
+from substrate_cloud.monolith.models import Thread
 from substrate_cloud.monolith.security.deps import AuthClaims, get_current_user
+from substrate_cloud.storage_admin import (
+    DataStorageAdmin,
+    LocalStorageAdmin,
+    StorageAdmin,
+    StorageUnsupported,
+)
 from substrate_cloud.stream import project_thread
 
 logger = logging.getLogger(__name__)
@@ -169,24 +175,29 @@ async def delete_thread(
     return {"deleted": thread_id}
 
 
-# ── Storage (the store's own files only — FILE_STORE_BACKEND=local) ──────────
+# ── Storage ──────────────────────────────────────────────────────────────────
 
 
-def _require_workspace_file_store(ctx: ServerDependencies) -> Files:
-    store = ctx.file_store
-    if not isinstance(store, Files):
-        raise HTTPException(
-            status_code=501,
-            detail=(
-                "Admin storage management requires the store's own file backend "
-                "(FILE_STORE_BACKEND=local, the default) — not S3."
-            ),
-        )
-    return store
+def _storage_admin(ctx: ServerDependencies) -> StorageAdmin:
+    """The storage page's backend: the data service as an administrator, or the local folder store."""
+    access = ctx.file_access
+    if access is not None and access.data_backed:
+        if access.admin is None:
+            raise HTTPException(
+                status_code=501,
+                detail="Admin storage management needs DATA_ADMIN_OIDC_ISSUER, DATA_ADMIN_CLIENT_ID and DATA_ADMIN_CLIENT_SECRET.",
+            )
+        return DataStorageAdmin(access.admin, access.connection.volume_of)
+    if isinstance(ctx.file_store, Files):
+        return LocalStorageAdmin(ctx.file_store)
+    raise HTTPException(
+        status_code=501,
+        detail="Admin storage management needs the data service or the store's own file folder.",
+    )
 
 
 class SetQuotaRequest(BaseModel):
-    quota_bytes: int | None  # None resets the tenant to the global default
+    quota_bytes: int | None  # None removes the tenant volume's quota
 
 
 @router.get("/storage")
@@ -194,29 +205,12 @@ async def list_storage_tenants(
     ctx: ServerDependencies = Depends(get_ctx),
     _: AuthClaims = Depends(require_admin),
 ) -> List[Dict[str, Any]]:
-    """Every tenant with a workspace directory, their usage, effective quota
-    (override or global default), and conversation count.
+    """Every tenant with a workspace, their usage, quota and conversation count.
 
-    Metered per tenant, not per user: usage/quota stay tenant-scoped even
-    though conversation keys do carry a user segment (see
-    ``Files``' module docstring) — tenant is the coarser
-    identity every key reliably carries.
+    Metered per tenant, not per user: usage/quota stay tenant-scoped even though conversation keys do carry a user segment (see
+    ``Files``' module docstring) — tenant is the coarser identity every key reliably carries.
     """
-    store = _require_workspace_file_store(ctx)
-    tenants = await store.list_all_tenants()
-    result = []
-    for tenant_id in tenants:
-        used = await store.usage_bytes(tenant_id)
-        conversations = await store.list_conversations(tenant_id)
-        result.append(
-            {
-                "tenant_id": tenant_id,
-                "used_bytes": used,
-                "quota_bytes": store.effective_quota(tenant_id),
-                "conversation_count": len(conversations),
-            }
-        )
-    return result
+    return await _storage_admin(ctx).tenants()
 
 
 @router.get("/storage/{tenant_id}/conversations")
@@ -225,13 +219,10 @@ async def list_storage_conversations(
     ctx: ServerDependencies = Depends(get_ctx),
     _: AuthClaims = Depends(require_admin),
 ) -> List[Dict[str, Any]]:
-    """``(conversation_id, size_bytes, file_count)`` for one tenant — the
-    admin storage page's drill-down. Conversation workspaces are what the
-    code interpreter's sandbox mounts (``sandbox_service.py`` /
-    ``nsjail.py`` mount ``.../conversations/{cid}/workspace``), so this
-    is what an agent's sandbox run actually wrote."""
-    store = _require_workspace_file_store(ctx)
-    conversations = await store.list_conversations(tenant_id)
+    """``(conversation_id, size_bytes, file_count)`` for one tenant — the admin storage page's drill-down. Conversation workspaces
+    are what the code interpreter's sandbox mounts (``sandbox_service.py`` / ``nsjail.py`` mount ``.../conversations/{cid}/workspace``),
+    so this is what an agent's sandbox run actually wrote."""
+    conversations = await _storage_admin(ctx).conversations(tenant_id)
     return [
         {"conversation_id": cid, "size_bytes": size, "file_count": count}
         for cid, size, count in conversations
@@ -243,32 +234,15 @@ async def set_storage_quota(
     tenant_id: str,
     body: SetQuotaRequest,
     ctx: ServerDependencies = Depends(get_ctx),
-    db: AsyncSession = Depends(get_service_scoped_db),
     _: AuthClaims = Depends(require_admin),
 ) -> Dict[str, Any]:
-    """Set (or, with ``quota_bytes: null``, reset to the global default)
-    one tenant's storage quota. Takes effect immediately (updates the live
-    store) and persists (upserts/deletes the ``workspace_quotas`` row) so
-    it survives a restart."""
-    store = _require_workspace_file_store(ctx)
-
-    existing = await db.get(WorkspaceQuota, tenant_id)
-    if body.quota_bytes is None:
-        if existing is not None:
-            await db.delete(existing)
-            await db.commit()
-    elif existing is not None:
-        existing.quota_bytes = body.quota_bytes
-        await db.commit()
-    else:
-        db.add(WorkspaceQuota(user_id=tenant_id, quota_bytes=body.quota_bytes))
-        await db.commit()
-
-    store.set_quota_override(tenant_id, body.quota_bytes)
+    """Set (or, with ``quota_bytes: null``, remove) one tenant's storage quota. It is the tenant volume's hard quota in the data
+    service, enforced there on every write; this process keeps no copy."""
+    try:
+        result = await _storage_admin(ctx).set_quota(tenant_id, body.quota_bytes)
+    except StorageUnsupported as exc:
+        raise HTTPException(status_code=501, detail=str(exc)) from exc
     logger.info(
         "Admin set storage quota for tenant %s: %r", tenant_id, body.quota_bytes
     )
-    return {
-        "tenant_id": tenant_id,
-        "quota_bytes": store.effective_quota(tenant_id),
-    }
+    return result

@@ -125,23 +125,10 @@ async def lifespan(app: FastAPI):
     app.state.skill_manager = infra.skill_manager
     app.state.file_store = infra.file_store
 
-    from substrate_cloud.monolith.routes.files import sweep_stale_pending_uploads
-
-    app.state.pending_file_store = infra.pending_file_store
+    app.state.file_access = infra.file_access
+    app.state.data_minter = infra.data_minter
     app.state.artifact_store = infra.artifact_store
     app.state.workspace_store = infra.workspace_store
-    removed_bytes = app.state.pending_file_store.sweep_stale(
-        older_than_seconds=settings.PENDING_UPLOAD_TTL_HOURS * 3600
-    )
-    removed_rows = await sweep_stale_pending_uploads(
-        session_factory, settings.PENDING_UPLOAD_TTL_HOURS
-    )
-    if removed_bytes or removed_rows:
-        logger.info(
-            "Swept %d stale pending upload file(s), %d orphaned row(s) on startup",
-            removed_bytes,
-            removed_rows,
-        )
 
     # Every request is verified against the realm; fail at startup rather than answer 503 to all of them.
     app.state.token_verifier = build_verifier(settings)
@@ -289,7 +276,7 @@ async def lifespan(app: FastAPI):
         session_factory=app.state.session_factory,
         ci_client=app.state.ci_client,
         file_store=app.state.file_store,
-        pending_file_store=app.state.pending_file_store,
+        file_access=app.state.file_access,
         artifact_store=app.state.artifact_store,
         workspace_store=app.state.workspace_store,
         trigger_scheduler=app.state.trigger_scheduler,
@@ -302,17 +289,6 @@ async def lifespan(app: FastAPI):
         knowledge=app.state.knowledge,
     )
     app.state.ctx.enrichment = app.state.enrichment
-
-    from substrate_cloud.monolith.routes.files import sweep_stuck_staging_uploads
-
-    dispatched = await sweep_stuck_staging_uploads(
-        app.state.ctx, ttl_minutes=settings.STAGING_RECONCILIATION_TTL_MINUTES
-    )
-    if dispatched:
-        logger.info(
-            "Staging reconciliation: re-dispatched %d stuck upload(s) on startup",
-            dispatched,
-        )
 
     if app.state.enrichment is not None:
         # each library describes only its own kind of collection: knowledge bases (filed by topic) and conversations (not)
@@ -410,10 +386,8 @@ async def lifespan(app: FastAPI):
         await app.state.store.aclose()  # threads, memory and session state share it
     if getattr(app.state, "redis_client", None):
         await app.state.redis_client.aclose()
-    if hasattr(getattr(app.state, "file_store", None), "disconnect"):
-        await (
-            app.state.file_store.disconnect()
-        )  # the S3 connection; the store's own files close with the store
+    if getattr(app.state, "file_access", None) is not None:
+        await app.state.file_access.aclose()  # the pooled data-service connection; the store's own files close with the store
     for tool in app.state.tools.all():
         if hasattr(tool, "stop"):
             try:

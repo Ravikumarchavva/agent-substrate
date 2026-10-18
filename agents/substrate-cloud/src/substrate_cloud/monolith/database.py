@@ -52,16 +52,6 @@ _MIGRATE_COLUMNS: list[tuple[str, str, str]] = [
     ("agents", "pinned_at", "TIMESTAMPTZ"),
     ("scheduled_task_runs", "tokens", "INTEGER NOT NULL DEFAULT 0"),
     ("scheduled_task_runs", "cost_usd", "DOUBLE PRECISION NOT NULL DEFAULT 0"),
-    ("file_metadata", "extracted_text", "TEXT"),
-    ("file_metadata", "extracted_at", "TIMESTAMPTZ"),
-    ("file_metadata", "extraction_engine", "VARCHAR"),
-    ("file_metadata", "rag_ingested_at", "TIMESTAMPTZ"),
-    ("file_metadata", "page_count", "INTEGER"),
-    ("file_metadata", "staged_at", "TIMESTAMPTZ"),
-    ("file_metadata", "staging_error", "TEXT"),
-    ("file_metadata", "promoted_at", "TIMESTAMPTZ"),
-    ("file_versions", "restored_from_seq", "INTEGER"),
-    ("file_versions", "tenant_id", "VARCHAR"),
 ]
 
 
@@ -162,8 +152,8 @@ async def get_db(request: Request) -> AsyncGenerator[AsyncSession, None]:
     whole request, rather than letting the session pull from the engine's
     pool per-transaction (the default). This matters specifically for
     ``get_tenant_scoped_db`` (rls_deps.py): a route that calls
-    ``db.commit()`` more than once mid-request (e.g. upload_file's
-    ``_ensure_user``, then again after the file_metadata insert) was
+    ``db.commit()`` more than once mid-request (e.g. a route that commits a
+    thread lock and then reads its own row back) was
     silently losing its RLS session GUCs (``app.current_tenant_id`` etc.)
     on the second commit — `Session.commit()` returns the connection to
     the pool by default, so the next statement (e.g. `db.refresh()`) could

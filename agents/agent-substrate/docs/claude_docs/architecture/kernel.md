@@ -24,7 +24,7 @@ agents       RoutedAgent (+ @handle), ReActAgent, OrchestratorAgent, UserProxyAg
 testing      conformance suites and doubles; never imported by production code
 -------
 evals/                the eval harness, a client of the core (not part of it)
-integrations/             adapters: vendor LLM clients, Postgres/Redis/S3 backends, MCP, tools, and URL clients for the heavy services
+integrations/             adapters: vendor LLM clients, Postgres/Redis backends, the data-service file adapter, MCP, tools, and URL clients for the heavy services
 apps/ packages/           the heavy services (document intelligence, embedding/reranking, the inference pool): projects of their own
 serving/ console/ cli     wiring: FastAPI apps, the REPL, the CLI
 ```
@@ -58,7 +58,7 @@ log and `synchronous=FULL`, so a transaction that returned survives a kill (row:
 Each part of the engine owns its tables and ships them as ordered migrations recorded in the database; a folder from a
 newer build is refused (`StoreVersionError`). `Store.start()` creates only the layout and `substrate_info`; threads, memory, tasks, graph, vectors and files each create their tables the first time that part is used (`Store.ensure`), and `Store.has(component)` says whether a part exists, so a store that only runs agents and keeps threads holds no `vector_docs`, `graph_*`, `memory_records` or `files` (row: `test_a_runtime_only_store_creates_no_…`; ADR 0004). Every part lives in the same database, so a later step can make one turn commit as one transaction — today each part commits on its own. Workers on one host share the folder. For workers on several machines the same engine runs over PostgreSQL —
 `integrations.database.postgres_store(dsn)` (a `Database` adapter; its own schema, `substrate` by default) — with the rows in Postgres
-and file contents in the `files` folder (or an `S3FileStore`). The few things SQL spells differently live in one place
+and file contents in the `files` folder (or a `DataFileStore` over the data service). The few things SQL spells differently live in one place
 (`stores/textsearch.py`: FTS5 + triggers on SQLite, a generated `tsvector` + GIN on Postgres; the vector column: packed bytes
 on SQLite, a pgvector column with an HNSW index per vector width — `halfvec` above 2,000 dimensions — on Postgres).
 Every facet runs the same conformance suite on both (`tests/integrations/test_postgres_store_conformance.py`). There is no in-memory store: tests use a folder (`ephemeral_runtime`, `runtime_store`).
@@ -112,7 +112,7 @@ A guarantee not yet true is `xfail(strict=True)` naming what fixes it.
 
 Conformance suites live in `testing/conformance/` and are run by every implementation of
 their port: `RuntimeStore`, `MemoryStore`, `VectorStore` (`SearchableVectorStoreConformance` adds word and hybrid search), `ThreadStore`,
-`TaskStore`, `GraphStore`, `ShortTermMemory` and `WorkspaceStore` (each on the folder store and on Postgres), `FileStore` (folder, Postgres, S3), `ChatModel` (OpenAI chat + Responses, Anthropic, Gemini — through each vendor's real SDK over a
+`TaskStore`, `GraphStore`, `ShortTermMemory` and `WorkspaceStore` (each on the folder store and on Postgres), `FileStore` (folder, Postgres, `DataFileStore` against a real substrate-data), `ChatModel` (OpenAI chat + Responses, Anthropic, Gemini — through each vendor's real SDK over a
 scripted HTTP transport), `EmbeddingModel` (OpenAI, Gemini, local sentence-transformers, embedding-reranker service),
 `DocumentExtractor` (local, document-intelligence service). There is no in-memory store: the minimum a durable agent rests on is a folder.
 Row I30 fails the build if an implementation of a port that has a suite does not run it.

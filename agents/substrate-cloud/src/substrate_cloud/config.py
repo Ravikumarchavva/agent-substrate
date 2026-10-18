@@ -24,7 +24,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class SubstrateConfig(BaseSettings):
     # ── Single Data Directory (Unified Root) ──────────────────────────────────
     DATA_DIR: str = "./data"
-    # "local" (zero-external-service file/LanceDB store) | "postgres" (PostgreSQL + S3) | "hybrid"
+    # "local" (zero-external-service file/LanceDB store) | "postgres" (PostgreSQL) | "hybrid"
     STORAGE_MODE: str = "local"
     # ── LLM provider keys ────────────────────────────────────────────────────
     OPENAI_API_KEY: str = ""
@@ -67,7 +67,7 @@ class SubstrateConfig(BaseSettings):
 
     # ── The store: everything the engine remembers ───────────────────────────
     # "postgres" (workers on several machines; rows in DATABASE_URL) | "local" (no infra: one folder, STORE_PATH).
-    # File contents live under STORE_PATH either way unless FILE_STORE_BACKEND=s3.
+    # File contents live under STORE_PATH unless DATA_SERVICE_URL points at Substrate Data.
     STORE_BACKEND: str = "postgres"
     STORE_PATH: str = ""
 
@@ -107,15 +107,9 @@ class SubstrateConfig(BaseSettings):
     DISABLE_TOOL_APPROVALS: bool = False
 
     # ── File storage ─────────────────────────────────────────────────────────
-    # "local" (Files) | "s3" (SeaweedFS/S3)
-    FILE_STORE_BACKEND: str = "local"
+    # With DATA_SERVICE_URL set, files are Substrate Data's Files domain (governed, versioned, direct-to-storage) and this process holds
+    # no object-store credentials at all. Without it, files are a folder on this machine.
     FILE_STORE_ROOT: str = ""
-    FILE_STORE_BUCKET: str = "agent-files"
-    FILE_STORE_ENDPOINT: str | None = None
-    FILE_STORE_REGION: str = "us-east-1"
-    FILE_STORE_ACCESS_KEY: str | None = None
-    FILE_STORE_SECRET_KEY: str | None = None
-    FILE_STORE_PREFIX: str = ""
 
     # ── Code interpreter sandbox ─────────────────────────────────────────────
     # "nsjail" (Linux namespaces/cgroups) | "k8s" (isolated pods) | "inprocess" (tests only)
@@ -164,10 +158,18 @@ class SubstrateConfig(BaseSettings):
     # DATA_DIR/keys when no file is given; its public half is served at /.well-known/data-token-jwks.json
     # for the data service to fetch (to rotate, rename the key to <name>.previous.pem and restart).
     DATA_TOKEN_ISSUER: str = "agent-substrate"
+    # The same key under a second issuer name, for the tokens that may change files (`files:write`). Register it on the data service as a
+    # trusted issuer with read_only=false; the read-only DATA_TOKEN_ISSUER can never write whatever its tokens claim.
+    DATA_FILES_TOKEN_ISSUER: str = "agent-substrate-files"
     DATA_TOKEN_AUDIENCE: str = "substrate-data"
     DATA_TOKEN_KEY_FILE: str = ""
     # Where the gateway socket shown to sandboxes lives, on this host only (a short absolute path).
     DATA_RELAY_DIR: str = ""
+    # How the platform administers storage in the data service (tenant list, volume quotas): an OIDC client with the data-admins group.
+    # Empty leaves the admin storage routes read-only on what the data service already allows the caller.
+    DATA_ADMIN_OIDC_ISSUER: str = ""
+    DATA_ADMIN_CLIENT_ID: str = ""
+    DATA_ADMIN_CLIENT_SECRET: str = ""
 
     # ── Document-intelligence service ────────────────────────────────────────
     DOCUMENT_INTELLIGENCE_SERVICE_URL: str = ""
@@ -215,7 +217,7 @@ class SubstrateConfig(BaseSettings):
     def _apply_data_dir_defaults(self) -> SubstrateConfig:
         root = self.DATA_DIR.rstrip("/")
         if not self.FILE_STORE_ROOT:
-            self.FILE_STORE_ROOT = f"{root}/blobs/{self.FILE_STORE_BUCKET}"
+            self.FILE_STORE_ROOT = f"{root}/blobs/files"
         if not self.HISTORY_STORAGE_PATH:
             self.HISTORY_STORAGE_PATH = f"{root}/db/sessions"
         if not self.MEMORY_STORAGE_PATH:

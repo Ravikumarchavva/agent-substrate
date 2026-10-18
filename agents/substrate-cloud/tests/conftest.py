@@ -130,6 +130,10 @@ def pytest_configure(config: pytest.Config) -> None:
     )
     config.addinivalue_line(
         "markers",
+        "integration: needs Docker (a throwaway substrate-data and SeaweedFS); skips without it",
+    )
+    config.addinivalue_line(
+        "markers",
         "heavy: loads a real model or document engine into memory (several GB, tens of seconds) — "
         "not run by a plain `pytest`; `make test-ci` and `pytest -m ''` run everything",
     )
@@ -176,3 +180,13 @@ def database_url() -> str:
 @pytest.fixture
 def system_prompt() -> str:
     return "You are a helpful agent."
+
+
+@pytest.fixture(autouse=True)
+def _real_file_index_after_each_test():
+    """``tests/_file_rows.py`` swaps methods of the file index for a test; put the real ones back."""
+    from substrate_cloud.file_records import FileIndex
+
+    saved = (FileIndex.for_thread, FileIndex.save)
+    yield
+    FileIndex.for_thread, FileIndex.save = saved

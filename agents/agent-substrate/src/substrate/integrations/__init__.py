@@ -18,7 +18,7 @@ Directory layout::
     ├── pipeline/     ← declarative pipeline execution engine + DataRefStore/ArtifactStore
     ├── memory/       ← Redis session cache, the memory manager and exposure policy
     ├── database/     ← PostgresDatabase / postgres_store: the engine's state on PostgreSQL (pgvector for vectors)
-    ├── storage/      ← S3FileStore
+    ├── data/         ← DataFileStore, DataUploadSessions: governed files through substrate-data (the ``data`` extra)
     ├── safety/       ← TextSafetyClassifier, ImageSafetyClassifier
     ├── artifacts/    ← OKF artifact store
     ├── gdpr/         ← cross-store tenant erasure

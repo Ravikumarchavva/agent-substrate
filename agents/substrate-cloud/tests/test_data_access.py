@@ -90,6 +90,36 @@ async def test_a_token_names_the_user_tenant_and_agent_and_can_only_read():
     assert jwt.get_unverified_header(await m.mint(SCOPE, 90))["kid"] == m.kid
 
 
+async def test_a_files_token_is_delegated_writable_and_under_the_files_issuer():
+    m = DataTokenMinter(
+        Ed25519PrivateKey.generate(),
+        issuer="agent-substrate",
+        audience="substrate-data",
+        files_issuer="agent-substrate-files",
+    )
+    public = jwt.PyJWK(m.jwks()["keys"][0]).key
+    claims = jwt.decode(
+        await m.mint_files(SCOPE),
+        public,
+        algorithms=["EdDSA"],
+        audience="substrate-data",
+        issuer="agent-substrate-files",
+    )
+    # The same key signs both; only the issuer name differs, because the data service trusts that name to write (or only to read).
+    assert claims["scope"] == "files:write" and claims["sub"] == "user-1"
+    assert (
+        claims["act"] == {"sub": "agent-substrate:analyst"} and "groups" not in claims
+    )
+    assert verify(m, await m.mint(SCOPE, 90))["scope"] == "data:read"
+
+
+async def test_a_files_token_needs_a_user_and_a_tenant():
+    with pytest.raises(ValueError):
+        await minter().mint_files(RunScope(tenant_id="acme"))
+    with pytest.raises(ValueError):
+        await minter().mint_files(RunScope(user_id="u"))
+
+
 async def test_a_token_lives_about_as_long_as_the_run_and_never_longer_than_the_cap():
     m = minter()
     short, long = (

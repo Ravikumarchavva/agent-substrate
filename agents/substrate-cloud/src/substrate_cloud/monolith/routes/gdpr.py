@@ -28,15 +28,16 @@ class EraseTenantRequest(BaseModel):
     tenant_id: str
 
 
-def _require_store(ctx: ServerDependencies, tenant_id: str):
+def _require_store(ctx: ServerDependencies, tenant_id: str, user_id: str = "platform"):
     if ctx.file_store is None:
         raise HTTPException(status_code=503, detail="File storage is not configured")
     if not hasattr(ctx.file_store, "delete_prefix"):
         raise HTTPException(
             status_code=501, detail="File store does not support GDPR erasure"
         )
-    # Fenced to the tenant being erased: the sweep can only ever touch that tenant's subtree.
-    return ctx.files_for(tenant_id)
+    # Fenced to the tenant being erased: the sweep can only ever touch that tenant's subtree. In the data service the store acts as
+    # `user_id`: a user's folder is deleted as that user, and the tenant's shared folders as the platform's service principal.
+    return ctx.files_for(tenant_id, user_id)
 
 
 @router.post("/erase-user")
@@ -49,12 +50,11 @@ async def erase_user_data(
 ) -> dict:
     summary = await erase_user(
         db,
-        store=_require_store(ctx, body.tenant_id),
+        store=_require_store(ctx, body.tenant_id, body.user_id),
         redis=request.app.state.redis,
         tenant_id=body.tenant_id,
         user_id=body.user_id,
         cfg=settings,
-        pending_store=ctx.pending_for(body.tenant_id),
         memory_store=ctx.long_term_memory,
         runtime_store=ctx.runtime.store if ctx.runtime is not None else None,
         folder=request.app.state.store,
@@ -76,7 +76,11 @@ async def erase_tenant_data(
         redis=request.app.state.redis,
         tenant_id=body.tenant_id,
         cfg=settings,
-        pending_store=ctx.pending_for(body.tenant_id),
+        user_store=(
+            (lambda user: ctx.files_for(body.tenant_id, user))
+            if ctx.file_access is not None and ctx.file_access.data_backed
+            else None
+        ),
         memory_store=ctx.long_term_memory,
         runtime_store=ctx.runtime.store if ctx.runtime is not None else None,
         folder=request.app.state.store,

@@ -163,6 +163,13 @@ async def _library_context(
     return "\n".join(lines)
 
 
+def _staging_is_stale(meta: Any) -> bool:
+    """Eager staging that started but never finished: it runs on an in-process task that a restart takes with it, so past this age
+    the file is filed by the message that needs it instead of blocking that message forever."""
+    age = datetime.now(timezone.utc) - meta.created_at
+    return age.total_seconds() > settings.STAGING_RECONCILIATION_TTL_MINUTES * 60
+
+
 async def _build_file_context(
     db: AsyncSession,
     body: ChatRequest,
@@ -195,26 +202,11 @@ async def _build_file_context(
     if ctx.file_store is None:
         return "", [], [], []
 
-    from sqlalchemy import or_, select
+    from substrate_cloud.file_records import FileIndex
 
-    from substrate_cloud.monolith.models import FileMetadata
-
-    conditions = [FileMetadata.thread_id == body.thread_id]
-    if body.file_ids:
-        conditions.append(FileMetadata.id.in_(body.file_ids))
-
-    rows = (
-        (
-            await db.execute(
-                select(FileMetadata).where(
-                    or_(*conditions),
-                    FileMetadata.deleted_at.is_(None),
-                )
-            )
-        )
-        .scalars()
-        .all()
-    )
+    files = ctx.files_for(claims.tenant_id, claims.sub)
+    index = FileIndex(files, claims.tenant_id, claims.sub)
+    rows = await index.for_thread(body.thread_id, extra=list(body.file_ids or []))
     if not rows:
         return "", [], [], []
 
@@ -242,7 +234,7 @@ async def _build_file_context(
                         status_code=422,
                         detail=f"'{meta.original_name}' failed to process: {meta.staging_error}",
                     )
-                if meta.staged_at is None:
+                if meta.staged_at is None and not _staging_is_stale(meta):
                     raise HTTPException(
                         status_code=425,
                         detail=f"'{meta.original_name}' is still processing — try again in a moment.",
@@ -271,7 +263,7 @@ async def _build_file_context(
     text_parts: list[str] = []
     image_inputs: list[_ImagePayload] = []
     attachments: list[dict[str, Any]] = []
-    needs_commit = False
+    needs_save: list[Any] = []
 
     def _attachment_dict(meta: Any) -> dict[str, Any]:
         attachment: dict[str, Any] = {
@@ -322,17 +314,6 @@ async def _build_file_context(
         return attachment
 
     for meta in rows:
-        if meta.promoted_at is None:
-            # Attachments live only in the local pending store (see
-            # integrations/storage/pending.py) until the message
-            # referencing them is actually sent — this is that moment.
-            # Must happen before any of the ctx.files_for(claims.tenant_id).download(...)
-            # calls below, for both extractable and non-extractable
-            # (workspace-mounted) files.
-            from substrate_cloud.monolith.routes.files import promote_pending_file
-
-            await promote_pending_file(ctx, meta)
-            needs_commit = True
         if meta.content_type in EXTRACTABLE_CONTENT_TYPES:
             # Extractable documents are filed in the conversation's documents (substrate.documents.Library) and worked through with the
             # `documents` tool; a small one is also put in front of the model here, a large one as its outline. Cache hit: already
@@ -350,9 +331,7 @@ async def _build_file_context(
                     if not already_staged_for_this_thread:
                         # Not staged at upload (thread_id wasn't known then), or referenced from a different thread than it was
                         # uploaded under — file it now, under *this* message's real thread_id.
-                        data = await ctx.files_for(claims.tenant_id).download(
-                            meta.object_key
-                        )
+                        data = await files.download(meta.object_key)
                         try:
                             await ctx.library.add(
                                 data,
@@ -369,7 +348,7 @@ async def _build_file_context(
                                 await release(redis, "docquota:commit", claims.sub)
                             raise
                     meta.rag_ingested_at = datetime.now(timezone.utc)
-                    needs_commit = True
+                    needs_save.append(meta)
                 inline = await _library_context(ctx.library, collection, meta)
                 if inline:
                     text_parts.append(inline)
@@ -384,7 +363,7 @@ async def _build_file_context(
                 attachments.append(_attachment_dict(meta))
                 continue
 
-            data = await ctx.files_for(claims.tenant_id).download(meta.object_key)
+            data = await files.download(meta.object_key)
             result = await document_reader().read(
                 data, meta.original_name, content_type=meta.content_type
             )
@@ -395,7 +374,7 @@ async def _build_file_context(
                 meta.extracted_text = text
                 meta.extracted_at = datetime.now(timezone.utc)
                 meta.extraction_engine = result.engine
-                needs_commit = True
+                needs_save.append(meta)
                 attachments.append(_attachment_dict(meta))
                 continue
             # Extraction failed (corrupt file, no extraction service
@@ -403,11 +382,11 @@ async def _build_file_context(
             # so the model at least knows the file exists.
 
         elif meta.content_type.startswith("image/"):
-            data = await ctx.files_for(claims.tenant_id).download(meta.object_key)
+            data = await files.download(meta.object_key)
             image_inputs.append(_ImagePayload(data=data, media_type=meta.content_type))
             continue
         elif meta.content_type.startswith("text/"):
-            data = await ctx.files_for(claims.tenant_id).download(meta.object_key)
+            data = await files.download(meta.object_key)
             text_parts.append(
                 f"[File: {meta.original_name}]\n"
                 + data.decode("utf-8", errors="replace")
@@ -416,8 +395,8 @@ async def _build_file_context(
 
         attachments.append(_attachment_dict(meta))
 
-    if needs_commit:
-        await db.commit()
+    for meta in needs_save:
+        await index.save(meta)
 
     new_attachments = [a for a in attachments if a.get("id") in new_file_ids]
     return "\n\n".join(text_parts), image_inputs, attachments, new_attachments

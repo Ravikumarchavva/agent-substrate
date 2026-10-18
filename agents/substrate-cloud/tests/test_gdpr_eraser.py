@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from substrate_cloud.gdpr.eraser import erase_tenant, erase_user
 from substrate_cloud.config import SubstrateConfig
-from substrate_cloud.monolith.models import FileMetadata, Thread, User
+from substrate_cloud.monolith.models import Thread, User
 from substrate.testing.runtime import runtime_store
 
 
@@ -65,7 +65,7 @@ def cfg(tmp_path):
 
 
 @pytest.mark.requires_postgres
-async def test_erase_user_deletes_threads_metadata_and_the_user_row(
+async def test_erase_user_deletes_threads_files_and_the_user_row(
     db: AsyncSession, db_factory, cfg
 ):
     tenant_id = f"tenant-{uuid.uuid4()}"
@@ -92,30 +92,6 @@ async def test_erase_user_deletes_threads_metadata_and_the_user_row(
         f"tenants/{tenant_id}/users/{other_user_uuid}/conversations/"
         f"{other_thread.id}/workspace/shared/b.txt"
     )
-    db.add(
-        FileMetadata(
-            id=uuid.uuid4(),
-            object_key=own_key,
-            original_name="a.txt",
-            content_type="text/plain",
-            size_bytes=1,
-            org_id=tenant_id,
-            user_id=user_uuid,
-            thread_id=thread.id,
-        )
-    )
-    db.add(
-        FileMetadata(
-            id=uuid.uuid4(),
-            object_key=other_key,
-            original_name="b.txt",
-            content_type="text/plain",
-            size_bytes=1,
-            org_id=tenant_id,
-            user_id=other_user_uuid,
-            thread_id=other_thread.id,
-        )
-    )
     await db.commit()
 
     store = FakeStore()
@@ -134,7 +110,6 @@ async def test_erase_user_deletes_threads_metadata_and_the_user_row(
             cfg=cfg,
         )
         assert summary.conversations_deleted == 1
-        assert summary.metadata_rows_deleted == 1
         assert summary.documents_deleted == 0
         assert own_key not in store.objects
         assert (
@@ -165,49 +140,78 @@ async def test_erase_user_deletes_threads_metadata_and_the_user_row(
 
 
 @pytest.mark.requires_postgres
-async def test_erase_user_also_clears_never_sent_pending_attachments(
+async def test_erase_user_takes_the_users_file_records_with_their_files(
     db: AsyncSession, db_factory, cfg
 ):
-    """A composer attachment never touches `store` until the message
-    carrying it is actually sent (routes/files.py) — before wiring
-    pending_store in, one staged but never sent survived erasure entirely."""
+    """File records and the per-thread markers live in the user's own folder (file_records.py), so the one prefix delete that
+    removes their files removes those too -- there is no table of files left behind."""
     tenant_id = f"tenant-{uuid.uuid4()}"
-    user_uuid = uuid.uuid4()
-    db.add(User(id=user_uuid, identifier=f"owner-{user_uuid}@example.com"))
-    thread = Thread(
-        id=uuid.uuid4(), user_identifier=str(user_uuid), tenant_id=tenant_id
-    )
+    sub = f"external|{uuid.uuid4()}"
+    thread = Thread(id=uuid.uuid4(), user_identifier=sub, tenant_id=tenant_id)
     db.add(thread)
     await db.commit()
 
     store = FakeStore()
-    pending_store = FakeStore()
-    pending_key = (
-        f"tenants/{tenant_id}/users/{user_uuid}/conversations/"
-        f"{thread.id}/workspace/shared/never-sent.txt"
-    )
-    pending_store.objects[pending_key] = b"draft"
+    prefix = f"tenants/{tenant_id}/users/{sub}"
+    store.objects[f"{prefix}/uploads/a.txt"] = b"a"
+    store.objects[f"{prefix}/.files/ids/{uuid.uuid4()}.json"] = b"{}"
+    store.objects[f"{prefix}/.files/threads/{thread.id}/{uuid.uuid4()}"] = b""
+    other = f"tenants/{tenant_id}/users/someone-else/.files/ids/x.json"
+    store.objects[other] = b"{}"
 
     try:
         summary = await erase_user(
+            db, store=store, redis=None, tenant_id=tenant_id, user_id=sub, cfg=cfg
+        )
+        assert summary.objects_deleted == 3
+        assert list(store.objects) == [other]
+    finally:
+        async with db_factory() as cleanup:
+            row = await cleanup.get(Thread, thread.id)
+            if row is not None:
+                await cleanup.delete(row)
+                await cleanup.commit()
+
+
+@pytest.mark.requires_postgres
+async def test_erase_tenant_with_a_data_service_erases_each_user_as_that_user(
+    db: AsyncSession, db_factory, cfg
+):
+    """In the data service a user's folder can only be deleted by that user's own token, so the tenant sweep goes user by user and then
+    takes the tenant's shared folders with the platform's service principal."""
+    tenant_id = f"tenant-{uuid.uuid4()}"
+    threads = [
+        Thread(id=uuid.uuid4(), user_identifier=u, tenant_id=tenant_id)
+        for u in ("u1", "u2")
+    ]
+    for thread in threads:
+        db.add(thread)
+    await db.commit()
+    stores: dict[str, FakeStore] = {
+        "shared": FakeStore(),
+        "u1": FakeStore(),
+        "u2": FakeStore(),
+    }
+    stores["u1"].objects[f"tenants/{tenant_id}/users/u1/uploads/a"] = b"1"
+    stores["u2"].objects[f"tenants/{tenant_id}/users/u2/uploads/b"] = b"2"
+    stores["shared"].objects[f"tenants/{tenant_id}/knowledge/kb/doc"] = b"3"
+    try:
+        summary = await erase_tenant(
             db,
-            store=store,
+            store=stores["shared"],
             redis=None,
             tenant_id=tenant_id,
-            user_id=str(user_uuid),
             cfg=cfg,
-            pending_store=pending_store,
+            user_store=lambda user: stores[user],
         )
-        assert pending_key not in pending_store.objects
-        assert summary.objects_deleted >= 1
+        assert summary.objects_deleted == 3
+        assert all(not s.objects for s in stores.values())
     finally:
-        row = await db.get(Thread, thread.id)
-        if row is not None:
-            await db.delete(row)
-        user_row = await db.get(User, user_uuid)
-        if user_row is not None:
-            await db.delete(user_row)
-        await db.commit()
+        async with db_factory() as cleanup:
+            await cleanup.execute(
+                Thread.__table__.delete().where(Thread.tenant_id == tenant_id)
+            )
+            await cleanup.commit()
 
 
 @pytest.mark.requires_postgres

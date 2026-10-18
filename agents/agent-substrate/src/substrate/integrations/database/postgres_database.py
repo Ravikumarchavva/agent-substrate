@@ -12,7 +12,7 @@ an ``asyncpg`` pool, transactions, and the things PostgreSQL needs that SQLite d
 
 ``postgres_store(dsn)`` is the whole engine's state on it: the same ``Store`` as ``substrate.connect(folder)``, with
 the rows in PostgreSQL and the file contents in ``files`` (a folder every worker can reach; put them in object storage by
-passing an ``S3FileStore`` where a ``FileStore`` is taken).
+passing a ``DataFileStore`` where a ``FileStore`` is taken).
 
 Needs the ``postgres`` extra (``asyncpg``) and, for vectors, the ``vector`` (pgvector) extension.
 """

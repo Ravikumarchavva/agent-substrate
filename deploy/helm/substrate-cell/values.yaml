@@ -57,8 +57,9 @@ postgres:
     user: substrate
     # sslmode require | verify-ca | verify-full. substrate-data refuses anything weaker off-machine.
     sslmode: require
-    # The databases must exist: agentdb (with pgvector and uuid-ossp), keycloak, substrate_data, substrate_ui.
-  databases: { agent: agentdb, keycloak: keycloak, data: substrate_data, ui: substrate_ui }
+    # The databases must exist: agentdb (with pgvector and uuid-ossp), keycloak, substrate_data, data_retrieval (pgvector: the
+    # documents and memory index, ADR 0008), substrate_ui.
+  databases: { agent: agentdb, keycloak: keycloak, data: substrate_data, retrieval: data_retrieval, ui: substrate_ui }
 
 redis:
   bundled:

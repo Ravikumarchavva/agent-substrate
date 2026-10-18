@@ -59,7 +59,7 @@ inside a view definition still prune files; filters written outside it are appli
 - **Two storage identities.** The control plane's S3 key can commit and sign uploads; the workers' key can
   read and write data files but has no catalog or staging-write rights (`scripts/bootstrap.py`).
 - **Control-plane state:** SQLite in WAL mode (`catalog/store.py`): securables, grants, audit, statement
-  and import history, pipelines, collections, durable publications. Schema is typed and indexed.
+  and import history, pipelines, durable publications. Schema is typed and indexed.
 
 ## Files
 

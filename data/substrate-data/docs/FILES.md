@@ -159,8 +159,8 @@ library's `FileStore` keys map onto volumes and paths.
 - **Legacy volume routes.** `…/volumes/{name}/files` and `…/access` in `assets.py` still address the staging
   bucket (UI uploads of up to 64 MiB). New code should use this API; the legacy routes and the UI that calls
   them should move over and be deleted.
-- **Erasure and export by subject** (a `DELETE` of everything under `users/{sub}/` across volumes) beyond
-  `delete-prefix` plus the purge window; no legal hold.
+- **Legal hold.** Erasure and export by subject exist (`POST /api/v1/erasure-requests`, `/exports`; see
+  [DOCUMENTS.md](DOCUMENTS.md)); nothing can yet pause them for a hold.
 - **Per-prefix quotas.** Usage is reported per prefix; the quota is per volume. Concurrent writers are
   serialised by locking the volume's quota row, which exists only while a quota is set.
 - **Orphan object garbage collection** for objects whose version row was never written (a crash between

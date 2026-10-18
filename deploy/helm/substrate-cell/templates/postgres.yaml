@@ -27,10 +27,10 @@ data:
   10-databases.sh: |
     #!/bin/bash
     set -euo pipefail
-    for db in {{ .Values.postgres.databases.keycloak }} {{ .Values.postgres.databases.data }} {{ .Values.postgres.databases.ui }}; do
+    for db in {{ .Values.postgres.databases.keycloak }} {{ .Values.postgres.databases.data }} {{ .Values.postgres.databases.retrieval }} {{ .Values.postgres.databases.ui }}; do
       psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "CREATE DATABASE $db"
     done
-    for db in "$POSTGRES_DB" {{ .Values.postgres.databases.data }}; do
+    for db in "$POSTGRES_DB" {{ .Values.postgres.databases.data }} {{ .Values.postgres.databases.retrieval }}; do
       psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$db" -c 'CREATE EXTENSION IF NOT EXISTS vector' -c 'CREATE EXTENSION IF NOT EXISTS "uuid-ossp"'
     done
 ---

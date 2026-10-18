@@ -152,8 +152,8 @@ def test_sql_is_translated_without_touching_literals():
     assert to_postgres("SELECT '100%' AS p") == "SELECT '100%%' AS p"
 
 
-def test_the_postgres_schema_uses_wide_integers_and_native_search():
+def test_the_postgres_schema_uses_wide_integers():
     ddl = "\n".join(postgres_schema(SCHEMA))
     assert "INTEGER" not in ddl.replace("BIGINT", "") and "AUTOINCREMENT" not in ddl
-    assert "tsvector" in ddl and "fts5" not in ddl and "PRAGMA" not in ddl
+    assert "fts5" not in ddl and "PRAGMA" not in ddl  # search lives in the retrieval index now
     assert "DOUBLE PRECISION" in ddl

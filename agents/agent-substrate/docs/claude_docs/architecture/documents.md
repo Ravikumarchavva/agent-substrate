@@ -9,8 +9,9 @@
 |---|---|---|
 | `Reader` | `read(data, filename, *, content_type, strategy) -> ExtractionResult`. A location picks the engine: none = built-in, a URL = a document server, `engine=` = any `DocumentExtractor`. | `documents/reader.py`, `remote.py` |
 | Built-in engine | PDFium text layer + headings + figures; DOCX/PPTX/XLSX/ODF/HTML/Markdown/CSV/JSON with the stdlib; OCR only for pages with no text. | `documents/reading/` |
-| `Library` | Files documents as an OKF bundle + a derived catalog; `add`, `list`, `outline`, `read`, `find`, `view`, `delete`, `erase_under`, `reindex`. | `documents/library.py` |
-| `DocumentsTool` | The one model-facing tool over a `Library`. Collection from `scope_of(ctx)`. | `documents/tool.py` |
+| `DocumentLibrary` | The **port**: `info`, `list`, `collections`, `outline`, `read`, `find`, `view`, `browse`, `add`, `delete`, `erase_under`, `reindex`, `embed_missing`, and the enrichment surface (`pending`, `pending_all`, `needs_reorganising`, `brief`, `enrichment_state`, `claim`, `fail`, `topic_tree`, `annotate`, `set_topics`). The value types it returns (`Added`, `DocumentInfo`, `Outline`, `Hits`, …) are in `documents/types.py`. Conformance: `DocumentLibraryConformance`. | `documents/protocols.py`, `types.py` |
+| `Library` | The folder implementation of the port: files documents as an OKF bundle + a derived catalog. `add` is `prepare` (read and cut into a `Bundle`; no storage) → vectors → `file` (write the bundle) → catalog; `index(collection, document)` rebuilds the catalog of a filed bundle from its files, which is what `reindex` runs per document. | `documents/library.py`, `bundle.py` |
+| `DocumentsTool` | The one model-facing tool over a `DocumentLibrary`. Collection from `scope_of(ctx)`. | `documents/tool.py` |
 | Splitting / chunking | Sections for navigation (`split.py`); chunks for embedding (`chunking.py`). | `documents/` |
 | OKF | The bundle format (v0.2) and the stdlib frontmatter codec. | `documents/okf.py`, `_frontmatter.py` |
 
@@ -49,8 +50,8 @@
 
 ## Descriptions and filing (written by a model, after the upload)
 
-`Library.add` never calls a model: the index it writes says only what can be counted ("3 pages · 4 sections"), which cannot guide a model
-through thousands of documents. `Library.enrich(collection, document)` adds what can: a **description per section** (what it says, with its
+`add` never calls a model: the index it writes says only what can be counted ("3 pages · 4 sections"), which cannot guide a model
+through thousands of documents. `enrich(library, collection=…, document=…, enricher=…)` (`documents/enrichment.py`, a free function over any `DocumentLibrary`; `Library.enrich` passes the library's own enricher) adds what can: a **description per section** (what it says, with its
 key names and figures), a **card** for the document (the `description` of its `index.md`: what kind of document, when, about whom, what it can
 answer) and, when the library has `file_topics=True` (knowledge bases), **where it is filed** (`Finance/Earnings`).
 
@@ -64,6 +65,7 @@ answer) and, when the library has `file_topics=True` (knowledge bases), **where 
   figure in it must appear in the text it describes, allowing rounding (`$119.6B` for `119,575`); a sentence with an unknown figure is dropped
   and, if nothing is left, a plain extract stands in. The tool returns descriptions inside `<document>` tags with a note that they are
   machine-written hints.
+* **Over the port.** `enrich` and `reorganise` hold the rules (claim, idempotency by enricher name+version, figure check, retries) and call the library's small primitives: `brief` (read the sections), `enrichment_state`, `claim` (mark running), `annotate` (store card, section descriptions, topics; refresh search, embeddings and topic pages), `fail`, `set_topics`. The model, its timeout and its token budget stay with the caller (ADR 0004), so the same code runs over the folder `Library` and over a governed document service.
 * **Fails soft, runs later.** `enrich` never raises for a model that is down, slow or wrong; it records `failed` (retried up to three times by
   `pending()`/`pending_all()`), and the document keeps its counted index. One document is described by one caller at a time; writes are
   idempotent, so two server processes can race safely. Re-running with the same enricher name+version does nothing; a new model or prompt
@@ -74,7 +76,7 @@ answer) and, when the library has `file_topics=True` (knowledge bases), **where 
   its section's description in front of it), and walks the topic tree with `browse`.
 
 * **Redrawing the tree.** Filing one document at a time drifts (near-duplicate names, one branch that keeps growing). When a topic has more than
-  12 subtopics (or 24 documents filed straight into it) `Library.needs_reorganising(collection)` says so, and `Library.reorganise(collection)`
+  12 subtopics (or 24 documents filed straight into it) `needs_reorganising(collection)` says so, and `reorganise(library, collection=…, organiser=…)` (also `Library.reorganise(collection=…)`)
   has an `Organiser` (`LLMOrganiser`: one call that sees every card and where each is filed now) redraw the whole tree at once. Documents and
   their text never move; only each document's topics (catalog and its `index.md`) and the topic pages change, the previous topics are appended
   to `{collection}/_topics/log.md`, and a failed or nonsensical answer (unknown documents, unusable paths) leaves the tree as it was. The
@@ -126,6 +128,6 @@ the OpenAI embeddings wire and the Jina/Cohere rerank wire; `data/embedding-rera
 | Change how documents are described or filed | an `Enricher` (`documents/enrichment.py`), or the prompts in `documents/llm_enricher.py` (bump `PROMPT_VERSION` so existing documents are described again) |
 | Change what the model can do with documents | `documents/tool.py`; keep it free of any argument that names a collection or a path |
 
-Tests: `tests/documents/` (formats, PDF, OCR, reader, library on SQLite **and** PostgreSQL, embeddings, `test_library_enrichment.py`,
+Tests: `tests/documents/` (formats, PDF, OCR, reader, library on SQLite **and** PostgreSQL, `test_library_conformance.py` = `DocumentLibraryConformance` on SQLite, with an embedder, and on PostgreSQL, embeddings, `test_library_enrichment.py`,
 `test_llm_enricher.py`), `agents/substrate-cloud/tests/test_enrichment_queue.py`, invariants I32–I39 and the tenant
 row in `tests/invariants/test_documents.py`, `agents/substrate-cloud/tests/test_rag_routes.py` for tenant isolation.

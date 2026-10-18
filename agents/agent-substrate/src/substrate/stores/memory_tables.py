@@ -129,7 +129,9 @@ class Memory:
         return self._store
 
     async def _run(self, fn: Callable[[Tx], Awaitable[T]]) -> T:
-        await self._store.ensure("memory", MEMORY_SCHEMA)  # this part's tables are created the first time it is used
+        await self._store.ensure(
+            "memory", MEMORY_SCHEMA
+        )  # this part's tables are created the first time it is used
         return await self._store.run(fn)
 
     async def save(self, record: MemoryRecord) -> str:

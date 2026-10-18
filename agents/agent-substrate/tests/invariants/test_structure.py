@@ -230,6 +230,7 @@ _PORTS = (
     "ChatModel",
     "EmbeddingModel",
     "DocumentExtractor",
+    "DocumentLibrary",
     "Ocr",
     "Reranker",
 )
@@ -296,7 +297,14 @@ def test_i30_every_implementation_of_a_port_with_a_suite_runs_it() -> None:
         "the WorkspaceStore conformance suite has gone missing"
     )
     assert "GraphStore" in suites, "the GraphStore conformance suite has gone missing"
-    for port in ("ChatModel", "EmbeddingModel", "DocumentExtractor", "Ocr", "Reranker"):
+    for port in (
+        "ChatModel",
+        "EmbeddingModel",
+        "DocumentExtractor",
+        "DocumentLibrary",
+        "Ocr",
+        "Reranker",
+    ):
         assert port in suites, f"the {port} conformance suite has gone missing"
     assert "VectorStore" in suites, (
         "the vector-store conformance suite has gone missing"
@@ -331,6 +339,7 @@ def test_i30_every_implementation_of_a_port_with_a_suite_runs_it() -> None:
             "TestInProcessReader",
             "TestReaderByUrl",
         ),
+        "DocumentLibrary": ("TestLibraryOnSqlite", "TestLibraryOnPostgres"),
         "Ocr": ("TestTesseract", "TestRapidOcr"),
         "Reranker": ("TestRemoteReranker",),
         "VectorStore": ("TestVectors", "TestPostgresVectors"),

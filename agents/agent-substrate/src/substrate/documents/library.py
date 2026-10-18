@@ -24,43 +24,61 @@ documents, a company's handbook — and the tool (``DocumentsTool``) takes it fr
 
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import json
 import logging
 import re
 import time
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from collections import defaultdict
-from dataclasses import dataclass, field, replace
+from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
 from substrate.documents import okf
+from substrate.documents.bundle import (
+    Bundle,
+    BundleImage,
+    build_bundle,
+    document_id,
+    headings_in,
+    pages_label,
+    slug,
+    strip_navigation,
+)
 from substrate.documents.chunking import chunk_section, chunk_size_for
 from substrate.documents.enrichment import (
-    CARD_CHARS,
+    STALE_RUNNING_S,
     MAX_TOPIC_CHILDREN,
-    MIN_ENRICH_TOKENS,
-    SECTION_DESCRIPTION_CHARS,
-    Described,
     DocumentBrief,
     Enriched,
     Enricher,
     EnrichmentUsage,
-    FiledDocument,
-    FirstSentenceEnricher,
     Organiser,
     Reorganised,
     SectionBrief,
     clean,
-    extract,
-    ground,
+    enrich as enrich_document,
+    reorganise as reorganise_collection,
     sentences,
     topic_path,
 )
 from substrate.documents.reader import Reader
-from substrate.documents.split import Section, split, tokens
-from substrate.documents.types import ExtractionResult
+from substrate.documents.split import Section, tokens
+from substrate.documents.types import (
+    Added,
+    DocumentError,
+    DocumentInfo,
+    EnrichmentState,
+    ExtractionResult,
+    Hit,
+    Hits,
+    Listing,
+    Outline,
+    Passage,
+    Picture,
+    SectionInfo,
+    Topic,
+)
 from substrate.stores import textsearch
 from substrate.models.protocols import EmbeddingModel, Modality, Reranker
 from substrate.models.remote import RemoteEmbedder, RemoteReranker
@@ -76,11 +94,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _COMPONENT = "library"
-_CID = re.compile(r"\(cid:([^)\s]+)\)")
-_SLUG = re.compile(r"[^a-z0-9]+")
-_HEADING = re.compile(r"^(#{1,6})\s+(.+?)\s*#*\s*$", re.MULTILINE)
 _PAGE = re.compile(r"<!-- page (\d+) -->")
-_PAGE_MARKER_LINE = re.compile(r"<!-- page \d+ -->")
 MAX_READ_CHARS = 24_000
 MAX_OUTLINE = 60
 MAX_LIST = 50
@@ -197,150 +211,7 @@ _ENRICHMENT_TABLES = (
     "library_topics",
 )
 TOPICS_DIR = "_topics"
-STALE_RUNNING_S = 600
 TOPIC_TREE_LIMIT = 200
-
-
-class DocumentError(ValueError):
-    """A document could not be added: it could not be read, or it has nothing readable in it."""
-
-
-@dataclass(frozen=True)
-class Added:
-    document: str
-    title: str
-    filename: str
-    pages: int
-    sections: int
-    images: int
-    needs_ocr: tuple[int, ...] = ()
-    duplicate: bool = False
-    """The same file was already in the collection: nothing was written."""
-    warnings: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True)
-class DocumentInfo:
-    document: str
-    title: str
-    filename: str
-    pages: int
-    sections: int
-    images: int
-    needs_ocr: tuple[int, ...]
-    engine: str
-    resource: str | None
-    meta: dict[str, Any] = field(default_factory=dict)
-    description: str | None = None
-    """A model-written card for the document (``Library.enrich``), or ``None`` while it only has the counted index."""
-    topics: tuple[str, ...] = ()
-    """Where the document is filed (slash-separated paths), for a library that files its documents."""
-    enrichment: str = "none"
-    """``none``, ``running``, ``done`` or ``failed``."""
-
-
-@dataclass(frozen=True)
-class SectionInfo:
-    position: int
-    title: str
-    heading_path: tuple[str, ...]
-    first_page: int
-    last_page: int
-    tokens: int
-    headings: tuple[str, ...] = ()
-    """The headings inside the section, for a section that holds several."""
-    description: str | None = None
-    """What the section says, as a model wrote it (``Library.enrich``)."""
-
-
-@dataclass(frozen=True)
-class Outline:
-    document: DocumentInfo
-    sections: tuple[SectionInfo, ...]
-    more: int = 0
-    """Entries beyond ``MAX_OUTLINE`` that are not listed."""
-    headings: tuple[tuple[int, str, int], ...] = ()
-    """For one section: ``(level, heading, page)`` inside it."""
-
-
-@dataclass(frozen=True)
-class Passage:
-    document: DocumentInfo
-    section: SectionInfo
-    text: str
-    offset: int = 0
-    next_offset: int | None = None
-    """Where to continue (``offset=``) when the text was cut at ``MAX_READ_CHARS``; ``None`` at the end."""
-    total_chars: int = 0
-
-
-@dataclass(frozen=True)
-class Hit:
-    document: DocumentInfo
-    section: SectionInfo
-    snippet: str
-    score: float
-    image: str | None = None
-    """For a figure or chart that matched: its id, to ``view``."""
-
-
-class Hits(list[Hit]):
-    """The hits of a ``find``, best first, and ``note`` — what the model should be told about how they were found (the embedding service
-    was down, so only words were matched)."""
-
-    note: str | None = None
-
-
-@dataclass(frozen=True)
-class Listing:
-    documents: tuple[DocumentInfo, ...]
-    next: str | None = None
-    """Pass as ``after=`` for the next page; ``None`` when this was the last."""
-
-
-@dataclass(frozen=True)
-class Topic:
-    """One level of the filing tree: ``browse``'s answer."""
-
-    path: str
-    children: tuple[tuple[str, int], ...]
-    """``(topic path, documents below it)`` for each topic directly under ``path``."""
-    documents: tuple[DocumentInfo, ...]
-    """The documents filed at ``path`` itself."""
-    more: int = 0
-
-
-@dataclass(frozen=True)
-class Picture:
-    data: bytes
-    media_type: str
-    document: str
-    image: str
-    page: int
-    label: str
-    caption: str | None
-
-
-def slug(text: str, *, limit: int = 40) -> str:
-    return _SLUG.sub("-", text.lower()).strip("-")[:limit].strip("-") or "untitled"
-
-
-def _pages_label(first: int, last: int) -> str:
-    return f"p. {first}" if first == last else f"pp. {first}–{last}"
-
-
-def _headings_in(markdown: str) -> list[tuple[int, str, int]]:
-    out = []
-    page = 1
-    for line in markdown.splitlines():
-        marker = _PAGE.match(line)
-        if marker:
-            page = int(marker.group(1))
-            continue
-        heading = _HEADING.match(line)
-        if heading:
-            out.append((len(heading.group(1)), heading.group(2), page))
-    return out
 
 
 class Library:
@@ -384,8 +255,6 @@ class Library:
         self._organiser = organiser
         self._file_topics = file_topics
         self._enrich_timeout = enrich_timeout
-        self._enrich_locks: dict[tuple[str, str], asyncio.Lock] = {}
-        self._organise_locks: dict[str, asyncio.Lock] = {}
 
     async def _run(self, fn):
         await self._store.ensure(_COMPONENT, SCHEMA)
@@ -395,8 +264,12 @@ class Library:
     def document_id(filename: str, sha256: str) -> str:
         """The id ``add`` gives a file: its name's slug and the first six characters of the SHA-256 of its bytes — so a caller that
         already has the checksum can find the document without asking."""
-        stem = filename.rsplit("/", 1)[-1].rsplit(".", 1)[0] or "document"
-        return f"{slug(stem)}-{sha256[:6]}"
+        return document_id(filename, sha256)
+
+    @property
+    def file_topics(self) -> bool:
+        """Whether documents are filed in a topic tree (``browse``)."""
+        return self._file_topics
 
     # -------------------------------------------------------------------------------------------------------------- add
 
@@ -416,7 +289,65 @@ class Library:
         Adding the same file again is a no-op (``duplicate=True``). ``resource`` says where the original lives (an object key, a URL);
         ``metadata`` is kept with the document and returned with it (a file id, say). When you pass an ``ExtractionResult``, pass the SHA-256 of
         the original bytes as ``sha256`` if you have it: the document's id (``document_id``) is derived from it. Raises ``DocumentError`` for a file that could
-        not be read or has no readable text."""
+        not be read or has no readable text.
+
+        It is ``prepare`` (read and cut; no storage), then the chunks' vectors, then ``file`` (the bundle) and the catalog (what ``index``
+        rebuilds from the files): a collection written by another embedder is refused before anything is written."""
+        bundle = await self.prepare(
+            source,
+            filename,
+            resource=resource,
+            content_type=content_type,
+            metadata=metadata,
+            sha256=sha256,
+        )
+        collection = collection.strip("/")
+        if await self._exists(collection, bundle.document):
+            info = await self.info(collection, bundle.document)
+            assert info is not None
+            return Added(
+                bundle.document,
+                info.title,
+                info.filename,
+                info.pages,
+                info.sections,
+                info.images,
+                info.needs_ocr,
+                duplicate=True,
+            )
+        unembedded = await self._vectors_of(collection, bundle)
+        await self.file(bundle, collection=collection)
+        await self._catalog_of(collection, bundle)
+        await self._write_collection_index(collection)
+        warnings = list(bundle.warnings)
+        if unembedded:
+            warnings.append(
+                f"{unembedded} passage{'s' if unembedded != 1 else ''} could not be embedded (the embedding service was unavailable) and "
+                "will be found by their words only until reindex(missing_only=True) embeds them"
+            )
+        return Added(
+            bundle.document,
+            bundle.title,
+            bundle.filename,
+            bundle.pages,
+            len(bundle.sections),
+            len(bundle.images),
+            bundle.needs_ocr,
+            warnings=tuple(warnings),
+        )
+
+    async def prepare(
+        self,
+        source: bytes | ExtractionResult,
+        filename: str = "",
+        *,
+        resource: str | None = None,
+        content_type: str | None = None,
+        metadata: dict[str, Any] | None = None,
+        sha256: str | None = None,
+    ) -> Bundle:
+        """Read ``source`` and make it ready to file: its sections, figures and the OKF files of the bundle. Touches no storage (the reader
+        is the only thing it calls). Raises ``DocumentError`` for a file that could not be read or has no readable text."""
         if isinstance(source, ExtractionResult):
             result, digest = (
                 source,
@@ -427,163 +358,131 @@ class Library:
             result = await self._reader.read(
                 source, filename, content_type=content_type
             )
-        if not result.success:
-            raise DocumentError(result.error or "the document could not be read")
-        images = [image for page in result.pages for image in page.images]
-        text = _PAGE_MARKER_LINE.sub("", result.markdown).strip()
-        if not text and not images:
-            where = (
-                f" (pages {', '.join(map(str, result.needs_ocr))} are pictures of text and OCR is not available)"
-                if result.needs_ocr
-                else ""
-            )
-            raise DocumentError(
-                f"{filename or 'the document'} has no readable text{where}"
-            )
-
-        stem = filename.rsplit("/", 1)[-1].rsplit(".", 1)[0] or "document"
-        document = self.document_id(filename, digest)
-        collection = collection.strip("/")
-        if await self._exists(collection, document):
-            info = await self.info(collection, document)
-            assert info is not None
-            return Added(
-                document,
-                info.title,
-                info.filename,
-                info.pages,
-                info.sections,
-                info.images,
-                info.needs_ocr,
-                duplicate=True,
-            )
-
-        title = (
-            result.title
-            or next((h[1] for h in _headings_in(result.markdown) if h[0] <= 2), "")
-            or stem
-        )
-        image_ids: dict[tuple[int, int], str] = {}
-        for page in result.pages:
-            for k, image in enumerate(page.images):
-                image_ids[(page.page_number, k)] = (
-                    image.id or f"img-p{page.page_number}-{k}"
-                )
-        markdown = _CID.sub(lambda m: f"(images/{m.group(1)}.png)", result.markdown)
-        sections = split(markdown, title=title) or [
-            Section(title, (title,), 1, max(1, len(result.pages)), "")
-        ]
-        base = f"{collection}/{document}"
-
-        unembedded = await self._index_vectors(
-            collection,
-            document,
-            title,
-            filename,
-            sections,
+        return build_bundle(
             result,
-            image_ids,
-            metadata or {},
-        )
-
-        for page in result.pages:
-            for k, image in enumerate(page.images):
-                await self._files.upload(
-                    f"{base}/images/{image_ids[(page.page_number, k)]}.png",
-                    image.data,
-                    content_type=image.media_type,
-                )
-        names = [f"{n:02d}-{slug(s.title)}.md" for n, s in enumerate(sections, start=1)]
-        for n, (section, name) in enumerate(zip(sections, names, strict=True), start=1):
-            body = _with_navigation(section, names, n)
-            concept = okf.Concept(
-                type="Section",
-                title=section.title,
-                description=f"{_pages_label(section.first_page, section.last_page)} · ~{section.tokens} tokens",
-                resource=resource,
-                body=body,
-                extra={
-                    "document": document,
-                    "section": n,
-                    "parent": "index.md",
-                    "heading_path": list(section.heading_path),
-                    "pages": [section.first_page, section.last_page],
-                },
-            )
-            await self._files.upload(
-                f"{base}/{name}",
-                okf.serialize(concept).encode("utf-8"),
-                content_type="text/markdown",
-            )
-        needs_ocr = list(result.needs_ocr)
-        pages = max([p.page_number for p in result.pages] or [1])
-        index = okf.Concept(
-            type="Index",
-            title=title,
-            description=f"{filename or document} · {pages} page{'s' if pages != 1 else ''} · {len(sections)} sections · {len(images)} images",
+            filename=filename,
+            sha256=digest,
             resource=resource,
-            body=_document_index(sections, names, image_ids, result),
-            extra={
-                "document": document,
-                "filename": filename,
-                "engine": result.engine,
-                "sha256": digest,
-                "pages": pages,
-                "needs_ocr": needs_ocr,
-                "metadata": metadata or {},
-            },
-        )
-        await self._files.upload(
-            f"{base}/index.md",
-            okf.serialize(index).encode("utf-8"),
-            content_type="text/markdown",
+            metadata=metadata,
         )
 
+    async def file(self, bundle: Bundle, *, collection: str) -> None:
+        """Write ``bundle``'s files (figures, sections, then the document's index) into ``collection``'s folder of the file store. The
+        catalog is not touched: ``index`` builds it."""
+        base = f"{collection.strip('/')}/{bundle.document}"
+        for member in bundle.files:
+            await self._files.upload(
+                f"{base}/{member.path}", member.data, content_type=member.content_type
+            )
+
+    async def index(self, collection: str, document: str) -> int:
+        """Build the catalog of a document already filed in ``collection`` — and, with an embedder, its chunks and vectors — from the files of
+        its bundle: the code ``reindex`` runs for each document. Returns how many chunks were stored without a vector. Raises
+        ``DocumentError`` if there is no such bundle."""
+        collection = collection.strip("/")
+        names = [
+            key[len(f"{collection}/{document}/") :]
+            for key, _size, _mtime in await self._files.list_prefix(
+                f"{collection}/{document}/"
+            )
+        ]
+        if "index.md" not in names:
+            raise DocumentError(f"{collection}/{document} has no bundle to index")
+        return await self._index_filed(collection, document, names)
+
+    async def _index_filed(
+        self, collection: str, document: str, names: list[str]
+    ) -> int:
+        index = okf.parse(
+            (await self._files.download(f"{collection}/{document}/index.md")).decode(
+                "utf-8", "replace"
+            )
+        )
+        sections: list[Section] = []
+        written: dict[int, okf.Concept] = {}
+        for name in sorted(
+            n for n in names if n != "index.md" and "/" not in n and n.endswith(".md")
+        ):
+            concept = okf.parse(
+                (await self._files.download(f"{collection}/{document}/{name}")).decode(
+                    "utf-8", "replace"
+                )
+            )
+            pages = concept.extra.get("pages") or [1, 1]
+            written[len(sections) + 1] = concept
+            sections.append(
+                Section(
+                    concept.title or name,
+                    tuple(concept.extra.get("heading_path") or ()),
+                    int(pages[0]),
+                    int(pages[-1]),
+                    strip_navigation(concept.body),
+                )
+            )
+        images = tuple(
+            BundleImage(
+                n.rsplit("/", 1)[-1].removesuffix(".png"),
+                _page_of(n),
+                "figure",
+                None,
+                "image/png",
+            )
+            for n in names
+            if n.startswith("images/")
+        )
+        extra = index.extra
+        bundle = Bundle(
+            document=document,
+            title=index.title or document,
+            filename=str(extra.get("filename", "")),
+            sha256=str(extra.get("sha256", "")),
+            resource=index.resource,
+            engine=str(extra.get("engine", "")),
+            pages=int(extra.get("pages", 1)),
+            sections=tuple(sections),
+            images=images,
+            needs_ocr=tuple(int(p) for p in extra.get("needs_ocr", [])),
+            metadata=dict(extra.get("metadata") or {}),
+        )
+        await self._catalog_of(collection, bundle)
+        await self._restore_enrichment(collection, document, index, written)
+        if self._embedder is None:
+            return 0
+        await self._store.vectors.delete_where(
+            collection=collection, filter={"document": document}
+        )
+        return await self._vectors_of(collection, bundle)
+
+    async def _catalog_of(self, collection: str, bundle: Bundle) -> None:
         info = DocumentInfo(
-            document,
-            title,
-            filename,
-            pages,
-            len(sections),
-            len(images),
-            tuple(needs_ocr),
-            result.engine,
-            resource,
-            metadata or {},
+            bundle.document,
+            bundle.title,
+            bundle.filename,
+            bundle.pages,
+            len(bundle.sections),
+            len(bundle.images),
+            bundle.needs_ocr,
+            bundle.engine,
+            bundle.resource,
+            bundle.metadata,
         )
         await self._catalog(
             collection,
             info,
-            digest,
-            sections,
-            [
-                (
-                    image_ids[(p.page_number, k)],
-                    p.page_number,
-                    i.label.value,
-                    i.caption,
-                    i.media_type,
-                )
-                for p in result.pages
-                for k, i in enumerate(p.images)
-            ],
+            bundle.sha256,
+            bundle.sections,
+            [(i.id, i.page, i.label, i.caption, i.media_type) for i in bundle.images],
         )
-        await self._write_collection_index(collection)
-        warnings = list(result.warnings)
-        if unembedded:
-            warnings.append(
-                f"{unembedded} passage{'s' if unembedded != 1 else ''} could not be embedded (the embedding service was unavailable) and "
-                "will be found by their words only until reindex(missing_only=True) embeds them"
-            )
-        return Added(
-            document,
-            title,
-            filename,
-            pages,
-            len(sections),
-            len(images),
-            tuple(needs_ocr),
-            warnings=tuple(warnings),
+
+    async def _vectors_of(self, collection: str, bundle: Bundle) -> int:
+        return await self._index_vectors(
+            collection,
+            bundle.document,
+            bundle.title,
+            bundle.filename,
+            bundle.sections,
+            bundle.images,
+            bundle.metadata,
         )
 
     async def _exists(self, collection: str, document: str) -> bool:
@@ -824,7 +723,7 @@ class Library:
                 )
                 if row is None:
                     return None
-                headings = _headings_in(row["text"])
+                headings = headings_in(row["text"])
                 return Outline(
                     info,
                     (replace(self._section(row), description=described.get(section)),),
@@ -839,7 +738,7 @@ class Library:
             sections = []
             for row in rows:
                 inside = tuple(
-                    h[1] for h in _headings_in(row["text"]) if h[1] != row["title"]
+                    h[1] for h in headings_in(row["text"]) if h[1] != row["title"]
                 )[:6]
                 base = self._section(row)
                 sections.append(
@@ -1247,62 +1146,24 @@ class Library:
         force: bool = False,
     ) -> Enriched:
         """Have ``enricher`` (default: the library's) write a card for ``document`` and a description for each section, and file it under a
-        topic. See ``_enrich``; this adds only that one document is described by one caller at a time in this process (a second caller waits,
-        then finds it done and does not pay for the model again)."""
-        collection = collection.strip("/")
-        lock = self._enrich_locks.setdefault((collection, document), asyncio.Lock())
-        async with lock:
-            return await self._enrich(
-                collection=collection,
-                document=document,
-                enricher=enricher,
-                force=force,
-            )
+        topic. The logic is ``substrate.documents.enrichment.enrich``, which runs over any ``DocumentLibrary``; this passes the library's
+        enricher and timeout."""
+        return await enrich_document(
+            self,
+            collection=collection,
+            document=document,
+            enricher=enricher or self._enricher,
+            force=force,
+            timeout=self._enrich_timeout,
+        )
 
-    async def _enrich(
-        self,
-        *,
-        collection: str,
-        document: str,
-        enricher: Enricher | None = None,
-        force: bool = False,
-    ) -> Enriched:
-        """Have ``enricher`` (default: the library's) write a card for ``document`` and a description for each section, and file it under a topic.
-
-        Safe to call again: a document already described by the same enricher version is left alone unless ``force``. It never raises for a
-        model that is down, slow or wrong; it records ``failed`` and leaves the counted index in place. A document too short to need a model
-        is described by its own first sentences, for free. Nothing the document says about itself is altered: section text stays byte for byte."""
+    async def brief(self, *, collection: str, document: str) -> DocumentBrief | None:
         collection = collection.strip("/")
-        chosen = enricher or self._enricher
-        if chosen is None:
-            return Enriched(document, "skipped", error="no enricher is configured")
         info = await self.info(collection, document)
         if info is None:
-            return Enriched(document, "missing")
-        state = await self._state(collection, document)
-        if state is not None and not force:
-            if (
-                state["state"] == "done"
-                and state["enricher"] == chosen.name
-                and state["version"] == chosen.version
-            ):
-                return Enriched(
-                    document,
-                    "done",
-                    card=info.description or "",
-                    sections=info.sections,
-                    topics=info.topics,
-                )
-            if (
-                state["state"] == "running"
-                and time.time() - float(state["updated_at"]) < STALE_RUNNING_S
-            ):
-                return Enriched(
-                    document, "skipped", error="it is already being described"
-                )
-
+            return None
         rows = await self._sections_of(collection, document)
-        brief = DocumentBrief(
+        return DocumentBrief(
             document=document,
             title=info.title,
             filename=info.filename,
@@ -1320,81 +1181,73 @@ class Library:
                 for r in rows
             ),
         )
-        used: Enricher = (
-            FirstSentenceEnricher()
-            if sum(s.tokens for s in brief.sections) < MIN_ENRICH_TOKENS
-            else chosen
-        )
-        attempts = int(state["attempts"]) + 1 if state else 1
-        await self._set_state(collection, document, "running", used, attempts)
-        tree = await self._tree(collection) if self._file_topics else []
-        try:
-            described = await asyncio.wait_for(
-                used.enrich(brief, topics=tree), timeout=self._enrich_timeout
-            )
-        except Exception as exc:  # noqa: BLE001 — a model's failure must never reach the upload path
-            logger.warning(
-                "enrichment of %s/%s by %s failed: %s",
-                collection,
-                document,
-                used.name,
-                exc,
-            )
-            reason = (
-                "the description took too long"
-                if isinstance(exc, TimeoutError)
-                else "the description could not be written"
-            )
-            await self._set_state(
-                collection, document, "failed", used, attempts, error=reason
-            )
-            return Enriched(document, "failed", error=reason)
 
-        by_section, card, warnings = _validated(brief, described)
-        topics = (
-            [t for t in dict.fromkeys(topic_path(x) for x in described.topics) if t][:2]
-            if self._file_topics
-            else []
+    async def enrichment_state(
+        self, *, collection: str, document: str
+    ) -> EnrichmentState | None:
+        row = await self._state(collection.strip("/"), document)
+        if row is None:
+            return None
+        return EnrichmentState(
+            state=row["state"],
+            enricher=row["enricher"],
+            version=row["version"],
+            attempts=int(row["attempts"]),
+            updated_at=float(row["updated_at"]),
         )
+
+    async def claim(
+        self, *, collection: str, document: str, enricher: Enricher, attempts: int
+    ) -> None:
+        await self._set_state(
+            collection.strip("/"), document, "running", enricher, attempts
+        )
+
+    async def fail(
+        self,
+        *,
+        collection: str,
+        document: str,
+        enricher: Enricher,
+        attempts: int,
+        error: str,
+    ) -> None:
+        await self._set_state(
+            collection.strip("/"), document, "failed", enricher, attempts, error=error
+        )
+
+    async def topic_tree(self, *, collection: str) -> list[str]:
+        return await self._tree(collection.strip("/"))
+
+    async def annotate(
+        self,
+        *,
+        collection: str,
+        document: str,
+        card: str,
+        sections: Mapping[int, str],
+        topics: Sequence[str],
+        enricher: Enricher,
+        attempts: int,
+        usage: EnrichmentUsage,
+    ) -> None:
+        collection = collection.strip("/")
+        info = await self.info(collection, document)
+        brief = await self.brief(collection=collection, document=document)
+        if info is None or brief is None:
+            raise DocumentError(f"there is no document {collection}/{document}")
+        rows = await self._sections_of(collection, document)
+        by_section = dict(sections)
         before = await self._topics_of(collection, document)
-        try:
-            await self._write_enrichment_files(
-                collection, document, info, brief, by_section, card, topics, used
-            )
-            await self._save_enrichment(
-                collection,
-                document,
-                card,
-                by_section,
-                topics,
-                used,
-                attempts,
-                described.usage,
-            )
-            await self._reembed(collection, document, info, rows, by_section)
-            await self._write_topic_pages(collection, [*before, *topics])
-            await self._write_collection_index(collection)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning(
-                "could not store the description of %s/%s: %s",
-                collection,
-                document,
-                exc,
-            )
-            reason = "the description could not be saved"
-            await self._set_state(
-                collection, document, "failed", used, attempts, error=reason
-            )
-            return Enriched(document, "failed", error=reason)
-        return Enriched(
-            document,
-            "done",
-            card=card,
-            sections=len(by_section),
-            topics=tuple(topics),
-            usage=described.usage,
-            warnings=tuple(warnings),
+        await self._write_enrichment_files(
+            collection, document, info, brief, by_section, card, topics, enricher
         )
+        await self._save_enrichment(
+            collection, document, card, by_section, topics, enricher, attempts, usage
+        )
+        await self._reembed(collection, document, info, rows, by_section)
+        await self._write_topic_pages(collection, [*before, *topics])
+        await self._write_collection_index(collection)
 
     async def pending(
         self, *, collection: str, enricher: Enricher | None = None, limit: int = 50
@@ -1480,88 +1333,29 @@ class Library:
     async def reorganise(
         self, *, collection: str, organiser: Organiser | None = None
     ) -> Reorganised:
-        """Redraw the topic tree of ``collection`` in one pass: an ``Organiser`` sees every described document's card and the topics it has,
-        and says where each should be filed. Filing documents one at a time drifts; seeing them all at once is more coherent.
-
-        Documents never move and nothing is deleted: only each document's topics (in the catalog and its ``index.md``) and the topic pages
-        change, and the previous topics are written to ``_topics/log.md``. Never raises for a model that is down or wrong; the tree stays
-        as it was and the outcome says ``failed``."""
-        collection = collection.strip("/")
-        chosen = organiser or self._organiser
-        if not self._file_topics or chosen is None:
-            return Reorganised("skipped", error="topic filing is not on")
-        lock = self._organise_locks.setdefault(collection, asyncio.Lock())
-        async with lock:
-            return await self._reorganise(collection, chosen)
-
-    async def _reorganise(self, collection: str, chosen: Organiser) -> Reorganised:
-        listing = await self._described(collection)
-        if len(listing) < 2:
-            return Reorganised("skipped", error="too few described documents")
-        before = {d.document: d.topics for d in listing}
-        try:
-            organised = await asyncio.wait_for(
-                chosen.organise(
-                    [
-                        FiledDocument(
-                            d.document, d.title, d.description or "", d.topics
-                        )
-                        for d in listing
-                    ]
-                ),
-                timeout=self._enrich_timeout,
-            )
-        except Exception as exc:  # noqa: BLE001 — a model's failure must leave the tree as it was
-            logger.warning(
-                "reorganising %s by %s failed: %s", collection, chosen.name, exc
-            )
-            return Reorganised("failed", error="the topics could not be redrawn")
-        plan: dict[str, tuple[str, ...]] = {}
-        for document, proposed in organised.topics.items():
-            if document not in before:
-                continue  # a document the model made up
-            cleaned = tuple(
-                dict.fromkeys(t for t in (topic_path(x) for x in proposed) if t)
-            )[:2]
-            if cleaned and cleaned != before[document]:
-                plan[document] = cleaned
-        if not plan:
-            return Reorganised(
-                "done",
-                moved=0,
-                topics=len({t for ts in before.values() for t in ts}),
-                usage=organised.usage,
-            )
-        try:
-            for document, topics in plan.items():
-                await self._set_topics(collection, document, topics)
-            await self._write_topic_pages(
-                collection,
-                [t for d in plan for t in (*before[d], *plan[d])],
-            )
-            await self._write_collection_index(collection)
-            await self._log_reorganisation(collection, chosen, before, plan)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("could not store the new topics of %s: %s", collection, exc)
-            return Reorganised("failed", error="the new topics could not be saved")
-        after = {**before, **plan}
-        return Reorganised(
-            "done",
-            moved=len(plan),
-            topics=len({t for ts in after.values() for t in ts}),
-            usage=organised.usage,
+        """Redraw the topic tree of ``collection`` in one pass with ``organiser`` (default: the library's). The logic is
+        ``substrate.documents.enrichment.reorganise``, which runs over any ``DocumentLibrary``."""
+        return await reorganise_collection(
+            self,
+            collection=collection,
+            organiser=organiser or self._organiser,
+            timeout=self._enrich_timeout,
         )
 
-    async def _described(self, collection: str) -> list[DocumentInfo]:
-        """The documents of ``collection`` that have a model-written card (all of them, oldest first)."""
-        out: list[DocumentInfo] = []
-        after: str | None = None
-        while True:
-            page = await self.list(collection=collection, limit=MAX_LIST, after=after)
-            out += [d for d in page.documents if d.description]
-            if page.next is None:
-                return out
-            after = page.next
+    async def set_topics(
+        self, *, collection: str, plan: Mapping[str, Sequence[str]], by: str
+    ) -> None:
+        collection = collection.strip("/")
+        before = {d: await self._topics_of(collection, d) for d in plan}
+        for document, topics in plan.items():
+            await self._set_topics(collection, document, topics)
+        await self._write_topic_pages(
+            collection, [t for d in plan for t in (*before[d], *plan[d])]
+        )
+        await self._write_collection_index(collection)
+        await self._log_reorganisation(
+            collection, by, before, {d: tuple(t) for d, t in plan.items()}
+        )
 
     async def _set_topics(
         self, collection: str, document: str, topics: Sequence[str]
@@ -1588,9 +1382,9 @@ class Library:
     async def _log_reorganisation(
         self,
         collection: str,
-        organiser: Organiser,
-        before: dict[str, tuple[str, ...]],
-        plan: dict[str, tuple[str, ...]],
+        by: str,
+        before: Mapping[str, Sequence[str]],
+        plan: Mapping[str, Sequence[str]],
     ) -> None:
         """Append what changed to ``_topics/log.md``, so a reorganisation can be read back and undone by hand."""
         key = f"{collection}/{TOPICS_DIR}/log.md"
@@ -1598,7 +1392,7 @@ class Library:
             text = (await self._files.download(key)).decode("utf-8", "replace")
         except Exception:  # noqa: BLE001 — no log yet
             text = "# Topic log\n"
-        lines = [f"\n## {okf.utc_now_iso()} — {organiser.name} {organiser.version}\n"]
+        lines = [f"\n## {okf.utc_now_iso()} — {by}\n"]
         lines += [
             f"- {document}: {', '.join(before[document]) or '(none)'} → {', '.join(topics)}"
             for document, topics in plan.items()
@@ -1680,7 +1474,7 @@ class Library:
             collection=collection, filter={"document": document, "kind": "text"}
         )
         await self._index_vectors(
-            collection, document, info.title, info.filename, sections, None, {}, info.meta,
+            collection, document, info.title, info.filename, sections, (), info.meta,
             descriptions=by_section,
         )  # fmt: skip
 
@@ -1872,7 +1666,7 @@ class Library:
             index.body,
             by_section,
             {
-                s.position: f"{_pages_label(s.first_page, s.last_page)}, ~{s.tokens} tokens"
+                s.position: f"{pages_label(s.first_page, s.last_page)}, ~{s.tokens} tokens"
                 for s in brief.sections
             },
         )
@@ -1968,14 +1762,13 @@ class Library:
         title: str,
         filename: str,
         sections: Sequence[Section],
-        result: ExtractionResult | None,
-        image_ids: dict[tuple[int, int], str],
+        images: Sequence[BundleImage],
         metadata: dict[str, Any],
         descriptions: dict[int, str] | None = None,
     ) -> int:
-        """Cut each section into chunks (and take its figures), embed them, and store them under ``collection``. A chunk whose embedding
-        fails is stored without one. Returns how many were stored without. Nothing here fails the add for a service that is down; a
-        collection written by another embedder raises ``VectorSpaceError``."""
+        """Cut each section into chunks (and take its figures that carry their bytes), embed them, and store them under ``collection``. A chunk
+        whose embedding fails is stored without one. Returns how many were stored without. Nothing here fails the add for a service that is
+        down; a collection written by another embedder raises ``VectorSpaceError``."""
         embedder = self._embedder
         if embedder is None:
             return 0
@@ -2024,28 +1817,28 @@ class Library:
                         ),
                     )
                 )
-        if result is not None and Modality.IMAGE in embedder.modalities:
-            for page in result.pages:
-                for k, image in enumerate(page.images):
-                    ident = image_ids[(page.page_number, k)]
-                    caption = image.caption or ""
-                    doc = Document.from_text(
-                        caption or f"{image.label.value} on page {page.page_number}",
-                        id=f"{document}:img:{ident}",
-                        metadata={
-                            **base,
-                            "kind": "image",
-                            "image": ident,
-                            "pages": [page.page_number, page.page_number],
-                            "label": image.label.value,
-                        },
-                    )
-                    blocks: list[Any] = [
-                        MediaBlock.image(data=image.data, media_type=image.media_type)
-                    ]
-                    if caption:
-                        blocks.append(TextBlock(text=caption))
-                    pending.append((doc, blocks))
+        if Modality.IMAGE in embedder.modalities:
+            for image in images:
+                if image.data is None:
+                    continue
+                caption = image.caption or ""
+                doc = Document.from_text(
+                    caption or f"{image.label} on page {image.page}",
+                    id=f"{document}:img:{image.id}",
+                    metadata={
+                        **base,
+                        "kind": "image",
+                        "image": image.id,
+                        "pages": [image.page, image.page],
+                        "label": image.label,
+                    },
+                )
+                blocks: list[Any] = [
+                    MediaBlock.image(data=image.data, media_type=image.media_type)
+                ]
+                if caption:
+                    blocks.append(TextBlock(text=caption))
+                pending.append((doc, blocks))
         return await self._embed_and_store(collection, pending)
 
     async def _embed_and_store(
@@ -2151,68 +1944,7 @@ class Library:
         for document, names in sorted(by_doc.items()):
             if document == TOPICS_DIR or "index.md" not in names:
                 continue
-            index = okf.parse(
-                (
-                    await self._files.download(f"{collection}/{document}/index.md")
-                ).decode("utf-8", "replace")
-            )
-            sections: list[Section] = []
-            written: dict[int, okf.Concept] = {}
-            for name in sorted(
-                n
-                for n in names
-                if n != "index.md" and "/" not in n and n.endswith(".md")
-            ):
-                concept = okf.parse(
-                    (
-                        await self._files.download(f"{collection}/{document}/{name}")
-                    ).decode("utf-8", "replace")
-                )
-                pages = concept.extra.get("pages") or [1, 1]
-                written[len(sections) + 1] = concept
-                sections.append(
-                    Section(
-                        concept.title or name,
-                        tuple(concept.extra.get("heading_path") or ()),
-                        int(pages[0]),
-                        int(pages[-1]),
-                        _strip_navigation(concept.body),
-                    )
-                )
-            images = [
-                (
-                    n.rsplit("/", 1)[-1].removesuffix(".png"),
-                    _page_of(n),
-                    "figure",
-                    None,
-                    "image/png",
-                )
-                for n in names
-                if n.startswith("images/")
-            ]
-            extra = index.extra
-            info = DocumentInfo(
-                document, index.title or document, str(extra.get("filename", "")), int(extra.get("pages", 1)), len(sections), len(images),
-                tuple(int(p) for p in extra.get("needs_ocr", [])), str(extra.get("engine", "")), index.resource, dict(extra.get("metadata") or {}),
-            )  # fmt: skip
-            await self._catalog(
-                collection, info, str(extra.get("sha256", "")), sections, images
-            )
-            await self._restore_enrichment(collection, document, index, written)
-            if self._embedder is not None:
-                await self._store.vectors.delete_where(
-                    collection=collection, filter={"document": document}
-                )
-                await self._index_vectors(
-                    collection,
-                    document,
-                    info.title,
-                    info.filename,
-                    sections,
-                    None,
-                    {},
-                    info.meta,
-                )
+            await self._index_filed(collection, document, names)
             count += 1
         if count:
             await self._write_collection_index(collection)
@@ -2239,49 +1971,6 @@ def tx_dialect(library: Library) -> str:
 def _page_of(name: str) -> int:
     match = re.search(r"-p(\d+)-", name)
     return int(match.group(1)) if match else 1
-
-
-def _with_navigation(section: Section, names: list[str], n: int) -> str:
-    links = []
-    if n > 1:
-        links.append(f"[← Previous]({names[n - 2]})")
-    links.append("[Up](index.md)")
-    if n < len(names):
-        links.append(f"[Next →]({names[n]})")
-    return f"{section.markdown}\n\n---\n{' · '.join(links)}"
-
-
-def _strip_navigation(body: str) -> str:
-    head, sep, tail = body.rpartition("\n\n---\n")
-    return head if sep and "](" in tail and "Up" in tail else body
-
-
-def _document_index(
-    sections: Sequence[Section],
-    names: Sequence[str],
-    image_ids: dict[tuple[int, int], str],
-    result: ExtractionResult,
-) -> str:
-    lines = ["## Sections", ""]
-    for n, (section, name) in enumerate(zip(sections, names, strict=True), start=1):
-        lines.append(
-            f"{n}. [{section.title}]({name}) — {_pages_label(section.first_page, section.last_page)}, ~{section.tokens} tokens"
-        )
-    if image_ids:
-        lines += ["", "## Images", ""]
-        for page in result.pages:
-            for k, image in enumerate(page.images):
-                ident = image_ids[(page.page_number, k)]
-                lines.append(
-                    f"- [{ident}](images/{ident}.png) — {image.label.value}, p. {page.page_number}"
-                    + (f": {image.caption}" if image.caption else "")
-                )
-    if result.needs_ocr:
-        lines += [
-            "",
-            f"> Pages {', '.join(map(str, result.needs_ocr))} are pictures of text and were not read (no OCR was available).",
-        ]
-    return "\n".join(lines)
 
 
 _SECTION_LINE = re.compile(r"^(\d+)\. \[(.+?)\]\((.+?)\) — .*$")
@@ -2331,36 +2020,6 @@ def _state_args(
         collection, document, state, enricher.name, enricher.version, attempts, error,
         usage.input_tokens, usage.output_tokens, usage.cost_usd, time.time(),
     )  # fmt: skip
-
-
-def _validated(
-    brief: DocumentBrief, described: Described
-) -> tuple[dict[int, str], str, list[str]]:
-    """What an enricher returned, made safe to store: cleaned, every figure checked against the text it describes, and a plain extract
-    standing in wherever nothing trustworthy is left. Returns the section descriptions, the card and what was dropped."""
-    warnings: list[str] = []
-    by_section: dict[int, str] = {}
-    for section in brief.sections:
-        text = clean(
-            described.sections.get(section.position, ""),
-            limit=SECTION_DESCRIPTION_CHARS,
-        )
-        text, bad = ground(text, section.text)
-        if bad:
-            warnings.append(
-                f"section {section.position}: dropped a sentence with figures not in the text ({', '.join(bad[:3])})"
-            )
-        by_section[section.position] = text or extract(
-            section.text, limit=SECTION_DESCRIPTION_CHARS
-        )
-    card = clean(described.card, limit=CARD_CHARS)
-    card, bad = ground(card, "\n".join(s.text for s in brief.sections))
-    if bad:
-        warnings.append(
-            f"card: dropped a sentence with figures not in the document ({', '.join(bad[:3])})"
-        )
-    card = card or next((d for d in by_section.values() if d), "") or brief.title
-    return by_section, card, warnings
 
 
 def _slice_pages(text: str, first: int, last: int) -> str:

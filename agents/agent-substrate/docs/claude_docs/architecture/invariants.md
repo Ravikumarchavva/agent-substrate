@@ -9,7 +9,7 @@ sentence in a docstring. A row is *enforced* when its test passes today, and
 marked `xfail(strict=True)`, so the build fails the moment one starts passing
 and the marker has to come off. That is what keeps this document honest.
 
-**130 enforced · 0 pending · 130 total**
+**131 enforced · 0 pending · 131 total**
 
 ## approvals
 
@@ -232,6 +232,8 @@ and the marker has to come off. That is what keeps this document honest.
   `test_a_turn_killed_between_two_appends_leaves_a_thread_that_is_whole`
 - ✅ **Most programs never call ``aclose`` on the store an agent opened for itself. Leaving the process must neither print a traceback nor lose anything: the connection is released at exit, after the thread pool is gone.**
   `test_a_store_nobody_closed_exits_cleanly_and_keeps_what_was_committed`
+- ✅ **A store creates a part's tables the first time that part is used. One that runs agents and keeps threads holds no ``vector_docs``, ``graph_*``, ``memory_records`` or ``files`` (governed content lives elsewhere, ADR 0004), and using a part later creates exactly that part.**
+  `test_a_runtime_only_store_creates_no_document_vector_graph_memory_or_file_tables`
 
 ## structure
 
@@ -253,7 +255,7 @@ and the marker has to come off. That is what keeps this document honest.
   `test_i30_every_implementation_of_a_port_with_a_suite_runs_it`
 - ✅ **i30 every port has a conformance suite**
   `test_i30_every_port_has_a_conformance_suite`
-- ✅ **The engine instruments itself through ``opentelemetry-api``, which does nothing until a host configures an SDK. The SDK, the exporter and the web-framework instrumentation are the host's choice — the platform (apps/substrate-cloud) installs them — so a plain install of the engine does not pull them in.**
+- ✅ **The engine instruments itself through ``opentelemetry-api``, which does nothing until a host configures an SDK. The SDK, the exporter and the web-framework instrumentation are the host's choice — the platform (agents/substrate-cloud) installs them — so a plain install of the engine does not pull them in.**
   `test_the_core_install_carries_the_opentelemetry_api_and_nothing_that_exports`
 - ✅ **The AST check above sees what each file names; this one sees what actually loads. A module that reached a vendor SDK, a logging stack or a database driver through a helper would pass the first and fail this.**
   `test_i26_importing_the_whole_engine_loads_only_the_allowed_third_party_set`

@@ -44,6 +44,7 @@ CONTRACTS = (
     "stores.tasks",
     "stores.threads",
     "stores.vector",
+    "documents.enrichment",
     "documents.protocols",
     "documents.types",
     "workspace.protocols",

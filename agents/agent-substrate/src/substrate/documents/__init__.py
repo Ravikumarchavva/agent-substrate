@@ -15,45 +15,49 @@ from substrate.documents.enrichment import (
     Reorganised,
     SectionBrief,
 )
-from substrate.documents.library import (
-    Added,
-    DocumentError,
-    DocumentInfo,
-    Hit,
-    Library,
-    Listing,
-    Outline,
-    Passage,
-    Picture,
-    SectionInfo,
-    Topic,
-)
+from substrate.documents.bundle import Bundle
+from substrate.documents.library import Library
 from substrate.documents.llm_enricher import LLMEnricher
 from substrate.documents.llm_organiser import LLMOrganiser
-from substrate.documents.protocols import DocumentExtractor, Ocr
+from substrate.documents.protocols import DocumentExtractor, DocumentLibrary, Ocr
 from substrate.documents.reader import Reader
 from substrate.documents.tool import DocumentsTool
 from substrate.documents.types import (
+    Added,
+    DocumentError,
+    DocumentInfo,
+    EnrichmentState,
     ExtractedImage,
     ExtractedImageLabel,
     ExtractedPage,
     ExtractionResult,
+    Hit,
+    Hits,
+    Listing,
     OcrResult,
+    Outline,
     PageMethod,
+    Passage,
+    Picture,
     ReadLimits,
+    SectionInfo,
     Strategy,
+    Topic,
 )
 
 __all__ = [
     "Added",
+    "Bundle",
     "Described",
     "DocumentBrief",
     "DocumentError",
     "DocumentExtractor",
     "DocumentInfo",
+    "DocumentLibrary",
     "DocumentsTool",
     "Enriched",
     "Enricher",
+    "EnrichmentState",
     "EnrichmentUsage",
     "ExtractedImage",
     "ExtractedImageLabel",
@@ -62,6 +66,7 @@ __all__ = [
     "FiledDocument",
     "FirstSentenceEnricher",
     "Hit",
+    "Hits",
     "LLMEnricher",
     "LLMOrganiser",
     "Library",

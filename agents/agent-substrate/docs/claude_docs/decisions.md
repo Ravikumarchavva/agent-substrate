@@ -1,5 +1,27 @@
 # Decisions — Check Here Before Re-litigating
 
+## Ports refactor: lazy store parts, a `DocumentLibrary` port, enrichment over the port (2026-10-18)
+
+**Context.** ADR 0004 splits governed content (documents, vectors, memory, files) from the runtime's operational state. The code still assumed one
+database holding everything: `Store.start()` migrated all seven parts, `Library` was a concrete class that `DocumentsTool` imported, and enrichment
+lived inside `Library`, so an adapter over a governed service could not reuse it. No behaviour changed in this step.
+
+* **Parts are created on first use.** `Store.start()` migrates the layout only; each `*_tables` class calls `store.ensure(component, schema)` before its
+  first transaction, the modules are imported inside the `Store` properties, `Store.has(component)` reads the migrations table, and `Tenant.erase`
+  skips parts that were never used. A runtime-only store holds no vector, graph, memory or file tables (invariant row in `test_store.py`).
+* **`DocumentLibrary` is a `typing.Protocol`** in `documents/protocols.py`; its value types moved to `documents/types.py` and are still exported from
+  `substrate.documents` (plus `DocumentLibrary`, `Bundle`, `EnrichmentState`, `Hits`). `DocumentsTool` depends on the protocol.
+* **Enrichment is a free function over the port** (`enrichment.enrich` / `reorganise`), with the claim/annotate/set_topics primitives on the port;
+  `Library.enrich` / `reorganise` remain as thin delegations that pass the library's enricher, organiser and timeout.
+* **`Library.add` is composed of steps:** `prepare` (pure, a `Bundle`), vectors, `file`, catalog; `index` rebuilds a filed bundle's catalog and is what
+  `reindex` runs. The order (vectors before files, so a collection of another embedder is refused before anything is written) is unchanged.
+* **`sqlalchemy` left the base dependencies** for a `pipeline` extra (I31); only `integrations/pipeline/store.py` imports it.
+* `documents.enrichment` joined the contract modules (`tests/_layout.py`): it holds the `Enricher`/`Organiser` protocols and imports nothing of the engine.
+* **Not done:** renaming `postgres_store` to `postgres_runtime_store` (ADR 0004 names it) touches `integrations/`, the cloud factory, tests and docs and
+  belongs with the change that stops that store creating the content parts; `EnrichmentQueue` still takes a `Library`, because it relies on the library's own enricher.
+
+---
+
 ## An agent's account is viewable read only: pairs are record channels, lists are keyset-paged (2026-10-10)
 
 **Context.** The user wants to open any agent and see what it sees (its chats with you, with other agents, in groups), without being able to write in it,

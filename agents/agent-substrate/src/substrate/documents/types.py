@@ -6,8 +6,9 @@ multimodal document chunks, and document metadata.
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Literal, Sequence
+from typing import Any, Literal, Sequence
 
 from pydantic import Field, model_validator
 
@@ -117,9 +118,159 @@ class ReadLimits(KernelModel):
     """Address-space limit of an isolated reader (enforced on Linux)."""
 
 
+# ── what a document library answers with ─────────────────────────────────────────────────────────────────
+
+
+class DocumentError(ValueError):
+    """A document could not be added: it could not be read, or it has nothing readable in it."""
+
+
+@dataclass(frozen=True)
+class Added:
+    document: str
+    title: str
+    filename: str
+    pages: int
+    sections: int
+    images: int
+    needs_ocr: tuple[int, ...] = ()
+    duplicate: bool = False
+    """The same file was already in the collection: nothing was written."""
+    warnings: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class DocumentInfo:
+    document: str
+    title: str
+    filename: str
+    pages: int
+    sections: int
+    images: int
+    needs_ocr: tuple[int, ...]
+    engine: str
+    resource: str | None
+    meta: dict[str, Any] = field(default_factory=dict)
+    description: str | None = None
+    """A model-written card for the document (``Library.enrich``), or ``None`` while it only has the counted index."""
+    topics: tuple[str, ...] = ()
+    """Where the document is filed (slash-separated paths), for a library that files its documents."""
+    enrichment: str = "none"
+    """``none``, ``running``, ``done`` or ``failed``."""
+
+
+@dataclass(frozen=True)
+class SectionInfo:
+    position: int
+    title: str
+    heading_path: tuple[str, ...]
+    first_page: int
+    last_page: int
+    tokens: int
+    headings: tuple[str, ...] = ()
+    """The headings inside the section, for a section that holds several."""
+    description: str | None = None
+    """What the section says, as a model wrote it (``Library.enrich``)."""
+
+
+@dataclass(frozen=True)
+class Outline:
+    document: DocumentInfo
+    sections: tuple[SectionInfo, ...]
+    more: int = 0
+    """Entries beyond ``MAX_OUTLINE`` that are not listed."""
+    headings: tuple[tuple[int, str, int], ...] = ()
+    """For one section: ``(level, heading, page)`` inside it."""
+
+
+@dataclass(frozen=True)
+class Passage:
+    document: DocumentInfo
+    section: SectionInfo
+    text: str
+    offset: int = 0
+    next_offset: int | None = None
+    """Where to continue (``offset=``) when the text was cut at ``MAX_READ_CHARS``; ``None`` at the end."""
+    total_chars: int = 0
+
+
+@dataclass(frozen=True)
+class Hit:
+    document: DocumentInfo
+    section: SectionInfo
+    snippet: str
+    score: float
+    image: str | None = None
+    """For a figure or chart that matched: its id, to ``view``."""
+
+
+class Hits(list[Hit]):
+    """The hits of a ``find``, best first, and ``note`` — what the model should be told about how they were found (the embedding service
+    was down, so only words were matched)."""
+
+    note: str | None = None
+
+
+@dataclass(frozen=True)
+class Listing:
+    documents: tuple[DocumentInfo, ...]
+    next: str | None = None
+    """Pass as ``after=`` for the next page; ``None`` when this was the last."""
+
+
+@dataclass(frozen=True)
+class Topic:
+    """One level of the filing tree: ``browse``'s answer."""
+
+    path: str
+    children: tuple[tuple[str, int], ...]
+    """``(topic path, documents below it)`` for each topic directly under ``path``."""
+    documents: tuple[DocumentInfo, ...]
+    """The documents filed at ``path`` itself."""
+    more: int = 0
+
+
+@dataclass(frozen=True)
+class Picture:
+    data: bytes
+    media_type: str
+    document: str
+    image: str
+    page: int
+    label: str
+    caption: str | None
+
+
+@dataclass(frozen=True)
+class EnrichmentState:
+    """Where a document's description stands (``DocumentLibrary.enrichment_state``)."""
+
+    state: str
+    """``running``, ``done`` or ``failed``."""
+    enricher: str
+    version: str
+    attempts: int
+    updated_at: float
+
+
 __all__ = [
+    "Added",
+    "DocumentError",
+    "DocumentInfo",
+    "EnrichmentState",
     "ExtractedImageLabel",
     "ExtractedImage",
     "ExtractedPage",
     "ExtractionResult",
+    "Hit",
+    "Hits",
+    "Listing",
+    "OcrResult",
+    "Outline",
+    "Passage",
+    "Picture",
+    "ReadLimits",
+    "SectionInfo",
+    "Strategy",
+    "Topic",
 ]

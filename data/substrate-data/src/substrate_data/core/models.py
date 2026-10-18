@@ -80,6 +80,24 @@ class Settings(BaseSettings):
         default="substrate-staging", pattern=r"^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$"
     )
 
+    # Governed files (docs/FILES.md). User files live in their own bucket that compute workers cannot read
+    # (the worker credentials carry no actions on it). `volumes_public_endpoint_url` is the address clients
+    # use for presigned URLs when it differs from the control plane's own (a reverse proxy, a CDN).
+    volumes_bucket: str = Field(
+        default="substrate-volumes", pattern=r"^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$"
+    )
+    volumes_public_endpoint_url: str = ""
+    files_part_bytes: int = Field(default=16 * 1024 * 1024, ge=5 * 1024 * 1024, le=5 * 1024**3)
+    files_url_ttl_seconds: int = Field(default=900, ge=30, le=7 * 24 * 3600)
+    files_max_file_bytes: int = Field(default=5 * 1024**4, ge=1024)
+    # Pending uploads and upload sessions expire after this many hours; a sweeper removes their objects.
+    upload_session_ttl_hours: int = Field(default=24, ge=1, le=24 * 14)
+    # Versions that are no longer current (and files deleted this long ago) are purged. 0 keeps them.
+    files_version_retention_days: int = Field(default=30, ge=0, le=3650)
+    files_sweep_interval_seconds: float = Field(default=900, gt=0)
+    # Members of this group may provision tenants (POST /api/v1/tenants), besides metastore admins.
+    provisioner_group: str = "data-provisioners"
+
     # Identity
     oidc_issuer: str = "http://127.0.0.1:18080/realms/substrate"
     oidc_audience: str = "substrate-data"
@@ -185,6 +203,10 @@ class Settings(BaseSettings):
         self.iceberg_catalog_url = validate_service_url(self.iceberg_catalog_url, allowed)
         self.oidc_issuer = validate_service_url(self.oidc_issuer, allowed)
         self.controller_url = validate_service_url(self.controller_url, allowed)
+        if self.volumes_public_endpoint_url:
+            self.volumes_public_endpoint_url = validate_service_url(
+                self.volumes_public_endpoint_url, allowed
+            )
         if self.embedding_url:
             self.embedding_url = validate_service_url(self.embedding_url, allowed)
         if bool(self.tls_cert_file) != bool(self.tls_key_file):

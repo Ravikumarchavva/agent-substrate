@@ -132,6 +132,27 @@ CREATE VIRTUAL TABLE IF NOT EXISTS chunks USING fts5(
 CREATE TABLE IF NOT EXISTS publications (
     job_id TEXT PRIMARY KEY, kind TEXT NOT NULL, payload TEXT NOT NULL, state TEXT NOT NULL,
     error TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS volume_files (
+    id TEXT PRIMARY KEY, volume_id TEXT NOT NULL, path TEXT NOT NULL, size INTEGER NOT NULL,
+    sha256 TEXT NOT NULL, sha256_verified INTEGER NOT NULL DEFAULT 0,
+    content_type TEXT NOT NULL, version INTEGER NOT NULL, created_by TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, deleted_at TEXT,
+    UNIQUE (volume_id, path));
+CREATE INDEX IF NOT EXISTS volume_files_deleted ON volume_files(deleted_at);
+CREATE TABLE IF NOT EXISTS volume_file_versions (
+    file_id TEXT NOT NULL, version INTEGER NOT NULL, volume_id TEXT NOT NULL,
+    object_key TEXT NOT NULL, size INTEGER NOT NULL, sha256 TEXT NOT NULL,
+    sha256_verified INTEGER NOT NULL DEFAULT 0, content_type TEXT NOT NULL, created_by TEXT NOT NULL, created_at TEXT NOT NULL,
+    purged_at TEXT, PRIMARY KEY (file_id, version));
+CREATE INDEX IF NOT EXISTS volume_file_versions_object ON volume_file_versions(object_key);
+CREATE TABLE IF NOT EXISTS volume_quotas (
+    volume_id TEXT PRIMARY KEY, max_bytes INTEGER NOT NULL, updated_by TEXT NOT NULL,
+    updated_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS volume_uploads (
+    id TEXT PRIMARY KEY, volume_id TEXT, path TEXT, object_key TEXT NOT NULL, upload_id TEXT,
+    size INTEGER NOT NULL, content_type TEXT NOT NULL, sha256 TEXT NOT NULL,
+    created_by TEXT NOT NULL, created_at TEXT NOT NULL, expires_at TEXT NOT NULL,
+    state TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS volume_uploads_expiry ON volume_uploads(state, expires_at);
 """
 
 

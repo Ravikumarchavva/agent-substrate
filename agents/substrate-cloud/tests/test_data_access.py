@@ -22,7 +22,9 @@ from substrate.types import RunScope
 from substrate_cloud.data_access import (
     JWKS_PATH,
     DataGateway,
+    DATA_SCOPES,
     DataTokenMinter,
+    KeycloakMembership,
     PlatformDataAccess,
     build_data_access,
     load_keys,
@@ -36,11 +38,25 @@ SCOPE = RunScope(
 )
 
 
-def minter() -> DataTokenMinter:
+class Members:
+    """The organization membership the minter consults: (tenant, user) pairs, and a record of every question."""
+
+    def __init__(self, *pairs: tuple[str, str]):
+        self.pairs = set(pairs)
+        self.asked: list[tuple[str, str]] = []
+
+    async def is_member(self, tenant_id: str, user_id: str) -> bool:
+        self.asked.append((tenant_id, user_id))
+        return (tenant_id, user_id) in self.pairs
+
+
+def minter(members: Members | None = None, **kwargs) -> DataTokenMinter:
     return DataTokenMinter(
         Ed25519PrivateKey.generate(),
         issuer="agent-substrate",
         audience="substrate-data",
+        membership=members or Members(("acme", "user-1")),
+        **kwargs,
     )
 
 
@@ -58,22 +74,28 @@ def verify(m: DataTokenMinter, token: str) -> dict:
 # ── tokens ───────────────────────────────────────────────────────────────────
 
 
-def test_a_token_names_the_user_tenant_and_agent_and_can_only_read():
+async def test_a_token_names_the_user_tenant_and_agent_and_can_only_read():
     m = minter()
-    claims = verify(m, m.mint(SCOPE, 90))
+    claims = verify(m, await m.mint(SCOPE, 90))
     assert claims["sub"] == "user-1" and claims["tenant_id"] == "acme"
-    assert claims["groups"] == ["tenant-acme"] and claims["scope"] == "data:read"
+    assert (
+        "groups" not in claims
+    )  # the data service derives the tenant from tenant_id; no group is asserted
+    assert claims["scope"] == "data:read"
     assert (
         claims["act"] == {"sub": "agent-substrate:analyst"}
         and claims["thread_id"] == "thread-1"
     )
     assert claims["exp"] - claims["iat"] == 90
-    assert jwt.get_unverified_header(m.mint(SCOPE, 90))["kid"] == m.kid
+    assert jwt.get_unverified_header(await m.mint(SCOPE, 90))["kid"] == m.kid
 
 
-def test_a_token_lives_about_as_long_as_the_run_and_never_longer_than_the_cap():
+async def test_a_token_lives_about_as_long_as_the_run_and_never_longer_than_the_cap():
     m = minter()
-    short, long = verify(m, m.mint(SCOPE, 5)), verify(m, m.mint(SCOPE, 100_000))
+    short, long = (
+        verify(m, await m.mint(SCOPE, 5)),
+        verify(m, await m.mint(SCOPE, 100_000)),
+    )
     assert short["exp"] - short["iat"] == 60 and long["exp"] - long["iat"] == 330
 
 
@@ -81,8 +103,8 @@ def test_a_token_lives_about_as_long_as_the_run_and_never_longer_than_the_cap():
     "scope",
     [RunScope(tenant_id="acme"), RunScope(user_id="u"), RunScope()],
 )
-def test_no_user_or_no_tenant_means_no_token(scope):
-    assert minter().mint(scope, 60) is None
+async def test_no_user_or_no_tenant_means_no_token(scope):
+    assert await minter().mint(scope, 60) is None
 
 
 def test_the_signing_key_is_created_once_private_and_reused(tmp_path):
@@ -94,38 +116,191 @@ def test_the_signing_key_is_created_once_private_and_reused(tmp_path):
         if hasattr(first, "private_numbers")
         else True
     )
-    a = DataTokenMinter(first, issuer="i", audience="a")
-    b = DataTokenMinter(load_or_create_key(path), issuer="i", audience="a")
+    a = DataTokenMinter(first, issuer="i", audience="a", membership=Members())
+    b = DataTokenMinter(
+        load_or_create_key(path), issuer="i", audience="a", membership=Members()
+    )
     assert (
         a.kid == b.kid
     )  # the same key after a restart, so the data service keeps trusting it
 
 
-def test_a_token_from_a_different_key_does_not_verify():
+async def test_a_token_from_a_different_key_does_not_verify():
     a, b = minter(), minter()
     with pytest.raises(jwt.InvalidSignatureError):
-        verify(a, b.mint(SCOPE, 60))
+        verify(a, await b.mint(SCOPE, 60))
+
+
+# ── who the minter signs for ─────────────────────────────────────────────────
+
+
+async def test_a_user_who_is_not_a_member_of_the_organization_gets_no_token():
+    """A delegated run for a user outside the tenant (or one removed from it) is refused, not signed."""
+    members = Members(("acme", "user-1"))
+    m = minter(members)
+    stranger = RunScope(
+        tenant_id="acme", user_id="mallory", thread_id="t", agent_id="a"
+    )
+    other_org = RunScope(
+        tenant_id="globex", user_id="user-1", thread_id="t", agent_id="a"
+    )
+    assert await m.mint(stranger, 60) is None
+    assert await m.mint(other_org, 60) is None
+    assert await m.mint(SCOPE, 60) is not None
+    assert members.asked == [
+        ("acme", "mallory"),
+        ("globex", "user-1"),
+        ("acme", "user-1"),
+    ]
+
+
+async def test_membership_is_asked_for_the_runs_own_principal_only():
+    members = Members(("acme", "user-1"))
+    await minter(members).mint(SCOPE, 60)
+    assert members.asked == [("acme", "user-1")]
+
+
+async def test_removing_the_user_stops_new_tokens():
+    members = Members(("acme", "user-1"))
+    m = minter(members)
+    assert await m.mint(SCOPE, 60) is not None
+    members.pairs.clear()
+    assert await m.mint(SCOPE, 60) is None
+
+
+async def test_a_token_carries_only_scopes_the_issuer_may_grant():
+    m = minter(allowed_scopes=frozenset({"data:read", "files:read"}))
+    claims = verify(m, await m.mint(SCOPE, 60, scopes=("files:read", "data:read")))
+    assert claims["scope"] == "data:read files:read"
+    for beyond in (("files:write",), ("documents:read",), ("admin:all",), ()):
+        with pytest.raises(ValueError, match="allowed scopes"):
+            await m.mint(SCOPE, 60, scopes=beyond)
+
+
+def test_the_allowed_scopes_are_the_names_the_data_service_enforces():
+    assert DATA_SCOPES == {
+        "data:read",
+        "files:read",
+        "files:write",
+        "documents:read",
+        "documents:write",
+        "memory:read",
+        "memory:write",
+    }
+    with pytest.raises(ValueError, match="unknown data scopes"):
+        minter(allowed_scopes=frozenset({"data:read", "files:*"}))
+
+
+class FakeKeycloak:
+    """Just enough of Keycloak: a token endpoint and the organization members endpoint."""
+
+    def __init__(self):
+        self.members = {("org-1", "user-1")}
+        self.calls = 0
+        self.fail = False
+        self.clock = 0.0
+
+    def handler(self, request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/protocol/openid-connect/token"):
+            return httpx.Response(200, json={"access_token": "svc", "expires_in": 300})
+        self.calls += 1
+        if self.fail:
+            return httpx.Response(500)
+        assert request.headers["authorization"] == "Bearer svc"
+        parts = request.url.path.split("/")
+        org, user = parts[-3], parts[-1]
+        assert request.url.path.startswith("/admin/realms/substrate/organizations/")
+        return httpx.Response(200 if (org, user) in self.members else 404)
+
+
+def keycloak_membership(fake: FakeKeycloak) -> KeycloakMembership:
+    return KeycloakMembership(
+        "https://id.example.com/realms/substrate",
+        "cell",
+        "secret",
+        client=httpx.AsyncClient(transport=httpx.MockTransport(fake.handler)),
+        clock=lambda: fake.clock,
+    )
+
+
+async def test_keycloak_membership_is_cached_for_sixty_seconds():
+    fake = FakeKeycloak()
+    check = keycloak_membership(fake)
+    assert await check.is_member("org-1", "user-1") and await check.is_member(
+        "org-1", "user-1"
+    )
+    assert fake.calls == 1
+    fake.members.clear()  # removed in Keycloak: still a member until the cache window ends
+    assert await check.is_member("org-1", "user-1")
+    fake.clock = 61
+    assert not await check.is_member("org-1", "user-1")
+    assert fake.calls == 2
+
+
+async def test_keycloak_membership_fails_closed_and_does_not_cache_an_error():
+    fake = FakeKeycloak()
+    check = keycloak_membership(fake)
+    fake.fail = True
+    assert not await check.is_member("org-1", "user-1")
+    fake.fail = False
+    assert await check.is_member(
+        "org-1", "user-1"
+    )  # the outage was not remembered as "not a member"
+    assert not await check.is_member("org-1", "mallory")
+    assert not await check.is_member("org-9", "user-1")
+
+
+def test_keycloak_membership_needs_a_realm_url():
+    with pytest.raises(ValueError, match="realm"):
+        KeycloakMembership("https://id.example.com", "c", "s")
+
+
+def test_without_a_membership_check_no_data_access_is_built(
+    tmp_path, monkeypatch, caplog
+):
+    monkeypatch.setattr(
+        "substrate_cloud.data_access.sandbox_has_client", lambda python_bin: True
+    )
+    access = build_data_access(
+        service_url="https://data.example.com",
+        data_dir=str(tmp_path),
+        key_file="",
+        relay_dir=str(tmp_path / "relay"),
+        issuer="i",
+        audience="a",
+        python_bin=sys.executable,
+    )
+    assert access is None and "membership" in caplog.text
 
 
 # ── key publication and rotation ────────────────────────────────────────────
 
 
-def test_tokens_carry_a_unique_id_and_are_not_valid_before_issue():
+async def test_tokens_carry_a_unique_id_and_are_not_valid_before_issue():
     m = minter()
-    first, second = verify(m, m.mint(SCOPE, 60)), verify(m, m.mint(SCOPE, 60))
+    first, second = (
+        verify(m, await m.mint(SCOPE, 60)),
+        verify(m, await m.mint(SCOPE, 60)),
+    )
     assert first["jti"] != second["jti"] and first["nbf"] == first["iat"]
 
 
-def test_rotation_publishes_both_keys_and_signs_with_the_new_one(tmp_path):
+async def test_rotation_publishes_both_keys_and_signs_with_the_new_one(tmp_path):
     path = tmp_path / "data-token.pem"
     old = load_or_create_key(path)
     path.rename(tmp_path / "data-token.previous.pem")  # the documented rotation step
     current, previous = load_keys(path)  # creates the new key, finds the old one
-    m = DataTokenMinter(current, issuer="i", audience="a", previous=previous)
+    members = Members(("acme", "user-1"))
+    m = DataTokenMinter(
+        current, issuer="i", audience="a", previous=previous, membership=members
+    )
     published = {k["kid"] for k in m.jwks()["keys"]}
-    assert published == {m.kid, DataTokenMinter(old, issuer="i", audience="a").kid}
+    assert published == {
+        m.kid,
+        DataTokenMinter(old, issuer="i", audience="a", membership=members).kid,
+    }
     assert all("d" not in k for k in m.jwks()["keys"])  # public halves only
-    assert jwt.get_unverified_header(m.mint(SCOPE, 60))["kid"] == m.kid
+    assert jwt.get_unverified_header(await m.mint(SCOPE, 60))["kid"] == m.kid
 
 
 async def test_the_public_keys_are_served_unauthenticated_and_404_when_off():
@@ -471,6 +646,7 @@ def test_nothing_is_built_without_a_data_service_or_without_the_client(
         relay_dir=str(tmp_path / "relay"),
         issuer="agent-substrate",
         audience="substrate-data",
+        membership=Members(),
     )
     assert (
         build_data_access(service_url="", python_bin=sys.executable, **common) is None
@@ -499,6 +675,7 @@ def test_enabling_data_access_needs_no_file_shared_with_the_data_service(
         issuer="agent-substrate",
         audience="substrate-data",
         python_bin=sys.executable,
+        membership=Members(),
     )
     assert access is not None
     assert [p.name for p in (tmp_path / "keys").iterdir()] == [
@@ -520,4 +697,5 @@ def test_a_remote_plaintext_data_service_is_refused_at_startup(tmp_path, monkeyp
             issuer="i",
             audience="a",
             python_bin=sys.executable,
+            membership=Members(),
         )

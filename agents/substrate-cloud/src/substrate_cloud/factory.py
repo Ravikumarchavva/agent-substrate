@@ -32,7 +32,11 @@ from typing import Any, List, Optional, cast
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from substrate_cloud.config import SubstrateConfig
-from substrate_cloud.data_access import PlatformDataAccess, build_data_access
+from substrate_cloud.data_access import (
+    KeycloakMembership,
+    PlatformDataAccess,
+    build_data_access,
+)
 from substrate.types import Actor
 from substrate.models import ChatModel
 from substrate.stores import FileStore, ThreadStore
@@ -466,6 +470,18 @@ async def init_tool_registry(
                 ca_file=cfg.DATA_SERVICE_CA_FILE,
                 client_cert_file=cfg.DATA_CLIENT_CERT_FILE,
                 client_key_file=cfg.DATA_CLIENT_KEY_FILE,
+                membership=(
+                    KeycloakMembership(
+                        cfg.OIDC_ISSUER,
+                        cfg.OIDC_ADMIN_CLIENT_ID,
+                        cfg.OIDC_ADMIN_CLIENT_SECRET,
+                        ca_file=cfg.OIDC_CA_FILE or None,
+                    )
+                    if cfg.OIDC_ISSUER
+                    and cfg.OIDC_ADMIN_CLIENT_ID
+                    and cfg.OIDC_ADMIN_CLIENT_SECRET
+                    else None
+                ),
             )
         elif cfg.DATA_SERVICE_URL:
             logger.warning(

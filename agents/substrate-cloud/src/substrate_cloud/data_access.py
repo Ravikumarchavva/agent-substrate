@@ -3,8 +3,11 @@
 The data service is a remote HTTPS service. Nothing here assumes it shares a host, a disk or a
 network with this process. Four small parts, composed by ``factory.py``:
 
-* :class:`DataTokenMinter` signs a short-lived, read-only token for one run: the user, their tenant
-  and the acting agent, with an Ed25519 key only this platform holds. Its public keys (current and,
+* :class:`DataTokenMinter` signs a short-lived token for one run: the user, their tenant (the Keycloak organization id)
+  and the acting agent, with an Ed25519 key only this platform holds. It signs only for the principal the run recorded
+  (``RunScope``), only after confirming the user is still a member of that organization (:class:`KeycloakMembership`,
+  cached for 60 s), asserts no groups (the data service derives the tenant itself) and never grants a scope outside
+  its ``allowed_scopes`` (the same names ``substrate_data.auth.scopes`` enforces per route). Its public keys (current and,
   during a rotation, the previous one) are published at ``/.well-known/data-token-jwks.json`` and the
   data service fetches them over HTTPS; no key or file is ever copied between machines.
 * :class:`DataGateway` is the only thing a sandbox can reach. The jail has no network, so it gets one
@@ -31,9 +34,10 @@ import stat
 import subprocess
 import time
 import uuid
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from pathlib import Path
-from urllib.parse import urlsplit
+from typing import Protocol
+from urllib.parse import quote, urlsplit
 
 import httpx
 import jwt
@@ -99,6 +103,115 @@ def _kid(key: Ed25519PrivateKey) -> str:
     return hashlib.sha256(public).hexdigest()[:16]
 
 
+# The scopes a data token may carry; the data service enforces them per route (substrate_data.auth.scopes.SCOPES).
+DATA_SCOPES = frozenset(
+    {
+        "data:read",
+        "files:read",
+        "files:write",
+        "documents:read",
+        "documents:write",
+        "memory:read",
+        "memory:write",
+    }
+)
+MEMBERSHIP_TTL_SECONDS = 60
+
+
+class MembershipChecker(Protocol):
+    async def is_member(self, tenant_id: str, user_id: str) -> bool: ...
+
+
+class KeycloakMembership:
+    """Whether a user is (still) a member of an organization, asked of Keycloak's admin API and cached for 60 s.
+
+    Uses a service-account client of the realm (client credentials; it needs ``view-users``). Fails closed: any
+    answer other than a clear yes or no is "not a member", and is not cached.
+    """
+
+    def __init__(
+        self,
+        issuer: str,
+        client_id: str,
+        client_secret: str,
+        *,
+        ca_file: str | None = None,
+        ttl: float = MEMBERSHIP_TTL_SECONDS,
+        client: httpx.AsyncClient | None = None,
+        clock=time.monotonic,
+    ):
+        base, _, realm = issuer.rstrip("/").rpartition("/realms/")
+        if not base or not realm:
+            raise ValueError(
+                f"{issuer!r} is not a Keycloak realm URL (…/realms/<realm>)"
+            )
+        self.admin = f"{base}/admin/realms/{realm}"
+        self.token_url = f"{issuer.rstrip('/')}/protocol/openid-connect/token"
+        self.client_id, self.client_secret = client_id, client_secret
+        self.ttl, self.clock = ttl, clock
+        self.http = client or httpx.AsyncClient(
+            verify=ssl.create_default_context(cafile=ca_file) if ca_file else True,
+            timeout=httpx.Timeout(5),
+            follow_redirects=False,
+        )
+        self._cache: dict[tuple[str, str], tuple[bool, float]] = {}
+        self._token: tuple[str, float] | None = None
+
+    async def _bearer(self) -> str:
+        now = self.clock()
+        if self._token and self._token[1] > now:
+            return self._token[0]
+        response = await self.http.post(
+            self.token_url,
+            data={
+                "grant_type": "client_credentials",
+                "client_id": self.client_id,
+                "client_secret": self.client_secret,
+            },
+        )
+        response.raise_for_status()
+        body = response.json()
+        self._token = (
+            body["access_token"],
+            now + max(5.0, float(body.get("expires_in", 60)) - 10),
+        )
+        return self._token[0]
+
+    async def is_member(self, tenant_id: str, user_id: str) -> bool:
+        key = (tenant_id, user_id)
+        now = self.clock()
+        hit = self._cache.get(key)
+        if hit is not None and hit[1] > now:
+            return hit[0]
+        try:
+            response = await self.http.get(
+                f"{self.admin}/organizations/{quote(tenant_id, safe='')}/members/{quote(user_id, safe='')}",
+                headers={"Authorization": f"Bearer {await self._bearer()}"},
+            )
+        except (httpx.HTTPError, KeyError, ValueError):
+            logger.warning(
+                "Organization membership could not be checked; refusing the data token"
+            )
+            return False
+        if response.status_code == 200:
+            member = True
+        elif response.status_code == 404:
+            member = False
+        else:
+            logger.warning(
+                "Organization membership check answered %s; refusing",
+                response.status_code,
+            )
+            return False
+        self._cache[key] = (member, now + self.ttl)
+        if len(self._cache) > 10_000:
+            self._cache = {k: v for k, v in self._cache.items() if v[1] > now}
+        return member
+
+    async def aclose(self) -> None:
+        await self.http.aclose()
+
+
 class DataTokenMinter:
     def __init__(
         self,
@@ -106,10 +219,17 @@ class DataTokenMinter:
         *,
         issuer: str,
         audience: str,
+        membership: MembershipChecker,
         previous: Ed25519PrivateKey | None = None,
+        allowed_scopes: frozenset[str] = DATA_SCOPES,
     ):
+        unknown = set(allowed_scopes) - DATA_SCOPES
+        if unknown:
+            raise ValueError(f"unknown data scopes: {sorted(unknown)}")
         self.key, self.issuer, self.audience = key, issuer, audience
         self.previous = previous
+        self.membership = membership
+        self.allowed_scopes = frozenset(allowed_scopes)
         self.kid = _kid(key)
 
     def jwks(self) -> dict[str, object]:
@@ -121,9 +241,29 @@ class DataTokenMinter:
                 keys.append({**jwk, "kid": _kid(key), "use": "sig", "alg": "EdDSA"})
         return {"keys": keys}
 
-    def mint(self, scope: RunScope, ttl_seconds: int) -> str | None:
-        """A read-only token for this run's user, or None when the run has no user or tenant."""
+    async def mint(
+        self,
+        scope: RunScope,
+        ttl_seconds: int,
+        *,
+        scopes: Iterable[str] = ("data:read",),
+    ) -> str | None:
+        """A token for the run's user, or None when the run has no user or tenant or the user is not a member.
+
+        ``scope`` is the run's recorded principal (set by the platform when the run started, never by the model). The
+        token asserts no groups: the data service derives the tenant from ``tenant_id``.
+        """
         if not scope.user_id or not scope.tenant_id:
+            return None
+        asked = frozenset(scopes)
+        if not asked or not asked <= self.allowed_scopes:
+            raise ValueError(
+                f"scopes {sorted(asked - self.allowed_scopes) or ['(none)']} are outside this issuer's allowed scopes"
+            )
+        if not await self.membership.is_member(scope.tenant_id, scope.user_id):
+            logger.warning(
+                "Refusing a data token: the run's user is not a member of its organization"
+            )
             return None
         now = int(time.time())
         agent = scope.agent_id or "primary"
@@ -136,9 +276,7 @@ class DataTokenMinter:
             "exp": now + max(MIN_TOKEN_SECONDS, min(ttl_seconds, MAX_TOKEN_SECONDS)),
             # A unique id the data service records with every statement it runs for this token.
             "jti": uuid.uuid4().hex,
-            # Tenant-wide grants in the data service are made to this group.
-            "groups": [f"tenant-{scope.tenant_id}"],
-            "scope": "data:read",
+            "scope": " ".join(sorted(asked)),
             "act": {"sub": f"agent-substrate:{agent}"},
             "tenant_id": scope.tenant_id,
             "thread_id": scope.thread_id,
@@ -456,7 +594,7 @@ class PlatformDataAccess:
         self.gateway = gateway or DataGateway(relay_dir, service_url)
 
     async def grant(self, scope: RunScope, *, timeout_s: int) -> DataMount | None:
-        token = self.minter.mint(scope, timeout_s + 30)
+        token = await self.minter.mint(scope, timeout_s + 30)
         if token is None:
             return None
         await self.gateway.ensure_started()
@@ -464,7 +602,7 @@ class PlatformDataAccess:
 
     async def token_for(self, scope: RunScope, ttl_seconds: int = 120) -> str | None:
         """A read-only token for server-side callers (the catalog tool), under the same rules."""
-        return self.minter.mint(scope, ttl_seconds)
+        return await self.minter.mint(scope, ttl_seconds)
 
     async def stop(self) -> None:
         await self.gateway.stop()
@@ -495,9 +633,20 @@ def build_data_access(
     ca_file: str = "",
     client_cert_file: str = "",
     client_key_file: str = "",
+    membership: MembershipChecker | None = None,
+    allowed_scopes: frozenset[str] = DATA_SCOPES,
 ) -> PlatformDataAccess | None:
-    """Data access for the sandbox, or None (with the reason logged) when it cannot work."""
+    """Data access for the sandbox, or None (with the reason logged) when it cannot work.
+
+    Without a ``membership`` checker (no OIDC admin client configured) no token could be signed safely, so it is off.
+    """
     if not service_url:
+        return None
+    if membership is None:
+        logger.warning(
+            "DATA_SERVICE_URL is set but no organization-membership check is configured "
+            "(OIDC_ISSUER, OIDC_ADMIN_CLIENT_ID, OIDC_ADMIN_CLIENT_SECRET). Sandbox data access is disabled."
+        )
         return None
     if not sandbox_has_client(python_bin):
         logger.warning(
@@ -509,7 +658,12 @@ def build_data_access(
     key_path = Path(key_file or f"{data_dir.rstrip('/')}/keys/data-token.pem").resolve()
     current, previous = load_keys(key_path)
     minter = DataTokenMinter(
-        current, issuer=issuer, audience=audience, previous=previous
+        current,
+        issuer=issuer,
+        audience=audience,
+        previous=previous,
+        membership=membership,
+        allowed_scopes=allowed_scopes,
     )
     directory = Path(relay_dir or f"/var/tmp/substrate-data-relay-{os.getuid()}")
     gateway = DataGateway(
@@ -522,10 +676,11 @@ def build_data_access(
     logger.info(
         "Sandbox data access on. Tell the data service to trust this platform: "
         'SUBSTRATE_DATA_TRUSTED_ISSUERS=[{"issuer": "%s", "audience": "%s", '
-        '"jwks_uri": "https://<this backend\'s public address>%s"}]',
+        '"jwks_uri": "https://<this backend\'s public address>%s", "allowed_scopes": %s}]',
         issuer,
         audience,
         JWKS_PATH,
+        json.dumps(sorted(allowed_scopes)),
     )
     return PlatformDataAccess(
         service_url=service_url, relay_dir=directory, minter=minter, gateway=gateway

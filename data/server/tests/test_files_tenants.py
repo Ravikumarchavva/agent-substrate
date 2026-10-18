@@ -1,4 +1,8 @@
-"""Tenant provisioning: one idempotent call makes a tenant's catalog, schemas, volume and grants."""
+"""Tenant provisioning: one idempotent call makes a tenant's catalog, schemas, volume and grants.
+
+The tenant's alias and every name are derived from its id (`loamz.identity.tenancy`); its members reach its workspace
+through the `org:<tenant>` group the server derives from their verified organization, never from a token's groups.
+"""
 
 from __future__ import annotations
 
@@ -29,23 +33,23 @@ def unthrottled(stack):
 
 
 def test_provisioning_creates_the_tenant_once_and_is_idempotent(admin):
-    first = admin.tenants.ensure("t-one", "one")
+    first = admin.tenants.ensure("t-one")
     assert first == {
         "tenant_id": "t-one",
-        "alias": "one",
-        "catalog": "tenant_one",
-        "schemas": ["tenant_one.workspace", "tenant_one.knowledge"],
-        "volumes": ["tenant_one.workspace.files"],
+        "alias": "t_one",
+        "catalog": "tenant_t_one",
+        "schemas": ["tenant_t_one.workspace", "tenant_t_one.knowledge"],
+        "volumes": ["tenant_t_one.workspace.files"],
         "group": "group:org:t-one",
         "created": True,
     }
-    again = admin.tenants.ensure("t-one", "one")
+    again = admin.tenants.ensure("t-one")
     assert again == {**first, "created": False}
-    assert [s["name"] for s in admin.catalog.schemas("tenant_one")] == ["knowledge", "workspace"]
-    assert [v["name"] for v in admin.catalog.volumes("tenant_one", "workspace")] == ["files"]
+    assert [s["name"] for s in admin.catalog.schemas("tenant_t_one")] == ["knowledge", "workspace"]
+    assert [v["name"] for v in admin.catalog.volumes("tenant_t_one", "workspace")] == ["files"]
     grants = {
         (a["principal"], p)
-        for a in admin.catalog.grants("volume", "tenant_one.workspace.files")
+        for a in admin.catalog.grants("volume", "tenant_t_one.workspace.files")
         for p in a["privileges"]
     }
     assert grants == {("group:org:t-one", "READ_VOLUME"), ("group:org:t-one", "WRITE_VOLUME")}
@@ -54,63 +58,65 @@ def test_provisioning_creates_the_tenant_once_and_is_idempotent(admin):
 def test_an_existing_tenant_is_completed_not_duplicated(stack, admin):
     # A half-provisioned tenant (the catalog exists, nothing else) is finished by the next call.
     with stack.http("alice", *ADMIN) as http:
-        made = http.post("/catalogs", json={"name": "tenant_half", "comment": "tenant:t-half"})
+        made = http.post("/catalogs", json={"name": "tenant_t_half", "comment": "tenant:t-half"})
         assert made.status_code == 201
-    done = admin.tenants.ensure("t-half", "half")
-    assert done["created"] is True and done["volumes"] == ["tenant_half.workspace.files"]
-    assert admin.tenants.ensure("t-half", "half")["created"] is False
+    done = admin.tenants.ensure("t-half")
+    assert done["created"] is True and done["volumes"] == ["tenant_t_half.workspace.files"]
+    assert admin.tenants.ensure("t-half")["created"] is False
 
 
-def test_an_alias_cannot_be_taken_over_by_another_tenant(admin):
-    admin.tenants.ensure("t-owner", "owned")
-    with pytest.raises(ConflictError) as taken:
-        admin.tenants.ensure("t-intruder", "owned")
+def test_a_catalog_name_cannot_be_taken_over_by_another_tenant(admin):
+    admin.tenants.ensure("acme-corp")
+    with pytest.raises(ConflictError) as taken:  # `acme_corp` has the same alias
+        admin.tenants.ensure("acme_corp")
     assert taken.value.code == "conflict"
     for body in (
-        {"tenant_id": "t", "alias": "Bad-Alias"},
-        {"tenant_id": "t", "alias": "x" * 60},
-        {"tenant_id": "", "alias": "ok"},
-        {"tenant_id": "t", "alias": "ok", "extra": 1},
+        {"tenant_id": ""},
+        {"tenant_id": "../x"},
+        {"tenant_id": "t", "alias": "chosen"},  # the alias is derived, never chosen
     ):
         with pytest.raises(DataError) as invalid:
             admin.request("POST", "/tenants", json=body)
-        assert invalid.value.status == 400
+        assert invalid.value.status == 422
 
 
-def test_only_admins_and_provisioners_may_provision(stack):
+def test_only_admins_and_the_provisioning_role_may_provision(stack):
     with pytest.raises(ForbiddenError):
-        stack.client("bob", "analysts").tenants.ensure("t-no", "no")
+        stack.client("bob", "analysts").tenants.ensure("t-no")
     with pytest.raises(ForbiddenError):
-        stack.client("carol", "org:t-no").tenants.ensure("t-no", "no")  # a tenant's own member
-    provisioner = stack.client("platform", "data-provisioners")
-    assert provisioner.tenants.ensure("t-prov", "prov")["created"] is True
+        stack.member("carol", "t-no").tenants.ensure("t-no")  # a tenant's own member
+    with pytest.raises(ForbiddenError):  # a group is not the role
+        stack.client("platform", "data-provisioners").tenants.ensure("t-prov")
     # Delegated tokens never provision: the route declares no scope.
-    agent = stack.agent_client("u1", "acme", scopes=("files:write",), groups=["data-provisioners"])
+    agent = stack.agent_client("u1", "acme", scopes=("files:write",))
     with pytest.raises(InsufficientScopeError):
-        agent.tenants.ensure("t-agent", "agent")
+        agent.tenants.ensure("t-agent")
     admin = stack.client("alice", *ADMIN)
-    for refused in ("tenant_no", "tenant_agent"):
+    for refused in ("tenant_t_no", "tenant_t_prov", "tenant_t_agent"):
         with pytest.raises(NotFoundError):
             admin.request("GET", f"/catalogs/{refused}")
 
 
 def test_members_use_their_tenants_workspace_and_nobody_elses(stack, admin):
-    admin.tenants.ensure("t-a", "alpha")
-    admin.tenants.ensure("t-b", "beta")
-    member_a = stack.client("ann", "org:t-a")
-    member_b = stack.client("ben", "org:t-b")
-    volume = "tenant_alpha.workspace.files"
+    admin.tenants.ensure("t-a")
+    admin.tenants.ensure("t-b")
+    member_a = stack.member("ann", "t-a")
+    member_b = stack.member("ben", "t-b")
+    volume = "tenant_t_a.workspace.files"
     info = member_a.files.upload(volume, "users/ann/plan.txt", b"alpha plan")
     assert info.version == 1 and member_a.files.read(volume, "users/ann/plan.txt") == b"alpha plan"
     assert [c["name"] for c in member_a.catalog.catalogs() if c["name"].startswith("tenant_")] == [
-        "tenant_alpha"
+        "tenant_t_a"
     ]
     with pytest.raises(NotFoundError):
         member_b.files.read(volume, "users/ann/plan.txt")  # not even visible
     with pytest.raises(NotFoundError):
         member_b.files.upload(volume, "x.txt", b"x")
+    # A token naming the group itself gets nothing: the group comes from the verified organization only.
+    with pytest.raises(NotFoundError):
+        stack.client("eve", "org:t-a").files.read(volume, "users/ann/plan.txt")
     # An agent acting for a member of tenant A reaches A's files, but only its own user's folder.
-    agent = stack.agent_client("ann-sub", "alpha", scopes=("files:write",), groups=["org:t-a"])
+    agent = stack.agent_client("ann-sub", "t-a", scopes=("files:write",))
     agent.files.upload(volume, "users/ann-sub/notes.txt", b"agent notes")
     with pytest.raises(ForbiddenError):
         agent.files.read(volume, "users/ann/plan.txt")
@@ -119,13 +125,13 @@ def test_members_use_their_tenants_workspace_and_nobody_elses(stack, admin):
 
 
 def test_the_platforms_service_account_provisions_with_its_realm_role(stack):
-    """cell-admin holds the client role `provision-tenant` on substrate-data (realm-substrate.json), not a group."""
+    """cell-admin holds the client role `provision-tenant` on loamz-data, not a group."""
     from loamz.data.client import DataClient
 
     role = {"resource_access": {"loamz-data": {"roles": ["provision-tenant"]}}}
     platform = DataClient(stack.api, token=lambda: stack.identity.token("cell-admin", **role))
-    assert platform.tenants.ensure("t-role", "viarole")["created"] is True
+    assert platform.tenants.ensure("t-role")["created"] is True
     other = {"resource_access": {"some-other-client": {"roles": ["provision-tenant"]}}}
     elsewhere = DataClient(stack.api, token=lambda: stack.identity.token("x", **other))
     with pytest.raises(ForbiddenError):
-        elsewhere.tenants.ensure("t-other", "other")
+        elsewhere.tenants.ensure("t-other")

@@ -83,7 +83,9 @@ def install(app: FastAPI, settings: Settings) -> None:
 
     @app.exception_handler(IdentityError)
     async def identity(request: Request, error: IdentityError):
-        return problem(request, error.status, error.code, error.detail)
+        # One spelling for "no or bad credentials" across every Loamz error (`UnauthenticatedError`).
+        code = "unauthenticated" if error.status == 401 else error.code
+        return problem(request, error.status, code, error.detail)
 
     @app.exception_handler(RequestValidationError)
     async def validation(request: Request, error: RequestValidationError):

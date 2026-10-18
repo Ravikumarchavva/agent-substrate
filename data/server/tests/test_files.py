@@ -26,7 +26,7 @@ from loamz.data.client import (
     QuotaExceededError,
 )
 from loamz.data.server.features.files.service import files_service
-from loamz.data.storage.errors import LoamzError, http_status
+from loamz.data.storage.errors import LoamzError
 
 pytestmark = pytest.mark.integration
 MiB = 1024 * 1024
@@ -151,7 +151,7 @@ def test_the_bytes_that_arrive_must_match_what_was_declared(env, admin):
     storage(env.settings).put_object(Bucket=VOLUMES_BUCKET, Key=key, Body=b"123456789")
     with pytest.raises(DataError) as mismatch:
         admin.files.complete_upload(VOL, swapped["upload_id"])
-    assert http_status(mismatch.value) == 409 and mismatch.value.code == "conflict"
+    assert mismatch.value.status == 409 and mismatch.value.code == "conflict"
     assert not admin.files.exists(VOL, "checks/swapped.bin")
     # An upload never sent is incomplete, and can be completed once it arrives.
     late = admin.files.initiate_upload(VOL, "checks/late.bin", 3)
@@ -164,7 +164,7 @@ def test_the_bytes_that_arrive_must_match_what_was_declared(env, admin):
     wrong = admin.files.initiate_upload(VOL, "checks/wrong.bin", 5, sha256="0" * 64)
     with pytest.raises(DataError) as refused:
         admin.files.put_to_url(wrong["url"], b"12345", wrong["headers"])
-    assert http_status(refused.value) == 400
+    assert refused.value.status == 400
     with pytest.raises(NotFoundError):
         admin.files.complete_upload(VOL, "0" * 32)
 
@@ -318,11 +318,7 @@ def test_a_hard_quota_refuses_writes_that_would_pass_it(env, admin, bob):
     admin.files.upload(SMALL, "q/a.bin", b"x" * 600)
     with pytest.raises(QuotaExceededError) as over:
         admin.files.upload(SMALL, "q/b.bin", b"x" * 600)
-    assert (
-        http_status(over.value) == 413
-        and over.value.quota_bytes == 1000
-        and over.value.used_bytes == 600
-    )
+    assert over.value.status == 413 and over.value.limit == 1000 and over.value.used == 600
     assert not admin.files.exists(SMALL, "q/b.bin")
     admin.files.upload(SMALL, "q/a.bin", b"y" * 950)  # replacing counts the difference only
     usage = admin.files.usage(SMALL)
@@ -368,7 +364,7 @@ def test_traversal_and_malformed_paths_are_refused_everywhere(admin, path):
     ):
         with pytest.raises((InvalidRequestError, NotFoundError, DataError)) as refused:
             call()
-        assert http_status(refused.value) in {400, 404}
+        assert refused.value.status in {400, 404}
     for prefix in ("../", "/", "a\\b"):
         with pytest.raises(DataError):
             list(admin.files.list(VOL, prefix))
@@ -423,7 +419,7 @@ def test_a_delegated_token_reaches_only_its_own_users_folder(env, admin, agent):
         ],
     )
     assert "url" in results[0]
-    assert [r["error"]["type"] for r in results[1:]] == ["path-forbidden", "path-forbidden"]
+    assert [r["error"]["type"] for r in results[1:]] == ["forbidden", "forbidden"]
     assert not admin.files.exists(VOL, "users/someone-else/planted.txt")
     # Ordinary users (no agent in between) and admins follow grants alone.
     assert admin.files.read(VOL, "users/someone-else/theirs.txt") == b"theirs"
@@ -547,7 +543,7 @@ def test_an_upload_session_is_promoted_into_a_volume_by_a_server_side_copy(env, 
     assert info.size == 11 and admin.files.read(VOL, "sessions/a.txt") == b"hello world"
     with pytest.raises(DataError) as spent:
         admin.files.promote_session(started["id"], VOL, "sessions/again.txt")
-    assert http_status(spent.value) == 409
+    assert spent.value.status == 409
     # Promotion respects quotas and grants of the target volume.
     admin.files.set_quota(SMALL, 5)
     pending = admin.files.create_session(11)

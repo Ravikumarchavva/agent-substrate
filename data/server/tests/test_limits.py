@@ -84,7 +84,7 @@ def test_the_api_enforces_them(stack, tmp_path):
         admin.sql("SELECT count(*) FROM main.lim.t")  # first statement plans some bytes
         with pytest.raises(DataError) as over:
             admin.sql("SELECT count(*) FROM main.lim.t")
-        assert http_status(over.value) == 429 and over.value.code == "rate-limited"
+        assert over.value.status == 429 and over.value.code == "rate-limited"
         cfg.daily_scan_bytes_per_principal = 0
         stack.app.state.container.limiter = RateLimiter(settings(rate_limit_per_minute=6))
         codes = []

@@ -407,6 +407,15 @@ class Stack:
 
         return DataClient(self.api, token=lambda: self.token(name, *groups))
 
+    def member(self, name: str, tenant: str, *groups: str, **claims: Any):
+        """A client signed in to the organization `tenant` (its Keycloak `organization` claim)."""
+        from loamz.data.client import DataClient
+
+        return DataClient(
+            self.api,
+            token=lambda: self.identity.token(name, groups, organization=[tenant], **claims),
+        )
+
     def agent_client(self, user: str, tenant: str = "acme", **claims: Any):
         """A client holding an agent's delegated token; `scopes=("files:write", …)` sets its scopes."""
         from loamz.data.client import DataClient

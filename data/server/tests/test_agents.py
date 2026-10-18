@@ -210,13 +210,14 @@ class UnixServer:
 def test_sandbox_discovery_over_a_unix_socket(stack, orders, tmp_path, monkeypatch):
     """The in-sandbox path: a socket and a token file, nothing else, no network."""
     grant_tenant(stack)
-    from loamz.data.server.app import build_services, create_app
+    from loamz.data.server.app import create_app
     from loamz.data.server.kernel.auth import TokenVerifier
+    from loamz.data.server.kernel.container import Container
 
-    services = build_services(
+    container = Container(
         stack.settings, verifier=TokenVerifier(stack.settings, jwks=stack.identity.jwks)
     )
-    server = UnixServer(create_app(stack.settings, services), tmp_path / "api.sock")
+    server = UnixServer(create_app(container), tmp_path / "api.sock")
     (tmp_path / "token").write_text(stack.identity.agent_token("user-42") + "\n")
     monkeypatch.setattr(sd, "SANDBOX_DIR", tmp_path)
     monkeypatch.setattr(sd, "_default", None)

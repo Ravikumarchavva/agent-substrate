@@ -111,7 +111,7 @@ def test_controller_requires_its_secret(stack):
 )
 def test_resources_cannot_request_provisioning(internal, field):
     body = {"name": f"p-{field}", "role": "sql", "url": WORKER, "token": TOKEN, field: 1}
-    assert internal.post("/resources", json=body).status_code == 400
+    assert internal.post("/resources", json=body).status_code == 422
 
 
 @pytest.mark.integration

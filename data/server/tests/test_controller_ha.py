@@ -83,7 +83,7 @@ def test_one_controller_serves_and_the_other_waits(pair):
     assert a.ready and not b.ready
     assert a.controller.active and not b.controller.active
     standby = b.http.get("/internal/v1/resources")
-    assert standby.status_code == 503 and standby.json()["type"].endswith("not-leader")
+    assert standby.status_code == 503 and standby.json()["type"].endswith("/unavailable")
     assert standby.headers["retry-after"] == "1"
     assert a.http.get("/internal/v1/resources").status_code == 200
     assert b.http.get("/livez").status_code == 200  # alive, just not in charge

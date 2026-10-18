@@ -12,6 +12,8 @@ from conftest import ADMIN
 
 from loamz.data.client import DataError
 from loamz.data.server.features.compute import batch
+from loamz.data.server.features.tables.iceberg import table_service
+from loamz.data.server.features.tables.publications import job_publisher
 from loamz.data.storage.errors import LoamzError, http_status
 
 pytestmark = pytest.mark.integration
@@ -164,14 +166,14 @@ def test_a_rewrite_never_loses_rows_appended_while_it_ran(stack, admin, tmp_path
     make_table(admin, tmp_path, "racy", files=3)
     services = stack.app.state.container
     record = services.store.table("main", "m3", "racy")
-    planned = services.tables.plan(record, [])
+    planned = services.get(table_service).plan(record, [])
     old = [f.path for f in planned.files]
     write_id = uuid4().hex
     result = batch.optimize(
         {
             "source_files": old,
             "sort_by": [],
-            "location": services.tables.load(record).location(),
+            "location": services.get(table_service).load(record).location(),
             "write_id": write_id,
             "partitioning": [],
             "target_file_bytes": 256 * 2**20,
@@ -183,18 +185,20 @@ def test_a_rewrite_never_loses_rows_appended_while_it_ran(stack, admin, tmp_path
     )  # lands after planning, before the commit
 
     record = services.store.table("main", "m3", "racy")
-    committed = services.tables.replace_files(
+    committed = services.get(table_service).replace_files(
         record, old, [f["path"] for f in result["files"]], write_id
     )
-    stack.app.state.publisher.refresh(record, committed)
+    stack.app.state.container.get(job_publisher).refresh(record, committed)
     assert admin.sql("SELECT count(*) AS n FROM main.m3.racy")["n"][0] == 1500 + 100
     assert table(admin, "racy")["file_count"] == 2  # the rewrite plus the late append
 
     # Replaying the same commit is a no-op; a different rewrite of files that are gone is refused.
-    services.tables.replace_files(record, old, [f["path"] for f in result["files"]], write_id)
+    services.get(table_service).replace_files(
+        record, old, [f["path"] for f in result["files"]], write_id
+    )
     assert admin.sql("SELECT count(*) AS n FROM main.m3.racy")["n"][0] == 1600
     with pytest.raises(LoamzError) as refused:
-        services.tables.replace_files(
+        services.get(table_service).replace_files(
             record, old, [f["path"] for f in result["files"]], uuid4().hex
         )
     assert http_status(refused.value) == 409 and refused.value.code == "conflict"
@@ -230,7 +234,7 @@ def test_maintenance_needs_modify_validates_columns_and_runs_one_at_a_time(stack
             http.post(
                 "/catalogs/main/schemas/m3/tables/guarded:optimize", json={"strategy": "sort"}
             ).status_code
-            == 400
+            == 422
         )
         first = http.post("/catalogs/main/schemas/m3/tables/guarded:optimize", json={})
         assert first.status_code == 202
@@ -339,7 +343,7 @@ def test_readers_need_select_on_the_view_only_and_cannot_write_to_it(stack, admi
     assert len(reader.sql("SELECT * FROM main.m3.secret_totals")) == 4
     with pytest.raises(DataError) as hidden:
         reader.sql("SELECT * FROM main.m3.secret")
-    assert http_status(hidden.value) == 404  # the source table stays invisible
+    assert hidden.value.status == 404  # the source table stays invisible
 
     with stack.http("rita", "readers") as http:
         assert (
@@ -350,7 +354,7 @@ def test_readers_need_select_on_the_view_only_and_cannot_write_to_it(stack, admi
         ).status_code in {404, 405}
     with pytest.raises(DataError) as blocked:
         admin.upload("main.m3.secret_totals", [scattered(tmp_path, "x", rows=3)], mode="append")
-    assert http_status(blocked.value) == 409
+    assert blocked.value.status == 409
 
 
 def test_refresh_runs_as_the_definer_and_stops_if_they_lose_access(stack, admin, tmp_path):
@@ -453,7 +457,7 @@ def test_the_cache_never_answers_for_someone_who_may_not_ask(stack, admin, tmp_p
     outsider = stack.client("mallory", "nobody")
     with pytest.raises(DataError) as denied:
         outsider.sql(sql)  # same SQL, same files, warm cache: still refused by the planner
-    assert http_status(denied.value) == 404
+    assert denied.value.status == 404
 
 
 def test_statements_that_can_change_between_runs_are_never_cached(stack, admin, tmp_path):
@@ -489,7 +493,7 @@ def object_exists(stack, uri: str) -> bool:
 def planned(stack, name):
     services = stack.app.state.container
     record = services.store.table("main", "m3", name)
-    return [f.path for f in services.tables.plan(record, []).files]
+    return [f.path for f in services.get(table_service).plan(record, []).files]
 
 
 def run_expire(stack, name, body, monkeypatch=None, days_ahead=0):
@@ -558,7 +562,7 @@ def test_orphans_are_removed_only_when_old_and_unreferenced(stack, admin, tmp_pa
     make_table(admin, tmp_path, "strays", files=2)
     services = stack.app.state.container
     record = services.store.table("main", "m3", "strays")
-    location = services.tables.load(record).location().rstrip("/")
+    location = services.get(table_service).load(record).location().rstrip("/")
     bucket, _, prefix = location.removeprefix("s3://").partition("/")
     s3 = boto3.client(
         "s3",
@@ -646,11 +650,11 @@ def optimize_payload(stack, tmp_path, name, **extra):
     services = stack.app.state.container
     record = services.store.table("main", "m3", name)
     return {
-        "source_files": [f.path for f in services.tables.plan(record, []).files],
+        "source_files": [f.path for f in services.get(table_service).plan(record, []).files],
         "sort_by": [],
         "zorder": False,
         "bloom_columns": [],
-        "location": services.tables.load(record).location(),
+        "location": services.get(table_service).load(record).location(),
         "write_id": uuid4().hex,
         "partitioning": [],
         "target_file_bytes": 250_000,
@@ -754,13 +758,13 @@ def test_the_api_accepts_zorder_and_validates_its_shape(stack, admin, tmp_path):
     make_table(admin, tmp_path, "z_api", files=3)
     with stack.http("alice", *ADMIN) as http:
         url = "/catalogs/main/schemas/m3/tables/z_api:optimize"
-        for bad in (
-            {"strategy": "zorder", "sort_by": ["k"]},
-            {"strategy": "zorder", "sort_by": ["k", "region", "amount", "k", "k"]},
-            {"strategy": "compact", "sort_by": ["k"]},
-            {"strategy": "sort", "sort_by": ["k"], "bloom_columns": ["nope"]},
+        for bad, status in (
+            ({"strategy": "zorder", "sort_by": ["k"]}, 422),  # the body's shape
+            ({"strategy": "zorder", "sort_by": ["k", "region", "amount", "k", "k"]}, 422),
+            ({"strategy": "compact", "sort_by": ["k"]}, 422),
+            ({"strategy": "sort", "sort_by": ["k"], "bloom_columns": ["nope"]}, 400),  # the table's
         ):
-            assert http.post(url, json=bad).status_code == 400, bad
+            assert http.post(url, json=bad).status_code == status, bad
     run = run_optimize(
         stack, "z_api", {"strategy": "zorder", "sort_by": ["k", "amount"], "bloom_columns": ["k"]}
     )
@@ -906,7 +910,7 @@ def test_scheduled_views_refresh_themselves_only_when_a_source_changed(stack, ad
         },
     )
     wait_fresh(stack, "sch_view")
-    services, publisher = stack.app.state.container, stack.app.state.publisher
+    services, publisher = stack.app.state.container, stack.app.state.container.get(job_publisher)
 
     def tick() -> int:
         """Ask the running publisher for a scheduling pass now, and wait for it to finish."""

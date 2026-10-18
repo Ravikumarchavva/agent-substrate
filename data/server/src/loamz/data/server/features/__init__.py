@@ -25,17 +25,19 @@ class Feature:
 
 
 FEATURES: tuple[Feature, ...] = (
+    # Order matters: `catalog.assets` serves `/catalogs/{c}/schemas/{s}/{collection}`, so it comes after every
+    # feature with a literal segment in that place (views, materialized views, tables).
     Feature("catalog", "catalog", "catalog.api"),
-    Feature("catalog.governance", "catalog", "catalog.governance"),
-    Feature("catalog.views", "catalog", "catalog.views"),
-    Feature("catalog.assets", "catalog", "catalog.assets"),
-    Feature("catalog.policies", "catalog", "catalog.policies"),
     Feature("sql", "sql", "sql.api"),
+    Feature("catalog.views", "catalog", "catalog.views"),
     Feature("tables.materialized", "tables", "tables.materialized"),
     Feature("tables.maintenance", "tables", "tables.maintenance"),
+    Feature("catalog.policies", "catalog", "catalog.policies"),
     Feature("tables.imports", "tables", "tables.imports"),
+    Feature("catalog.governance", "catalog", "catalog.governance"),
     Feature("tables.pipelines", "tables", "tables.pipelines"),
     Feature("compute", "compute", "compute.api"),
+    Feature("catalog.assets", "catalog", "catalog.assets"),
     Feature("files", "files", "files.api"),
     Feature("documents", "documents", "documents.api"),
     Feature("memory", "memory", "memory.api"),

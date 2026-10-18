@@ -25,6 +25,10 @@ class UploadIncompleteError(ConflictError):
     """The object store does not (yet) hold the whole upload: parts are missing or it is still being written."""
 
 
+class StatementTimeoutError(InvalidRequestError):
+    """A statement ran past its time limit and was stopped (narrow it, or raise `timeout_seconds`)."""
+
+
 class TenantNotProvisionedError(ConflictError):
     """The tenant has no workspace yet (`POST /api/v1/tenants` has not run for it)."""
 
@@ -52,6 +56,7 @@ _RELAYED: dict[str, type[LoamzError]] = {
         ConflictError,
         UploadIncompleteError,
         TenantNotProvisionedError,
+        StatementTimeoutError,
         errors.PreconditionFailedError,
         errors.QuotaExceededError,
         errors.VectorSpaceError,

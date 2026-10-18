@@ -22,7 +22,7 @@ def vol(seaweed, identity, ticket_keys, tmp_path_factory):
         identity, ticket_keys, tmp_path_factory.mktemp("vol"), seaweed=seaweed
     )
     with service.admin("vt") as admin:
-        admin.tenants.ensure("vt", "vt")
+        admin.tenants.ensure("vt")
     s3 = boto3.client(
         "s3",
         endpoint_url=seaweed.s3,

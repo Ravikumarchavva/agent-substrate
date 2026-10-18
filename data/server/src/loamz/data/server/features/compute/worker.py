@@ -25,7 +25,7 @@ from fastapi.responses import StreamingResponse
 
 from loamz.data.server.features.compute.manifests import JOB_MODELS, JobEnvelope, storage_identity
 from loamz.data.server.kernel import problems as http
-from loamz.data.server.kernel.errors import public_error
+from loamz.data.server.kernel.errors import StatementTimeoutError, public_error
 from loamz.data.server.kernel.settings import Settings
 from loamz.data.server.kernel.tickets import TicketVerifier
 from loamz.data.storage.errors import (
@@ -575,8 +575,13 @@ def create_compute_app(settings: Settings, role: Role) -> FastAPI:
 
     @app.exception_handler(duckdb.Error)
     async def query_error(request: Request, exc: duckdb.Error):
-        kind = "statement-timeout" if isinstance(exc, duckdb.InterruptException) else "query-error"
-        return http.problem(request, 400, kind, public_error(exc, settings))
+        message = public_error(exc, settings)
+        error = (
+            StatementTimeoutError(message)
+            if isinstance(exc, duckdb.InterruptException)
+            else InvalidRequestError(message)
+        )
+        return http.error_response(request, error)
 
     def controller_only(request: Request) -> None:
         if not secrets.compare_digest(request.headers.get("authorization", ""), "Bearer " + token):

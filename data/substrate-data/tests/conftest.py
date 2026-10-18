@@ -450,7 +450,7 @@ class Postgres:
         return self.admin.rsplit("/", 1)[0] + "/" + database
 
 
-def start_postgres() -> Postgres:
+def start_postgres(image: str = "postgres:16-alpine") -> Postgres:
     import psycopg
 
     if not shutil.which("docker"):
@@ -459,7 +459,7 @@ def start_postgres() -> Postgres:
     subprocess.run(
         [
             "docker", "run", "-d", "--rm", "--name", name, "-e", "POSTGRES_PASSWORD=test",
-            "-p", f"127.0.0.1:{port}:5432", "postgres:16-alpine",
+            "-p", f"127.0.0.1:{port}:5432", image,
         ],
         check=True,
         capture_output=True,
@@ -679,6 +679,7 @@ def serve_documents(
     root: Path,
     *,
     seaweed: Any = None,
+    retrieval_url: str = "",
     **engine: Any,
 ) -> DocsService:
     """With `seaweed`, bundles live in the tenants' volumes (the production path); without, in local files."""
@@ -702,6 +703,7 @@ def serve_documents(
         oidc_issuer=ISSUER,
         metadata=root / "catalog.sqlite",
         retrieval_dir=root / "retrieval",
+        retrieval_url=SecretStr(retrieval_url),
         scratch=root / "tmp",
         controller_state=root / "compute",
         mask_salt=SecretStr("test-salt-docs"),

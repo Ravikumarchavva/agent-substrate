@@ -34,7 +34,7 @@ test-agents:
 	cd agents/substrate-cloud && OTEL_SDK_DISABLED=true uv run --package substrate-cloud pytest -q --timeout=60
 
 test-data:
-	cd data/substrate-data && SUBSTRATE_DATA_SKIP_INTEGRATION=1 uv run --package substrate-data pytest tests -q -n 4 --timeout=120 -m "not integration"
+	cd data/substrate-data && SUBSTRATE_DATA_SKIP_INTEGRATION=1 uv run --package substrate-data pytest tests -q -n 4 --timeout=120 -m "not integration and not slow"
 
 test-slow:
 	cd agents/substrate-cloud && OTEL_SDK_DISABLED=true uv run --package substrate-cloud pytest -q -m "slow" --timeout=120

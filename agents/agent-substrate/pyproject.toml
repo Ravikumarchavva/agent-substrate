@@ -89,7 +89,7 @@ sandbox = [
 ocr = ["rapidocr>=3.0.0", "onnxruntime>=1.23.0"]
 # non-OpenAI LLM providers — LLMFactory lazy-imports each client, so only
 # the provider(s) you actually select need to be installed
-anthropic = ["anthropic>=0.95.0", "pillow>=12.0.0"]
+anthropic = ["anthropic>=1.14.0", "pillow>=12.0.0"]
 gemini = ["google-genai>=1.73.0", "pillow>=12.0.0"]
 # governed files through substrate-data's Files domain (integrations.data): the production FileStore. Bytes move between clients and object
 # storage on URLs the data service signs; the agent host holds no storage credentials (ADR 0004 and 0005)

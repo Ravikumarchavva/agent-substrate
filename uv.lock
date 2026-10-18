@@ -2347,11 +2347,17 @@ dependencies = [
 
 [package.optional-dependencies]
 arrow = [
+    { name = "polars" },
     { name = "pyarrow" },
+]
+http2 = [
+    { name = "httpx", extra = ["http2"] },
 ]
 
 [package.dev-dependencies]
 dev = [
+    { name = "polars" },
+    { name = "pyarrow" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-timeout" },
@@ -2361,13 +2367,17 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "httpx", specifier = ">=0.28,<1" },
+    { name = "httpx", extras = ["http2"], marker = "extra == 'http2'", specifier = ">=0.28,<1" },
     { name = "loamz-identity", editable = "identity/python" },
-    { name = "pyarrow", marker = "extra == 'arrow'", specifier = ">=18" },
+    { name = "polars", marker = "extra == 'arrow'", specifier = ">=1.44.2,<2" },
+    { name = "pyarrow", marker = "extra == 'arrow'", specifier = ">=22,<27" },
 ]
-provides-extras = ["arrow"]
+provides-extras = ["arrow", "http2"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "polars", specifier = ">=1.44.2,<2" },
+    { name = "pyarrow", specifier = ">=22,<27" },
     { name = "pytest", specifier = ">=9" },
     { name = "pytest-asyncio", specifier = ">=1.4" },
     { name = "pytest-timeout", specifier = ">=2.3" },

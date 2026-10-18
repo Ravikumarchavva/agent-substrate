@@ -12,6 +12,7 @@
         ├── NotFoundError             nothing there (also what another tenant's or user's object looks like)
         ├── ForbiddenError            known caller, not allowed
         ├── UnauthenticatedError      no or bad credentials
+        ├── PreconditionFailedError   a conditional write whose condition did not hold
         ├── ScopeViolationError       a write tried to take over a record of another scope
         ├── QuotaExceededError        a size or count limit
         ├── VectorSpaceError          vectors from two embedders mixed in one collection
@@ -126,6 +127,10 @@ class UnauthenticatedError(PermanentError):
     pass
 
 
+class PreconditionFailedError(PermanentError):
+    """A conditional write (`If-Match`, `If-None-Match`) whose condition did not hold: reload and decide again."""
+
+
 class ScopeViolationError(PermanentError):
     """Record ids are chosen by callers, so an id colliding with another scope's record is refused, never overwritten."""
 
@@ -159,6 +164,7 @@ HTTP_STATUS: dict[type[LoamzError], int] = {
     ForbiddenError: 403,
     NotFoundError: 404,
     ConflictError: 409,
+    PreconditionFailedError: 412,
     ScopeViolationError: 409,
     QuotaExceededError: 413,
     VectorSpaceError: 422,
@@ -184,6 +190,7 @@ __all__ = [
     "LoamzError",
     "NotFoundError",
     "PermanentError",
+    "PreconditionFailedError",
     "QuotaExceededError",
     "RateLimitedError",
     "SchemaVersionError",

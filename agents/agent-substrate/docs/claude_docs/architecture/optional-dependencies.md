@@ -19,6 +19,7 @@ so asking for one vendor's client needs that vendor's SDK and nothing else.
 | `openai` | OpenAI and OpenAI-compatible chat/embedding clients (vLLM, llama.cpp, Ollama, LM Studio) — `openai`, `tiktoken`, `httpx`, `pillow` |
 | `anthropic`, `gemini` | those vendors' clients |
 | `postgres` | `integrations.database.postgres_store` — the whole store on PostgreSQL (`asyncpg`); vectors also need pgvector |
+| `pipeline` | `integrations.pipeline.store` — the SQLAlchemy-backed pipeline store (`sqlalchemy`) |
 | `redis` | session cache, event bus |
 | `scheduler` | scheduled/cron triggers (`apscheduler`) |
 | `mcp` | MCP tools |

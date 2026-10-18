@@ -1,0 +1,88 @@
+version: 2
+
+# Grouped minor/patch updates, weekly. Majors arrive as separate PRs.
+updates:
+  - package-ecosystem: uv
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      python-minor-patch:
+        update-types: [minor, patch]
+
+  # document-intelligence is outside the uv workspace (Python 3.13, own project).
+  - package-ecosystem: uv
+    directory: /data/document-intelligence
+    schedule:
+      interval: weekly
+    groups:
+      python-minor-patch:
+        update-types: [minor, patch]
+
+  # pnpm workspace at the root (covers agents/substrate-ui and data/substrate-data-web).
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      npm-minor-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions-minor-patch:
+        update-types: [minor, patch]
+
+  # One entry per directory that holds a Dockerfile.
+  - package-ecosystem: docker
+    directory: /agents/substrate-ui
+    schedule:
+      interval: weekly
+    groups:
+      docker-minor-patch:
+        update-types: [minor, patch]
+  - package-ecosystem: docker
+    directory: /data/substrate-data/deployment
+    schedule:
+      interval: weekly
+    groups:
+      docker-minor-patch:
+        update-types: [minor, patch]
+  - package-ecosystem: docker
+    directory: /data/substrate-data/scripts/e2e_agent_sandbox
+    schedule:
+      interval: weekly
+    groups:
+      docker-minor-patch:
+        update-types: [minor, patch]
+  - package-ecosystem: docker
+    directory: /agents/agent-substrate/src/substrate/integrations/tools/code_interpreter/code_interpreter/agent-sandbox
+    schedule:
+      interval: weekly
+    groups:
+      docker-minor-patch:
+        update-types: [minor, patch]
+  - package-ecosystem: docker
+    directory: /agents/substrate-cloud/src/substrate_cloud/deployment/docker/mcp_server
+    schedule:
+      interval: weekly
+    groups:
+      docker-minor-patch:
+        update-types: [minor, patch]
+  - package-ecosystem: docker
+    directory: /deploy/legacy-agents/docker
+    schedule:
+      interval: weekly
+    groups:
+      docker-minor-patch:
+        update-types: [minor, patch]
+  - package-ecosystem: docker
+    directory: /deploy/legacy-agents/docker/mcp_server
+    schedule:
+      interval: weekly
+    groups:
+      docker-minor-patch:
+        update-types: [minor, patch]

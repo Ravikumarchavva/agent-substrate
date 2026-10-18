@@ -1,0 +1,31 @@
+# Code owners. Later lines win.
+#
+# Everything is owned by a single maintainer today. To move to teams, replace `@Ravikumarchavva` with
+# `@<org>/<team>` (for example `/agents/ @<org>/agents-maintainers`) and turn on
+# "Require review from Code Owners" in the branch protection / ruleset for main.
+
+*                               @Ravikumarchavva
+
+# Domains
+/agents/                        @Ravikumarchavva
+/data/                          @Ravikumarchavva
+/identity/                      @Ravikumarchavva
+/contracts/                     @Ravikumarchavva
+/deploy/                        @Ravikumarchavva
+/docs/adr/                      @Ravikumarchavva
+
+# Packages
+/agents/agent-substrate/        @Ravikumarchavva
+/agents/substrate-cloud/        @Ravikumarchavva
+/agents/substrate-ui/           @Ravikumarchavva
+/data/substrate-data/           @Ravikumarchavva
+/data/substrate-data-client/    @Ravikumarchavva
+/data/substrate-data-web/       @Ravikumarchavva
+/data/document-intelligence/    @Ravikumarchavva
+/data/embedding-reranker/       @Ravikumarchavva
+/data/inference-pool/           @Ravikumarchavva
+
+# Repo governance, CI and release machinery
+/.github/                       @Ravikumarchavva
+/release-please-config.json     @Ravikumarchavva
+/.release-please-manifest.json  @Ravikumarchavva

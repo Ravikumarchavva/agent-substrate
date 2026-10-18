@@ -1,0 +1,41 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "separate-pull-requests": true,
+  "include-component-in-tag": true,
+  "include-v-in-tag": true,
+  "tag-separator": "-",
+  "bump-minor-pre-major": true,
+  "bump-patch-for-minor-pre-major": true,
+  "packages": {
+    "agents/agent-substrate": {
+      "release-type": "python",
+      "package-name": "agent-substrate",
+      "component": "agent-substrate"
+    },
+    "agents/substrate-cloud": {
+      "release-type": "python",
+      "package-name": "substrate-cloud",
+      "component": "substrate-cloud"
+    },
+    "agents/substrate-ui": {
+      "release-type": "node",
+      "package-name": "substrate-ui",
+      "component": "substrate-ui"
+    },
+    "data/substrate-data": {
+      "release-type": "python",
+      "package-name": "substrate-data",
+      "component": "substrate-data"
+    },
+    "data/substrate-data-client": {
+      "release-type": "python",
+      "package-name": "substrate-data-client",
+      "component": "substrate-data-client"
+    },
+    "data/substrate-data-web": {
+      "release-type": "node",
+      "package-name": "substrate-data-web",
+      "component": "substrate-data-web"
+    }
+  }
+}

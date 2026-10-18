@@ -1,0 +1,20 @@
+* text=auto eol=lf
+
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Lockfiles: generated, collapse in diffs, never merge by hand.
+uv.lock         linguist-generated=true -diff -merge
+pnpm-lock.yaml  linguist-generated=true -diff -merge
+package-lock.json linguist-generated=true -diff -merge
+
+# Binary assets
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.pdf  binary
+*.parquet binary
+*.woff2 binary

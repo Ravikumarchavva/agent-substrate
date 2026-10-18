@@ -169,6 +169,7 @@ class Vectors:
         return self._store
 
     async def _run(self, fn: Callable[[Tx], Awaitable[T]]) -> T:
+        await self._store.ensure("vectors", SCHEMA)  # this part's tables are created the first time it is used
         return await self._store.run(fn)
 
     @property

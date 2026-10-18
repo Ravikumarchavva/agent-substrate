@@ -282,3 +282,35 @@ def test_a_store_nobody_closed_exits_cleanly_and_keeps_what_was_committed(
             return node.payload.text
 
     assert asyncio.run(read()) == "kept"
+
+
+async def _tables(store: Store) -> set[str]:
+    async with store.database.transaction() as tx:
+        rows = await tx.fetchall(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
+        )
+    return {row["name"] for row in rows}
+
+
+async def test_a_runtime_only_store_creates_no_document_vector_graph_memory_or_file_tables(
+    tmp_path: Path,
+) -> None:
+    """A store creates a part's tables the first time that part is used. One that runs agents and keeps threads
+    holds no ``vector_docs``, ``graph_*``, ``memory_records`` or ``files`` (governed content lives elsewhere,
+    ADR 0004), and using a part later creates exactly that part."""
+    async with Runtime.open(tmp_path / "state") as runtime:
+        store = runtime._source
+        assert await store.threads.list_branches("t/c") == []
+        tables = await _tables(store)
+        assert not {
+            t
+            for t in tables
+            if t.startswith(("vector", "graph_", "memory_", "library_", "file"))
+        }, f"a runtime-only store created {sorted(tables)}"
+        assert await store.has("threads") and not await store.has("vectors")
+
+        assert await store.vectors.space_of("c") is None
+        grown = await _tables(store)
+        assert "vector_docs" in grown and not {
+            t for t in grown if t.startswith("graph_")
+        }

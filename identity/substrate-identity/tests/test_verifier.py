@@ -419,3 +419,22 @@ def test_a_trusted_issuers_key_cannot_sign_for_the_primary_issuer(server, ed_key
             v.verify(bearer(mint(ed_key, alg="EdDSA", kid="agent-1")))
     finally:
         realm.close()
+
+
+def test_platform_service_accounts_need_no_organization(verifier, rsa_key, server):
+    token = mint(
+        rsa_key,
+        organization=None,
+        preferred_username="service-account-cell-admin",
+        resource_access={AUDIENCE: {"roles": ["provision-tenant", "erase-tenant"]}},
+    )
+    who = verifier.verify(bearer(token))
+    assert (who.kind, who.tenant_id, who.name) == ("service", None, "cell-admin")
+    assert who.roles == {"provision-tenant", "erase-tenant"}
+    strict = TokenVerifier(
+        PrimaryIssuer(ISSUER, AUDIENCE, jwks_url=server.url),
+        services_without_organization=False,
+        insecure_http=True,
+    )
+    with pytest.raises(OrganizationError):
+        strict.verify(bearer(token))

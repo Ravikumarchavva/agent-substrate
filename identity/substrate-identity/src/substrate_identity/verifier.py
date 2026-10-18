@@ -92,6 +92,7 @@ class TokenVerifier:
         trusted: Sequence[TrustedIssuer] = (),
         *,
         require_organization: bool = True,
+        services_without_organization: bool = True,
         organization_claim: str = "organization",
         scope_prefixes: Sequence[str] = SCOPE_PREFIXES,
         insecure_http: bool = False,
@@ -107,6 +108,7 @@ class TokenVerifier:
             raise ValueError("configure a primary issuer, a trusted issuer, or both")
         self.primary = primary
         self.require_organization = require_organization
+        self.services_without_organization = services_without_organization
         self.organization_claim = organization_claim
         self.scope_prefixes = tuple(scope_prefixes)
         self.primary_audiences = _audiences(primary.audience) if primary else ()
@@ -203,9 +205,15 @@ class TokenVerifier:
         if claims.get("typ") != "Bearer":
             raise InvalidToken("Access token rejected: not an access token")
         tenant, alias = organization_of(claims.get(self.organization_claim))
-        if tenant is None and self.require_organization:
-            raise OrganizationError("The token names no organization; select one and sign in again")
         username = str(claims.get("preferred_username") or claims["sub"])
+        service = username.startswith(SERVICE_PREFIX)
+        # A platform service account (cell-admin) acts across tenants and names the tenant in the request.
+        if (
+            tenant is None
+            and self.require_organization
+            and not (service and self.services_without_organization)
+        ):
+            raise OrganizationError("The token names no organization; select one and sign in again")
         scopes = _token_scopes(claims)
         context = _context(claims)
         if tenant:
@@ -213,7 +221,7 @@ class TokenVerifier:
         return Identity(
             subject=str(claims["sub"]),
             name=username.removeprefix(SERVICE_PREFIX),
-            kind="service" if username.startswith(SERVICE_PREFIX) else "user",
+            kind="service" if service else "user",
             email=claims.get("email"),
             tenant_id=tenant,
             organization=alias,

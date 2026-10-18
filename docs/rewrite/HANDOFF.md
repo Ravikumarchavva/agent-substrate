@@ -26,9 +26,9 @@ Branch **`rewrite/loamz`** (pushed to origin) holds, all green:
 - `loamz.agents` bootstrap (typed `Settings`, `Container` with `get(provider)`), `kernel/caller.py`, `server/` (create_app, RFC 9457), reference feature `features/people/preferences`;
 - **Track K merged**: the whole agent engine (kernel, stores incl. thread headers, providers, toolkit, console, CLI, evals, testing). 1,622 tests pass in ~106 s with `-n 4`; 7 import contracts kept.
 
-Two worktrees hold unmerged work (create with `git worktree list`); both were still running when this was written:
-- **`.claude/worktrees/d-data`** (branch `loamz/d-data`, 6 commits): Loamz Data port: storage engine (files, memory, vectors, documents, remote embedders on one `Storage` host), client, server in feature folders with the inference worker role, reader, tests covering every data API operation. Looks nearly done; verify and merge.
-- **`.claude/worktrees/f-features`** (branch `loamz/f-features`, 3 commits + 37 uncommitted files): Track F: port of all `substrate_cloud` features and the server onto the kernel. **Early**: feature registry, counters port, local file store, settings sections, in-process test server exist; most contexts are not ported yet.
+Two worktrees hold unmerged work (`git worktree list`). Both agents were stopped by the owner; **everything is committed and pushed** to origin as branches `loamz/d-data` and `loamz/f-features`:
+- **`.claude/worktrees/d-data`** (branch `loamz/d-data`, 7 commits, working tree clean): Loamz Data port: storage engine (files, memory, vectors, documents, remote embedders on one `Storage` host), client, server in feature folders with the inference worker role, reader, tests covering every data API operation. Looks nearly done; verify and merge.
+- **`.claude/worktrees/f-features`** (branch `loamz/f-features`, 4 commits; the last is a `wip` commit of the in-progress port): Track F: port of all `substrate_cloud` features and the server onto the kernel. **Early**: feature registry, counters port, local file store, settings sections, in-process test server exist; most contexts are not ported yet.
 
 ## What remains, in order
 

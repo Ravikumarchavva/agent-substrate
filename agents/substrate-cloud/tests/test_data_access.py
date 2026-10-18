@@ -730,3 +730,11 @@ def test_a_remote_plaintext_data_service_is_refused_at_startup(tmp_path, monkeyp
             python_bin=sys.executable,
             membership=Members(),
         )
+
+
+def test_plain_http_to_a_named_private_host_needs_the_explicit_opt_in(tmp_path):
+    from substrate_cloud.data_access import DataGateway
+
+    with pytest.raises(ValueError, match="https"):
+        DataGateway(tmp_path, "http://data-api:8020")
+    DataGateway(tmp_path, "http://data-api:8020", insecure_hosts=("data-api",))

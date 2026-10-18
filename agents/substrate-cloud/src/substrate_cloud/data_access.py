@@ -406,6 +406,7 @@ class DataGateway:
         connect_seconds: float = 10,
         read_seconds: float = 600,
         client: httpx.AsyncClient | None = None,
+        insecure_hosts: tuple[str, ...] = (),
     ):
         parts = urlsplit(upstream_url)
         if (
@@ -416,10 +417,12 @@ class DataGateway:
             or parts.fragment
         ):
             raise ValueError("The data service URL must be http(s)://host[:port]")
-        if parts.scheme == "http" and parts.hostname not in LOOPBACK:
+        if parts.scheme == "http" and parts.hostname not in LOOPBACK | set(
+            insecure_hosts
+        ):
             raise ValueError(
                 "The data service is on another machine: its URL must be https:// "
-                "(plain http is only allowed to localhost)."
+                "(plain http is only allowed to localhost and to hosts named in DATA_SERVICE_INSECURE_HOSTS)."
             )
         if bool(client_cert_file) != bool(client_key_file):
             raise ValueError(
@@ -697,6 +700,7 @@ def build_data_access(
     client_key_file: str = "",
     membership: MembershipChecker | None = None,
     allowed_scopes: frozenset[str] = DATA_SCOPES,
+    insecure_hosts: tuple[str, ...] = (),
 ) -> PlatformDataAccess | None:
     """Data access for the sandbox, or None (with the reason logged) when it cannot work.
 
@@ -734,6 +738,7 @@ def build_data_access(
         ca_file=ca_file or None,
         client_cert_file=client_cert_file or None,
         client_key_file=client_key_file or None,
+        insecure_hosts=insecure_hosts,
     )
     logger.info(
         "Sandbox data access on. Tell the data service to trust this platform: "
@@ -755,6 +760,7 @@ def service_transport(
     ca_file: str = "",
     client_cert_file: str = "",
     client_key_file: str = "",
+    insecure_hosts: tuple[str, ...] = (),
 ):
     """The pooled transport factory every call to the data service uses: https:// unless the service is on this machine, a private
     CA and a client certificate when configured, no ambient proxy, no redirects."""
@@ -767,10 +773,10 @@ def service_transport(
         or parts.fragment
     ):
         raise ValueError("The data service URL must be http(s)://host[:port]")
-    if parts.scheme == "http" and parts.hostname not in LOOPBACK:
+    if parts.scheme == "http" and parts.hostname not in LOOPBACK | set(insecure_hosts):
         raise ValueError(
             "The data service is on another machine: its URL must be https:// "
-            "(plain http is only allowed to localhost)."
+            "(plain http is only allowed to localhost and to hosts named in DATA_SERVICE_INSECURE_HOSTS)."
         )
     if bool(client_cert_file) != bool(client_key_file):
         raise ValueError("DATA_CLIENT_CERT_FILE and DATA_CLIENT_KEY_FILE go together")
@@ -819,12 +825,14 @@ def build_document_access(
     ca_file: str = "",
     client_cert_file: str = "",
     client_key_file: str = "",
+    insecure_hosts: tuple[str, ...] = (),
 ) -> DataDocumentAccess:
     transport = service_transport(
         service_url,
         ca_file=ca_file,
         client_cert_file=client_cert_file,
         client_key_file=client_key_file,
+        insecure_hosts=insecure_hosts,
     )
     return DataDocumentAccess(
         DataServiceConnection(service_url, transport=transport()), minter
@@ -846,6 +854,7 @@ def build_file_connection(
     admin_client_id: str = "",
     admin_client_secret: str = "",
     membership: MembershipChecker | None = None,
+    insecure_hosts: tuple[str, ...] = (),
 ) -> tuple[DataFilesConnection, DataTokenMinter, AsyncDataClient | None]:
     """The pooled connection every file operation goes through, and the minter whose public keys the data service must fetch.
 
@@ -862,6 +871,7 @@ def build_file_connection(
         ca_file=ca_file,
         client_cert_file=client_cert_file,
         client_key_file=client_key_file,
+        insecure_hosts=insecure_hosts,
     )
     key_path = Path(key_file or f"{data_dir.rstrip('/')}/keys/data-token.pem").resolve()
     current, previous = load_keys(key_path)

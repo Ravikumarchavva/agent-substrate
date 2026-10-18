@@ -1,0 +1,108 @@
+"""End-to-end check of a local compose cell: Keycloak org + user, tenant provisioning, agent API, data API.
+
+Run after `docker compose --profile monolith up -d`:  uv run --package substrate-cloud python deploy/compose/e2e.py deploy/compose/.env
+
+
+import sys
+import time
+from pathlib import Path
+
+import httpx
+
+ENV = dict(
+    line.split("=", 1)
+    for line in Path(sys.argv[1]).read_text().splitlines()
+    if "=" in line and not line.startswith("#")
+)
+KC = "http://localhost:8081"
+REALM = f"{KC}/realms/substrate"
+AGENT = "http://localhost:8000/api/v1"
+DATA = "http://localhost:8021/api/v1"
+# Keycloak only answers for its configured hostname; browsers and containers know it as keycloak:8080.
+KC_HOST = {"Host": "keycloak:8080"}
+http = httpx.Client(timeout=60)
+
+
+def step(name, ok, detail=""):
+    print(("PASS " if ok else "FAIL ") + name + (f"  {detail}" if detail else ""))
+    if not ok:
+        sys.exit(1)
+
+
+def admin_token():
+    r = http.post(
+        f"{KC}/realms/master/protocol/openid-connect/token",
+        headers=KC_HOST,
+        data={
+            "grant_type": "password",
+            "client_id": "admin-cli",
+            "username": ENV["KEYCLOAK_ADMIN_USER"],
+            "password": ENV["KEYCLOAK_ADMIN_PASSWORD"],
+        },
+    )
+    r.raise_for_status()
+    return {"Authorization": f"Bearer {r.json()['access_token']}", **KC_HOST}
+
+
+admin = admin_token()
+api = f"{KC}/admin/realms/substrate"
+
+# 1. organization + user + membership
+alias = f"e2e{int(time.time())}"
+r = http.post(f"{api}/organizations", headers=admin, json={"name": alias, "alias": alias, "domains": [{"name": f"{alias}.example.com"}]})
+step("create organization", r.status_code == 201, str(r.status_code) + r.text[:200])
+org_id = r.headers["Location"].rsplit("/", 1)[1]
+r = http.post(f"{api}/users", headers=admin, json={"username": f"alice-{alias}", "email": f"alice@{alias}.example.com", "emailVerified": True, "enabled": True, "firstName": "Alice", "lastName": "E2E", "credentials": [{"type": "password", "value": "e2e-Passw0rd!", "temporary": False}]})
+step("create user", r.status_code == 201, str(r.status_code) + r.text[:200])
+user_id = r.headers["Location"].rsplit("/", 1)[1]
+r = http.post(f"{api}/organizations/{org_id}/members", headers=admin, content=f'"{user_id}"', )
+r = r if r.status_code < 400 else http.post(f"{api}/organizations/{org_id}/members", headers={**admin, "Content-Type": "application/json"}, content=f'"{user_id}"')
+step("add member", r.status_code in (201, 204), str(r.status_code) + r.text[:200])
+
+# test-only: let the CLI client use the password grant so a script can sign in (the realm file is unchanged)
+clients = http.get(f"{api}/clients", headers=admin, params={"clientId": "substrate-cli"}).json()
+cli = clients[0]
+http.put(f"{api}/clients/{cli['id']}", headers=admin, json={**cli, "directAccessGrantsEnabled": True}).raise_for_status()
+
+
+def user_token(scope):
+    r = http.post(
+        f"{REALM}/protocol/openid-connect/token",
+        headers=KC_HOST,
+        data={"grant_type": "password", "client_id": "substrate-cli", "username": f"alice-{alias}", "password": "e2e-Passw0rd!", "scope": scope},
+    )
+    step(f"sign in ({scope})", r.status_code == 200, r.text[:300] if r.status_code != 200 else "")
+    return {"Authorization": f"Bearer {r.json()['access_token']}"}
+
+
+# 2. provision the tenant in substrate-data (as the platform would, with cell-admin)
+r = http.post(f"{REALM}/protocol/openid-connect/token", headers=KC_HOST, data={"grant_type": "client_credentials", "client_id": "cell-admin", "client_secret": ENV["CELL_ADMIN_CLIENT_SECRET"]})
+step("cell-admin token", r.status_code == 200, r.text[:200])
+cell = {"Authorization": f"Bearer {r.json()['access_token']}"}
+from substrate.integrations.data._keys import tenant_alias  # the alias contract the agent adapter resolves volumes by
+
+r = http.post(f"{DATA}/tenants", headers=cell, json={"tenant_id": org_id, "alias": tenant_alias(org_id)})
+step("provision tenant", r.status_code in (200, 201), str(r.status_code) + r.text[:300])
+
+# 3. agent API as the user
+user = user_token(f"openid organization:{alias} files:read files:write documents:read documents:write memory:read memory:write")
+r = http.get(f"{AGENT}/threads", headers=user)
+step("agent: list threads", r.status_code == 200, str(r.status_code) + r.text[:300])
+r = http.post(f"{AGENT}/files/upload", headers=user, files={"file": ("notes.txt", b"Substrate cells keep data in the customer's cloud.\n", "text/plain")})
+step("agent: upload a file (stored in substrate-data)", r.status_code in (200, 201), str(r.status_code) + r.text[:300])
+file_id = r.json().get("id")
+r = http.get(f"{AGENT}/files/{file_id}/download", headers=user)
+step("agent: download it back", r.status_code == 200 and b"customer's cloud" in r.content, str(r.status_code) + r.text[:200])
+
+# 4. data API directly as the same user: the file is in the tenant's governed volume
+r = http.get(f"{DATA}/search", headers=user, params={"q": "tenant_"})
+step("data: search the catalog", r.status_code == 200, str(r.status_code) + r.text[:300])
+
+# 5. negative: a token for another organization's user cannot read alice's file
+r = http.post(f"{api}/users", headers=admin, json={"username": f"mallory-{alias}", "enabled": True, "emailVerified": True, "email": f"m@{alias}.org", "firstName": "M", "lastName": "X", "credentials": [{"type": "password", "value": "e2e-Passw0rd!", "temporary": False}]})
+r = http.post(f"{REALM}/protocol/openid-connect/token", headers=KC_HOST, data={"grant_type": "password", "client_id": "substrate-cli", "username": f"mallory-{alias}", "password": "e2e-Passw0rd!", "scope": "openid"})
+mallory = {"Authorization": f"Bearer {r.json()['access_token']}"}
+r = http.get(f"{AGENT}/files/{file_id}/download", headers=mallory)
+step("isolation: an outsider cannot read the file", r.status_code in (401, 403, 404), str(r.status_code))
+
+print("ALL PASSED")

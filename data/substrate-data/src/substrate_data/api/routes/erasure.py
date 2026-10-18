@@ -50,9 +50,10 @@ def authorize(caller: Principal, body: Target) -> tuple[str, str | None]:
         raise Problem(400, "invalid-request", "scope tenant takes no subject")
     tenant_admin = TENANT_ADMIN_GROUP in caller.groups and caller.tenant_id == tenant
     itself = body.scope == "user" and caller.tenant_id == tenant and caller.subject == body.subject
-    if not (caller.is_admin or tenant_admin or itself):
+    platform = "erase-tenant" in caller.roles  # the platform's cell-admin service account
+    if not (caller.is_admin or tenant_admin or itself or platform):
         raise forbidden(
-            "Only the subject, a tenant administrator or a platform administrator may do this"
+            "Only the subject, a tenant administrator, a platform administrator or the platform may do this"
         )
     return tenant, body.subject if body.scope == "user" else None
 

@@ -5,7 +5,7 @@ nameOverride: ""
 fullnameOverride: ""
 
 global:
-  imageRegistry: ghcr.io/agent-substrate
+  imageRegistry: ghcr.io/ravikumarchavva
   # Empty = the chart's appVersion.
   imageTag: ""
   imagePullPolicy: IfNotPresent

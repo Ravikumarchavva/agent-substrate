@@ -29,7 +29,7 @@ wheels = [
 
 [[package]]
 name = "agent-substrate"
-version = "0.3.0"
+version = "0.4.0"
 source = { editable = "agents/agent-substrate" }
 dependencies = [
     { name = "opentelemetry-api" },
@@ -4818,7 +4818,7 @@ wheels = [
 
 [[package]]
 name = "substrate-cloud"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "agents/substrate-cloud" }
 dependencies = [
     { name = "agent-substrate", extra = ["anthropic", "code", "data", "gemini", "logging", "mcp", "openai", "postgres", "redis", "safety", "sandbox", "scheduler", "serve", "tools", "tts", "web"] },
@@ -4876,7 +4876,7 @@ provides-extras = ["test"]
 
 [[package]]
 name = "substrate-data"
-version = "0.1.0"
+version = "0.1.1"
 source = { editable = "data/substrate-data" }
 dependencies = [
     { name = "agent-substrate", extra = ["postgres"] },

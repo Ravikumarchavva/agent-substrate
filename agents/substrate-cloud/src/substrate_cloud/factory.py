@@ -250,6 +250,7 @@ def init_file_access(cfg: SubstrateConfig, store: Any) -> tuple[FileAccess, Any]
         ca_file=cfg.DATA_SERVICE_CA_FILE,
         client_cert_file=cfg.DATA_CLIENT_CERT_FILE,
         client_key_file=cfg.DATA_CLIENT_KEY_FILE,
+        insecure_hosts=tuple(cfg.DATA_SERVICE_INSECURE_HOSTS),
         admin_issuer=cfg.DATA_ADMIN_OIDC_ISSUER,
         admin_client_id=cfg.DATA_ADMIN_CLIENT_ID,
         admin_client_secret=cfg.DATA_ADMIN_CLIENT_SECRET,
@@ -271,6 +272,7 @@ def _init_document_access(cfg: SubstrateConfig, minter: Any) -> Any:
         ca_file=cfg.DATA_SERVICE_CA_FILE,
         client_cert_file=cfg.DATA_CLIENT_CERT_FILE,
         client_key_file=cfg.DATA_CLIENT_KEY_FILE,
+        insecure_hosts=tuple(cfg.DATA_SERVICE_INSECURE_HOSTS),
     )
 
 
@@ -504,6 +506,7 @@ async def init_tool_registry(
                 ca_file=cfg.DATA_SERVICE_CA_FILE,
                 client_cert_file=cfg.DATA_CLIENT_CERT_FILE,
                 client_key_file=cfg.DATA_CLIENT_KEY_FILE,
+                insecure_hosts=tuple(cfg.DATA_SERVICE_INSECURE_HOSTS),
                 membership=_membership(cfg),
             )
         elif cfg.DATA_SERVICE_URL:

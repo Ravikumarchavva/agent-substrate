@@ -12,6 +12,8 @@ class Principal:
     name: str
     kind: Literal["user", "service"]
     groups: frozenset[str] = field(default_factory=frozenset)
+    # Realm and client roles from the primary realm (never from a trusted issuer), e.g. the platform's `provision-tenant`.
+    roles: frozenset[str] = field(default_factory=frozenset)
     email: str | None = None
     # Set when another principal acts for this one (an agent for a user, RFC 8693 `act`).
     actor: str | None = None

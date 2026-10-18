@@ -4,7 +4,8 @@
 nothing. It is for the platform that onboards tenants (the control plane), not for end users.
 
 Who may call it: a metastore admin, or a member of `SUBSTRATE_DATA_PROVISIONER_GROUP` (default
-`data-provisioners`), the `data:provisioner` role expressed as a group claim in the access token.
+`data-provisioners`), or a service account holding the realm client role `provision-tenant` (the platform's
+`cell-admin`).
 Delegated (agent) tokens never can: the route declares no scope.
 """
 
@@ -100,7 +101,12 @@ def provision(svc: Services, body: TenantEnsure, granted_by: str) -> dict[str, A
 def ensure_tenant(
     body: TenantEnsure, svc: Svc, caller: Caller, request: Request, response: Response
 ):
-    if not (caller.is_admin or svc.settings.provisioner_group in caller.groups):
+    if not (
+        caller.is_admin
+        or svc.settings.provisioner_group in caller.groups
+        or "provision-tenant"
+        in caller.roles  # the platform's cell-admin service account (realm client role)
+    ):
         raise forbidden("Provisioning tenants needs the data:provisioner role")
     result = provision(svc, body, caller.id)
     if result["created"]:

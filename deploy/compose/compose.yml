@@ -12,7 +12,7 @@ name: ${COMPOSE_PROJECT_NAME:-substrate-cell}
 x-data-env: &data-env
   # The services are on one private Docker network behind (optionally) a TLS-terminating proxy; plain HTTP to these
   # named hosts is an explicit opt-in in substrate-data, and the proxy flag lets it listen beyond loopback.
-  SUBSTRATE_DATA_INSECURE_HTTP_HOSTS: '["seaweedfs","keycloak"]'
+  SUBSTRATE_DATA_INSECURE_HTTP_HOSTS: '["seaweedfs","keycloak","agent-server"]'
   # Controller and workers serve HTTPS with the cell's private CA (cell-init); the API trusts it.
   SUBSTRATE_DATA_INTERNAL_CA_FILE: /tls/ca.crt
   SUBSTRATE_DATA_BEHIND_TLS_PROXY: "true"
@@ -27,7 +27,7 @@ x-data-env: &data-env
   SUBSTRATE_DATA_CONTROLLER_URL: https://data-controller:8040
 
 x-data-image: &data-image
-  image: ${IMAGE_REGISTRY:-ghcr.io/agent-substrate}/substrate-data:${IMAGE_TAG:-local}
+  image: ${IMAGE_REGISTRY:-ghcr.io/ravikumarchavva}/substrate-data:${IMAGE_TAG:-local}
   build: { context: ../.., dockerfile: deploy/docker/substrate-data.Dockerfile }
 
 x-data-tls: &data-tls
@@ -52,7 +52,7 @@ x-worker-env: &worker-env
   SUBSTRATE_DATA_WORKER_MEMORY_LIMIT: ${SUBSTRATE_DATA_WORKER_MEMORY_LIMIT:-2GB}
 
 x-agent-image: &agent-image
-  image: ${IMAGE_REGISTRY:-ghcr.io/agent-substrate}/substrate-agent-server:${IMAGE_TAG:-local}
+  image: ${IMAGE_REGISTRY:-ghcr.io/ravikumarchavva}/substrate-agent-server:${IMAGE_TAG:-local}
   build: { context: ../.., dockerfile: deploy/docker/agent-server.Dockerfile }
 
 x-agent-env: &agent-env
@@ -63,9 +63,17 @@ x-agent-env: &agent-env
   STORE_BACKEND: postgres
   # Files, documents and memory live in substrate-data; the agent server holds no object-store credentials.
   DATA_SERVICE_URL: http://data-api:8020
+  DATA_SERVICE_INSECURE_HOSTS: '["data-api"]'
+  # Who may ask for a data token for a user: the agent server confirms organization membership in Keycloak first.
+  OIDC_ADMIN_CLIENT_ID: agent-membership
+  OIDC_ADMIN_CLIENT_SECRET: ${AGENT_MEMBERSHIP_CLIENT_SECRET:?run ./gen-env.sh}
   # Keycloak resource-server settings (the verifier in the agent server reads these).
   OIDC_ISSUER: ${KEYCLOAK_PUBLIC_URL:-http://keycloak:8080}/realms/substrate
   OIDC_AUDIENCE: agent-substrate
+  # Keycloak is on the cell's private network over plain http (TLS terminates at the proxy in front, if any).
+  OIDC_INSECURE_HTTP: "true"
+  # No collector in the self-host bundle; point OTEL_EXPORTER_OTLP_ENDPOINT at one and unset this to export traces.
+  OTEL_SDK_DISABLED: "true"
   FRONTEND_URL: ${SUBSTRATE_UI_URL:-http://localhost:3000}
   SANDBOX_RUNTIME: ${SANDBOX_RUNTIME:-nsjail}
   CHAT_MODEL: ${CHAT_MODEL:-google/gemini-3.1-flash-lite}
@@ -231,6 +239,7 @@ services:
       SUBSTRATE_UI_CLIENT_SECRET: ${SUBSTRATE_UI_CLIENT_SECRET:?run ./gen-env.sh}
       SUBSTRATE_DATA_WEB_CLIENT_SECRET: ${SUBSTRATE_DATA_WEB_CLIENT_SECRET:?}
       CELL_ADMIN_CLIENT_SECRET: ${CELL_ADMIN_CLIENT_SECRET:?}
+      AGENT_MEMBERSHIP_CLIENT_SECRET: ${AGENT_MEMBERSHIP_CLIENT_SECRET:?}
       SUBSTRATE_UI_URL: ${SUBSTRATE_UI_URL:-http://localhost:3000}
       SUBSTRATE_DATA_WEB_URL: ${SUBSTRATE_DATA_WEB_URL:-http://localhost:3011}
     volumes:
@@ -260,13 +269,16 @@ services:
       SUBSTRATE_DATA_S3_ACCESS_KEY_ID: ${CONTROL_S3_ACCESS_KEY_ID}
       SUBSTRATE_DATA_S3_SECRET_ACCESS_KEY: ${CONTROL_S3_SECRET_ACCESS_KEY}
       SUBSTRATE_DATA_TICKET_PRIVATE_KEY_FILE: /keys/ticket.pem
-      SUBSTRATE_DATA_VOLUMES_PUBLIC_ENDPOINT_URL: ${S3_PUBLIC_URL:-http://localhost:8333}
+      SUBSTRATE_DATA_VOLUMES_PUBLIC_ENDPOINT_URL: ${S3_PUBLIC_URL:-http://seaweedfs:8333}
       SUBSTRATE_DATA_MASK_SALT: ${MASK_SALT:-}
       # The documents and memory index (ADR 0008): its own database, with pgvector. The folder holds only scratch (no bundles).
       SUBSTRATE_DATA_RETRIEVAL_URL: postgresql://${POSTGRES_USER:-substrate}:${POSTGRES_PASSWORD}@postgres:5432/data_retrieval?sslmode=require
       SUBSTRATE_DATA_RETRIEVAL_DIR: /var/lib/substrate-data/retrieval
       SUBSTRATE_DATA_DOCUMENT_READER_URL: ${DOCUMENT_READER_URL:-}
       SUBSTRATE_DATA_DOCUMENT_EMBEDDING_URL: ${DOCUMENT_EMBEDDING_URL:-}
+      # The agent server signs per-run tokens for its users; the data service fetches its public keys. One name may only
+      # read; the other (`-files`) may also change files, documents and memory (scopes still bound every token).
+      SUBSTRATE_DATA_TRUSTED_ISSUERS: '[{"issuer":"agent-substrate","audience":"substrate-data","jwks_uri":"http://agent-server:8000/.well-known/data-token-jwks.json","read_only":true},{"issuer":"agent-substrate-files","audience":"substrate-data","jwks_uri":"http://agent-server:8000/.well-known/data-token-jwks.json","read_only":false}]'
     volumes:
       - ticket-private:/keys:ro
       - internal-tls:/tls:ro
@@ -395,7 +407,7 @@ services:
 
   # ── Web ─────────────────────────────────────────────────────────────────────
   substrate-ui:
-    image: ${IMAGE_REGISTRY:-ghcr.io/agent-substrate}/substrate-ui:${IMAGE_TAG:-local}
+    image: ${IMAGE_REGISTRY:-ghcr.io/ravikumarchavva}/substrate-ui:${IMAGE_TAG:-local}
     build: { context: ../.., dockerfile: deploy/docker/substrate-ui.Dockerfile }
     environment:
       BACKEND_API_URL: http://${AGENT_UPSTREAM:-agent-server:8000}
@@ -412,7 +424,7 @@ services:
     restart: unless-stopped
 
   substrate-data-web:
-    image: ${IMAGE_REGISTRY:-ghcr.io/agent-substrate}/substrate-data-web:${IMAGE_TAG:-local}
+    image: ${IMAGE_REGISTRY:-ghcr.io/ravikumarchavva}/substrate-data-web:${IMAGE_TAG:-local}
     build: { context: ../.., dockerfile: deploy/docker/substrate-data-web.Dockerfile }
     environment:
       DATA_API_URL: http://data-api:8020
@@ -428,7 +440,7 @@ services:
 
   # ── Retrieval models (profile "ml"): large downloads, CPU by default ────────
   llama-embed:
-    image: ${IMAGE_REGISTRY:-ghcr.io/agent-substrate}/llama-server:${IMAGE_TAG:-local}
+    image: ${IMAGE_REGISTRY:-ghcr.io/ravikumarchavva}/llama-server:${IMAGE_TAG:-local}
     build: { context: ../docker, dockerfile: llama-server.Dockerfile }
     profiles: [ml]
     command: ["--host", "0.0.0.0", "--port", "8031", "-hf", "Rizwan313/Qwen3-VL-Embedding-2B-GGUF:Q4_K_M", "--embedding", "--pooling", "last"]
@@ -436,7 +448,7 @@ services:
     volumes: [ "llama-cache:/cache" ]
     restart: unless-stopped
   llama-rerank:
-    image: ${IMAGE_REGISTRY:-ghcr.io/agent-substrate}/llama-server:${IMAGE_TAG:-local}
+    image: ${IMAGE_REGISTRY:-ghcr.io/ravikumarchavva}/llama-server:${IMAGE_TAG:-local}
     build: { context: ../docker, dockerfile: llama-server.Dockerfile }
     profiles: [ml]
     command: ["--host", "0.0.0.0", "--port", "8032", "-hf", "staralt/Qwen3-VL-Reranker-2B-Q4_K_M-GGUF", "--reranking"]
@@ -444,7 +456,7 @@ services:
     volumes: [ "llama-cache:/cache" ]
     restart: unless-stopped
   embedding-reranker:
-    image: ${IMAGE_REGISTRY:-ghcr.io/agent-substrate}/embedding-reranker:${IMAGE_TAG:-local}
+    image: ${IMAGE_REGISTRY:-ghcr.io/ravikumarchavva}/embedding-reranker:${IMAGE_TAG:-local}
     build: { context: ../.., dockerfile: deploy/docker/embedding-reranker.Dockerfile }
     profiles: [ml]
     command: ["--host", "0.0.0.0", "--port", "8050"]

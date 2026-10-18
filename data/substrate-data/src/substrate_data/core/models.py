@@ -16,7 +16,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 LOOPBACK = {"localhost", "127.0.0.1", "::1"}
 
 
-def validate_service_url(url: str, insecure_hosts: tuple[str, ...] = ()) -> str:
+def validate_service_url(
+    url: str, insecure_hosts: tuple[str, ...] = (), *, defer_https_check: bool = False
+) -> str:
     """Every address a service calls: HTTP(S) without embedded credentials; HTTPS off loopback."""
     parsed = urlsplit(url)
     if (
@@ -28,7 +30,11 @@ def validate_service_url(url: str, insecure_hosts: tuple[str, ...] = ()) -> str:
         or parsed.fragment
     ):
         raise ValueError("Service URLs must be HTTP(S) without credentials, query or fragment")
-    if parsed.scheme == "http" and parsed.hostname not in LOOPBACK | set(insecure_hosts):
+    if (
+        parsed.scheme == "http"
+        and not defer_https_check
+        and parsed.hostname not in LOOPBACK | set(insecure_hosts)
+    ):
         raise ValueError("Remote service connections require HTTPS")
     return url.rstrip("/")
 
@@ -57,7 +63,8 @@ class TrustedIssuer(BaseModel):
     @field_validator("jwks_uri")
     @classmethod
     def https_off_loopback(cls, value: str) -> str:
-        return validate_service_url(value)
+        # Shape only here; the HTTPS-off-loopback rule (with the explicit insecure_http_hosts opt-in) is applied by Settings.
+        return validate_service_url(value, defer_https_check=True)
 
 
 class Settings(BaseSettings):
@@ -223,6 +230,8 @@ class Settings(BaseSettings):
         self.iceberg_catalog_url = validate_service_url(self.iceberg_catalog_url, allowed)
         self.oidc_issuer = validate_service_url(self.oidc_issuer, allowed)
         self.controller_url = validate_service_url(self.controller_url, allowed)
+        for trusted in self.trusted_issuers:
+            validate_service_url(trusted.jwks_uri, allowed)
         if self.volumes_public_endpoint_url:
             self.volumes_public_endpoint_url = validate_service_url(
                 self.volumes_public_endpoint_url, allowed

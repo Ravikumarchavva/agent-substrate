@@ -106,6 +106,7 @@ class TokenVerifier:
             name=who.name,
             kind=who.kind,
             groups=_with_tenant(who),
+            roles=who.roles,
             email=who.email,
             actor=who.actor,
             is_admin=self.settings.admin_group in who.groups,

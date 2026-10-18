@@ -63,7 +63,7 @@ Anyone, on one machine, with the compose bundle; or on any Kubernetes with the c
 ```sh
 cd deploy/compose
 ./gen-env.sh                                   # random secrets into .env (never committed)
-echo '127.0.0.1 keycloak' | sudo tee -a /etc/hosts   # the issuer must be one address for browsers and containers
+echo '127.0.0.1 keycloak seaweedfs' | sudo tee -a /etc/hosts   # one address for browsers and containers (token issuer, presigned URLs)
 docker compose --profile monolith up -d --build      # or: --profile microservices ; add --profile ml for retrieval models
 ```
 

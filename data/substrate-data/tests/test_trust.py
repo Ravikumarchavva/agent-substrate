@@ -126,8 +126,12 @@ def test_keys_for_algorithms_the_operator_did_not_allow_are_ignored(issuer):
 
 
 def test_a_remote_issuer_must_use_https():
-    with pytest.raises(ValidationError):
-        TrustedIssuer(issuer="agent", jwks_uri="http://agent.example.com/jwks.json")
+    with pytest.raises(
+        ValidationError
+    ):  # the rule is applied by Settings, which knows the explicit opt-in hosts
+        Settings(
+            trusted_issuers=[{"issuer": "agent", "jwks_uri": "http://agent.example.com/jwks.json"}]
+        )
     TrustedIssuer(issuer="agent", jwks_uri="https://agent.example.com/jwks.json")
     TrustedIssuer(issuer="agent", jwks_uri="http://127.0.0.1:9000/jwks.json")  # loopback, tests/dev
 
@@ -269,3 +273,15 @@ def test_history_past_retention_is_deleted_and_the_rest_kept(make_store):
     assert store.purge_history(0) == {"audit_events": 0, "statements": 0}
     assert store.purge_history(365) == {"audit_events": 1, "statements": 1}  # a running one stays
     assert [e["action"] for e in store.audit_events(None, 10)] == ["new.action"]
+
+
+def test_a_trusted_issuers_keys_over_plain_http_need_an_explicit_host_opt_in():
+    import pytest
+
+    from substrate_data.core.models import Settings
+
+    issuer = {"issuer": "agent-substrate", "jwks_uri": "http://agent-server:8000/keys.json"}
+    with pytest.raises(ValueError, match="HTTPS"):
+        Settings(trusted_issuers=[issuer])
+    allowed = Settings(trusted_issuers=[issuer], insecure_http_hosts=("agent-server",))
+    assert allowed.trusted_issuers[0].jwks_uri.endswith("/keys.json")

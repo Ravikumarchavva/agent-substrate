@@ -110,3 +110,16 @@ def test_members_use_their_tenants_workspace_and_nobody_elses(stack, admin):
         agent.files.read(volume, "users/ann/plan.txt")
     shared = member_a.files.upload(volume, "shared/team.txt", b"team")
     assert agent.files.info(volume, "shared/team.txt").etag == shared.etag
+
+
+def test_the_platforms_service_account_provisions_with_its_realm_role(stack):
+    """cell-admin holds the client role `provision-tenant` on substrate-data (realm-substrate.json), not a group."""
+    from substrate_data_client import DataClient
+
+    role = {"resource_access": {"substrate-data": {"roles": ["provision-tenant"]}}}
+    platform = DataClient(stack.api, token=lambda: stack.identity.token("cell-admin", **role))
+    assert platform.tenants.ensure("t-role", "viarole")["created"] is True
+    other = {"resource_access": {"some-other-client": {"roles": ["provision-tenant"]}}}
+    elsewhere = DataClient(stack.api, token=lambda: stack.identity.token("x", **other))
+    with pytest.raises(Forbidden):
+        elsewhere.tenants.ensure("t-other", "other")

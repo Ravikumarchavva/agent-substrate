@@ -152,6 +152,8 @@ class SubstrateConfig(BaseSettings):
     # CA bundle that signed the data service's certificate (the system store when empty), and an optional
     # client certificate + key when the service requires mutual TLS. Files, never inline secrets.
     DATA_SERVICE_CA_FILE: str = ""
+    # Named hosts the data service may be reached at over plain http (a private network inside one cell); https is required elsewhere.
+    DATA_SERVICE_INSECURE_HOSTS: list[str] = []
     DATA_CLIENT_CERT_FILE: str = ""
     DATA_CLIENT_KEY_FILE: str = ""
     # The issuer name and audience the data service trusts. The signing key is generated under

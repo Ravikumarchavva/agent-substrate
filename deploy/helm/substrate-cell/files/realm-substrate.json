@@ -57,20 +57,30 @@
       ]
     }
   },
-  "groups": [{ "name": "data-admins" }],
+  "groups": [
+    {
+      "name": "data-admins"
+    }
+  ],
   "clientScopes": [
     {
       "name": "basic",
       "description": "The `sub` claim and auth_time. Without it access tokens carry no subject.",
       "protocol": "openid-connect",
-      "attributes": { "include.in.token.scope": "false", "display.on.consent.screen": "false" },
+      "attributes": {
+        "include.in.token.scope": "false",
+        "display.on.consent.screen": "false"
+      },
       "protocolMappers": [
         {
           "name": "sub",
           "protocol": "openid-connect",
           "protocolMapper": "oidc-sub-mapper",
           "consentRequired": false,
-          "config": { "introspection.token.claim": "true", "access.token.claim": "true" }
+          "config": {
+            "introspection.token.claim": "true",
+            "access.token.claim": "true"
+          }
         },
         {
           "name": "auth_time",
@@ -92,14 +102,20 @@
       "name": "web-origins",
       "description": "Allowed web origins of the client, for CORS.",
       "protocol": "openid-connect",
-      "attributes": { "include.in.token.scope": "false", "display.on.consent.screen": "false" },
+      "attributes": {
+        "include.in.token.scope": "false",
+        "display.on.consent.screen": "false"
+      },
       "protocolMappers": [
         {
           "name": "allowed web origins",
           "protocol": "openid-connect",
           "protocolMapper": "oidc-allowed-origins-mapper",
           "consentRequired": false,
-          "config": { "introspection.token.claim": "true", "access.token.claim": "true" }
+          "config": {
+            "introspection.token.claim": "true",
+            "access.token.claim": "true"
+          }
         }
       ]
     },
@@ -107,7 +123,10 @@
       "name": "acr",
       "description": "Authentication context class reference (level of assurance).",
       "protocol": "openid-connect",
-      "attributes": { "include.in.token.scope": "false", "display.on.consent.screen": "false" },
+      "attributes": {
+        "include.in.token.scope": "false",
+        "display.on.consent.screen": "false"
+      },
       "protocolMappers": [
         {
           "name": "acr loa level",
@@ -126,7 +145,10 @@
       "name": "profile",
       "description": "Name and username.",
       "protocol": "openid-connect",
-      "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "true" },
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true"
+      },
       "protocolMappers": [
         {
           "name": "username",
@@ -161,7 +183,10 @@
       "name": "email",
       "description": "Email address.",
       "protocol": "openid-connect",
-      "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "true" },
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true"
+      },
       "protocolMappers": [
         {
           "name": "email",
@@ -199,7 +224,10 @@
       "name": "roles",
       "description": "Realm roles (realm_access.roles) and client roles (resource_access.<client>.roles).",
       "protocol": "openid-connect",
-      "attributes": { "include.in.token.scope": "false", "display.on.consent.screen": "false" },
+      "attributes": {
+        "include.in.token.scope": "false",
+        "display.on.consent.screen": "false"
+      },
       "protocolMappers": [
         {
           "name": "realm roles",
@@ -336,43 +364,64 @@
       "name": "data:read",
       "description": "Run read-only SQL and browse the catalog.",
       "protocol": "openid-connect",
-      "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "true" }
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true"
+      }
     },
     {
       "name": "files:read",
       "description": "Read files in volumes.",
       "protocol": "openid-connect",
-      "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "true" }
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true"
+      }
     },
     {
       "name": "files:write",
       "description": "Write files in volumes.",
       "protocol": "openid-connect",
-      "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "true" }
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true"
+      }
     },
     {
       "name": "documents:read",
       "description": "Read documents.",
       "protocol": "openid-connect",
-      "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "true" }
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true"
+      }
     },
     {
       "name": "documents:write",
       "description": "Create and change documents.",
       "protocol": "openid-connect",
-      "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "true" }
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true"
+      }
     },
     {
       "name": "memory:read",
       "description": "Read agent memory.",
       "protocol": "openid-connect",
-      "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "true" }
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true"
+      }
     },
     {
       "name": "memory:write",
       "description": "Write agent memory.",
       "protocol": "openid-connect",
-      "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "true" }
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true"
+      }
     }
   ],
   "clients": [
@@ -389,13 +438,26 @@
       "serviceAccountsEnabled": false,
       "frontchannelLogout": true,
       "rootUrl": "${SUBSTRATE_UI_URL:http://127.0.0.1:3000}",
-      "redirectUris": ["${SUBSTRATE_UI_URL:http://127.0.0.1:3000}/auth/callback"],
-      "webOrigins": ["${SUBSTRATE_UI_URL:http://127.0.0.1:3000}"],
+      "redirectUris": [
+        "${SUBSTRATE_UI_URL:http://127.0.0.1:3000}/auth/callback"
+      ],
+      "webOrigins": [
+        "${SUBSTRATE_UI_URL:http://127.0.0.1:3000}"
+      ],
       "attributes": {
         "pkce.code.challenge.method": "S256",
         "post.logout.redirect.uris": "${SUBSTRATE_UI_URL:http://127.0.0.1:3000}/*"
       },
-      "defaultClientScopes": ["basic", "web-origins", "acr", "profile", "roles", "email", "agents-api", "groups"],
+      "defaultClientScopes": [
+        "basic",
+        "web-origins",
+        "acr",
+        "profile",
+        "roles",
+        "email",
+        "agents-api",
+        "groups"
+      ],
       "optionalClientScopes": [
         "organization",
         "data-api",
@@ -421,14 +483,30 @@
       "serviceAccountsEnabled": false,
       "frontchannelLogout": true,
       "rootUrl": "${SUBSTRATE_DATA_WEB_URL:http://127.0.0.1:3011}",
-      "redirectUris": ["${SUBSTRATE_DATA_WEB_URL:http://127.0.0.1:3011}/auth/callback"],
-      "webOrigins": ["${SUBSTRATE_DATA_WEB_URL:http://127.0.0.1:3011}"],
+      "redirectUris": [
+        "${SUBSTRATE_DATA_WEB_URL:http://127.0.0.1:3011}/auth/callback"
+      ],
+      "webOrigins": [
+        "${SUBSTRATE_DATA_WEB_URL:http://127.0.0.1:3011}"
+      ],
       "attributes": {
         "pkce.code.challenge.method": "S256",
         "post.logout.redirect.uris": "${SUBSTRATE_DATA_WEB_URL:http://127.0.0.1:3011}/*"
       },
-      "defaultClientScopes": ["basic", "web-origins", "acr", "profile", "roles", "email", "data-api", "groups"],
-      "optionalClientScopes": ["organization", "agents-api"]
+      "defaultClientScopes": [
+        "basic",
+        "web-origins",
+        "acr",
+        "profile",
+        "roles",
+        "email",
+        "data-api",
+        "groups"
+      ],
+      "optionalClientScopes": [
+        "organization",
+        "agents-api"
+      ]
     },
     {
       "clientId": "agent-substrate",
@@ -467,7 +545,13 @@
       "implicitFlowEnabled": false,
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": true,
-      "defaultClientScopes": ["basic", "profile", "roles", "agents-api", "data-api"],
+      "defaultClientScopes": [
+        "basic",
+        "profile",
+        "roles",
+        "agents-api",
+        "data-api"
+      ],
       "optionalClientScopes": []
     },
     {
@@ -483,7 +567,17 @@
       "attributes": {
         "oauth2.device.authorization.grant.enabled": "true"
       },
-      "defaultClientScopes": ["basic", "web-origins", "acr", "profile", "roles", "email", "agents-api", "data-api", "groups"],
+      "defaultClientScopes": [
+        "basic",
+        "web-origins",
+        "acr",
+        "profile",
+        "roles",
+        "email",
+        "agents-api",
+        "data-api",
+        "groups"
+      ],
       "optionalClientScopes": [
         "organization",
         "data:read",
@@ -494,6 +588,23 @@
         "memory:read",
         "memory:write"
       ]
+    },
+    {
+      "clientId": "agent-membership",
+      "name": "Agent server membership check",
+      "description": "Service account the agent server uses to confirm a user belongs to an organization before it mints a data token. Keycloak 26 serves organization membership only to manage-realm, so this client holds it: keep its secret on the agent server alone. Follow-up: replace with a narrower check (fine-grained admin permissions) when Keycloak offers one.",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "${AGENT_MEMBERSHIP_CLIENT_SECRET}",
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "defaultClientScopes": [
+        "basic",
+        "roles"
+      ],
+      "optionalClientScopes": []
     }
   ],
   "users": [
@@ -502,8 +613,24 @@
       "enabled": true,
       "serviceAccountClientId": "cell-admin",
       "clientRoles": {
-        "agent-substrate": ["provision-tenant", "erase-tenant"],
-        "substrate-data": ["provision-tenant", "erase-tenant"]
+        "agent-substrate": [
+          "provision-tenant",
+          "erase-tenant"
+        ],
+        "substrate-data": [
+          "provision-tenant",
+          "erase-tenant"
+        ]
+      }
+    },
+    {
+      "username": "service-account-agent-membership",
+      "enabled": true,
+      "serviceAccountClientId": "agent-membership",
+      "clientRoles": {
+        "realm-management": [
+          "manage-realm"
+        ]
       }
     }
   ]

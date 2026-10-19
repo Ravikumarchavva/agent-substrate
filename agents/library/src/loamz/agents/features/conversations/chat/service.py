@@ -16,6 +16,7 @@ from loamz.agents.kernel.runtime import ChatPayload, Message, Runtime
 from loamz.agents.kernel.tools.approval import ApprovalDecision
 from loamz.agents.kernel.types.content import ChatMessage, Role, TextBlock
 from loamz.agents.kernel.types.identity import Actor
+from loamz.agents.kernel.types.run_log import RunLogKind
 from loamz.agents.kernel.wire import wire_from_log
 from loamz.agents.kernel.wire.streaming import TERMINAL
 from loamz.agents.stores import AgentStore
@@ -36,16 +37,7 @@ class ChatService:
         return self._c.agent_store
 
     def tool_catalog(self) -> list[object]:
-        from loamz.agents.toolkit.discovery import CapabilityDiscovery
-
-        tools: list[object] = []
-        for pkg in CapabilityDiscovery().discover():
-            if "tool" in pkg.components and pkg.tool_class:
-                try:
-                    tools.append(pkg.tool_class)
-                except Exception:
-                    pass
-        return tools
+        return []
 
     async def chat(self, caller: Caller, req: ChatRequest) -> AsyncIterator[str]:
         header = await self._threads.require(caller, req.thread_id)
@@ -56,21 +48,49 @@ class ChatService:
         if active:
             raise ConflictError(f"A stream is already running for thread {req.thread_id}.")
 
-        prompt = req.prompt_text()
-        if not prompt:
+        raw_prompt = req.prompt_text()
+        if not raw_prompt:
             raise InvalidRequestError("Message prompt cannot be empty.")
 
+        prompt = raw_prompt
+        if req.file_ids:
+            from loamz.agents.features.workspace.files.service import FilesService
+
+            files_svc = FilesService(self._c)
+            for fid in req.file_ids:
+                try:
+                    data, filename = await files_svc.download(caller, fid)
+                    content = data.decode("utf-8", errors="replace")
+                    prompt += f"\n\n[Attached file: {filename}]\n{content}"
+                except Exception:
+                    pass
+
         agent_id = req.agent_id or header.agent_id or "default"
+        sender_actor = Actor(type="user", key=caller.user_id)
+
+        from loamz.agents.kernel.agents.factory import create_assistant_agent
+
+        agent = create_assistant_agent(
+            model_client=self._c.model_client(req.model),
+            history=self._c.agent_store.threads,
+            tools=None,
+            system_instructions=req.system_instructions or "",
+            session_id=agent_id,
+            name="agent",
+        )
+        await self._rt.register(agent, pinned=False)
+
         message = Message(
-            target=Actor(type="agent", id=agent_id),
-            sender=Actor(type="user", id=caller.user_id),
+            target=agent.id,
+            sender=sender_actor,
             payload=ChatPayload(
                 message=ChatMessage(role=Role.USER, content=[TextBlock(text=prompt)])
             ),
             correlation_id=req.thread_id,
+            metadata={"display_text": raw_prompt},
         )
         run_id = await self._rt.submit(
-            agent_id,
+            agent.id,
             message,
             tenant=caller.tenant_id,
             max_retries=0,
@@ -81,8 +101,19 @@ class ChatService:
             wire = wire_from_log(entry.kind, entry.payload or {})
             if wire is not None:
                 yield f"event: {wire.type}\ndata: {wire.model_dump_json()}\n\n"
-            if entry.kind in TERMINAL:
+            if entry.kind == RunLogKind.RUN_COMPLETED:
+                yield 'data: {"type": "run.completed"}\n\n'
                 break
+            elif entry.kind == RunLogKind.RUN_FAILED:
+                err = (entry.payload or {}).get("error", "agent run failed")
+                yield f'data: {{"type": "run.failed", "error": "{err}"}}\n\n'
+                break
+            elif entry.kind == RunLogKind.RUN_CANCELLED:
+                yield 'data: {"type": "run.cancelled"}\n\n'
+                break
+            elif entry.kind in TERMINAL:
+                break
+        yield "data: [DONE]\n\n"
 
     async def respond_hitl(
         self, caller: Caller, request_id: str, body: HitlResponse

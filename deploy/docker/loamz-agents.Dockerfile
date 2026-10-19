@@ -26,7 +26,7 @@ COPY agents/library/pyproject.toml agents/library/
 COPY meta/loamz/pyproject.toml meta/loamz/
 
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev --no-install-workspace --package loamz-agents --extra server --extra postgres --extra redis --extra data
+    uv sync --frozen --no-dev --no-install-workspace --package loamz-agents --extra server --extra postgres --extra redis --extra data --extra openai --extra anthropic --extra gemini
 
 COPY data/storage data/storage
 COPY data/client data/client
@@ -34,7 +34,7 @@ COPY identity/python identity/python
 COPY agents/library agents/library
 
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev --no-editable --package loamz-agents --extra server --extra postgres --extra redis --extra data
+    uv sync --frozen --no-dev --no-editable --package loamz-agents --extra server --extra postgres --extra redis --extra data --extra openai --extra anthropic --extra gemini
 
 FROM python:3.14-slim-bookworm AS runtime
 RUN apt-get update && apt-get install -y --no-install-recommends libprotobuf32 libnl-route-3-200 \

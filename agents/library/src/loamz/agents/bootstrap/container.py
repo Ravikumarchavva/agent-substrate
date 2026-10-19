@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from functools import cached_property
-from typing import Any
 
 from loamz.agents.bootstrap.settings import Settings
 from loamz.agents.kernel.events import EventBus, InMemoryEventBus
@@ -28,7 +27,7 @@ class Container:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
         set_capture_content(settings.telemetry.capture_content)
-        self._built: dict[Callable[..., Any], Any] = {}
+        self._built: dict[Callable[..., object], object] = {}
         self._closers: list[Callable[[], Awaitable[None]]] = []
 
     def get[T](self, provider: Provider[T]) -> T:
@@ -105,6 +104,8 @@ class Container:
             api_keys=llm.api_keys(),
             openai_base_url=llm.openai_base_url or None,
         )
+
+    model_client = chat_model
 
     @cached_property
     def runtime(self) -> Runtime:

@@ -321,6 +321,24 @@ class Runtime:
         """Every run a thread has had, oldest first: the basis for projecting its conversation."""
         return await self._store.find_runs(thread_id=thread_id, active_only=False)
 
+    async def find_runs(
+        self,
+        *,
+        thread_id: str | None = None,
+        agent: Actor | None = None,
+        wake_signal: str | None = None,
+        tenant: str | None = None,
+        active_only: bool = True,
+    ) -> list[RunRecord]:
+        """Runs matching every given filter, oldest first."""
+        return await self._store.find_runs(
+            thread_id=thread_id,
+            agent=agent,
+            wake_signal=wake_signal,
+            tenant=tenant,
+            active_only=active_only,
+        )
+
     # ------------------------------------------------------------------ control
 
     async def cancel(self, run_id: RunId | str, *, reason: str = "cancelled") -> list[RunId]:
@@ -330,6 +348,11 @@ class Runtime:
         for affected_id in affected:
             self._worker.cancel_local(str(affected_id), reason)
         return affected
+
+    async def request_cancel(
+        self, run_id: RunId | str, *, reason: str = "cancelled"
+    ) -> list[RunId]:
+        return await self.cancel(run_id, reason=reason)
 
     # ------------------------------------------------------------------ human approval
 
@@ -359,7 +382,7 @@ class Runtime:
         *,
         by: str,
         reason: str | None = None,
-        modified_args: dict[str, Any] | None = None,
+        modified_args: dict[str, object] | None = None,
     ) -> None:
         """Answer an approval a run is waiting on (``DurableApproval``), from any process on the same store.
 
@@ -375,7 +398,7 @@ class Runtime:
             raise ValueError(f"{decision!r} is not a decision a person can make")
         if action == "modify" and modified_args is None:
             raise ValueError("a MODIFIED decision needs modified_args")
-        payload: dict[str, Any] = {
+        payload: dict[str, object] = {
             "action": action,
             "decided_by": by,
             "reason": reason,
@@ -384,6 +407,25 @@ class Runtime:
         if modified_args is not None:
             payload["modified_arguments"] = modified_args
         await self._store.signal(RunId(run_id), approval_signal(request_id), payload)
+
+    async def decide_approval(
+        self,
+        run_id: RunId | str,
+        request_id: str,
+        decision: ApprovalDecision,
+        *,
+        by: str,
+        reason: str | None = None,
+        modified_args: dict[str, object] | None = None,
+    ) -> None:
+        await self.decide(
+            run_id,
+            request_id,
+            decision,
+            by=by,
+            reason=reason,
+            modified_args=modified_args,
+        )
 
     # ------------------------------------------------------------------ lifecycle
 

@@ -1893,6 +1893,7 @@ server = [
     { name = "pillow" },
     { name = "pydantic-settings" },
     { name = "python-json-logger" },
+    { name = "python-multipart" },
     { name = "uvicorn" },
 ]
 testing = [
@@ -1984,6 +1985,7 @@ requires-dist = [
     { name = "pytest-asyncio", marker = "extra == 'testing'", specifier = ">=1.4.0" },
     { name = "python-docx", marker = "extra == 'sandbox'", specifier = ">=1.1.0" },
     { name = "python-json-logger", marker = "extra == 'logging'", specifier = ">=2.0.7" },
+    { name = "python-multipart", marker = "extra == 'server'", specifier = ">=0.0.20" },
     { name = "python-pptx", marker = "extra == 'sandbox'", specifier = ">=1.0.0" },
     { name = "pyyaml", marker = "extra == 'tools'", specifier = ">=6.0.3" },
     { name = "redis", extras = ["hiredis"], marker = "extra == 'redis'", specifier = ">=5.0.0" },

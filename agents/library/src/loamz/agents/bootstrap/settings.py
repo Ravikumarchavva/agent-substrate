@@ -9,7 +9,7 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -26,6 +26,17 @@ class DatabaseSettings(BaseModel):
     pool_min: int = Field(default=2, ge=1)
     pool_max: int = Field(default=10, ge=1)
 
+    @model_validator(mode="before")
+    @classmethod
+    def _fallback_env(cls, data: object) -> object:
+        if isinstance(data, dict) and not data.get("url"):
+            import os
+
+            url = os.environ.get("DATABASE_URL") or os.environ.get("ASYNC_DATABASE_URL")
+            if url:
+                data["url"] = url
+        return data
+
 
 class OidcSettings(BaseModel):
     issuer: str = Field(
@@ -35,6 +46,26 @@ class OidcSettings(BaseModel):
     insecure_http: bool = Field(
         default=False, description="Allow plain http to the issuer (a private network)."
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _fallback_env(cls, data: object) -> object:
+        if isinstance(data, dict):
+            import os
+
+            if not data.get("issuer") and os.environ.get("OIDC_ISSUER"):
+                data["issuer"] = os.environ["OIDC_ISSUER"]
+            if (
+                not data.get("audience") or data.get("audience") == "loamz-agents"
+            ) and os.environ.get("OIDC_AUDIENCE"):
+                data["audience"] = os.environ["OIDC_AUDIENCE"]
+            if not data.get("insecure_http") and os.environ.get("OIDC_INSECURE_HTTP") in (
+                "true",
+                "1",
+                "yes",
+            ):
+                data["insecure_http"] = True
+        return data
 
 
 class LlmSettings(BaseModel):
@@ -53,6 +84,26 @@ class LlmSettings(BaseModel):
     openrouter_api_key: str = ""
     nvidia_api_key: str = ""
 
+    @model_validator(mode="before")
+    @classmethod
+    def _fallback_env(cls, data: object) -> object:
+        if isinstance(data, dict):
+            import os
+
+            if (not data.get("model") or data.get("model") == "gpt-4o-mini") and os.environ.get(
+                "CHAT_MODEL"
+            ):
+                data["model"] = os.environ["CHAT_MODEL"]
+            for key, env in [
+                ("openai_api_key", "OPENAI_API_KEY"),
+                ("anthropic_api_key", "ANTHROPIC_API_KEY"),
+                ("gemini_api_key", "GEMINI_API_KEY"),
+                ("openrouter_api_key", "OPENROUTER_API_KEY"),
+            ]:
+                if not data.get(key) and os.environ.get(env):
+                    data[key] = os.environ[env]
+        return data
+
     def api_keys(self) -> dict[str, str]:
         """Provider name -> key, as `providers.llm.create_model_client(..., api_keys=…)` takes them."""
         return {
@@ -70,6 +121,17 @@ class RedisSettings(BaseModel):
         default="", description="Redis for the event bus between roles; empty: an in-process bus."
     )
 
+    @model_validator(mode="before")
+    @classmethod
+    def _fallback_env(cls, data: object) -> object:
+        if isinstance(data, dict) and not data.get("url"):
+            import os
+
+            url = os.environ.get("REDIS_URL")
+            if url:
+                data["url"] = url
+        return data
+
 
 class TelemetrySettings(BaseModel):
     capture_content: bool = Field(
@@ -84,6 +146,19 @@ class HttpSettings(BaseModel):
         default="http://127.0.0.1:3000",
         description="Where links in notifications and e-mails point.",
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _fallback_env(cls, data: object) -> object:
+        if isinstance(data, dict) and (
+            not data.get("frontend_url") or data.get("frontend_url") == "http://127.0.0.1:3000"
+        ):
+            import os
+
+            url = os.environ.get("FRONTEND_URL")
+            if url:
+                data["frontend_url"] = url
+        return data
 
 
 class FilesSettings(BaseModel):
@@ -181,6 +256,17 @@ class SandboxSettings(BaseModel):
     python: str = ""
     runtime_class: str = ""
     workspace_pvc_claim: str = ""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _fallback_env(cls, data: object) -> object:
+        if isinstance(data, dict) and (not data.get("runtime") or data.get("runtime") == "nsjail"):
+            import os
+
+            runtime = os.environ.get("SANDBOX_RUNTIME")
+            if runtime:
+                data["runtime"] = runtime
+        return data
 
 
 class Settings(BaseSettings):

@@ -142,9 +142,7 @@ r = http.post(
 step("provision tenant", r.status_code in (200, 201), str(r.status_code) + r.text[:300])
 
 # 3. agent API as the user
-user = user_token(
-    f"openid organization:{alias} files:read files:write documents:read documents:write memory:read memory:write"
-)
+user = user_token(f"openid organization:{alias}")
 r = http.get(f"{AGENT}/threads", headers=user)
 step("agent: list threads", r.status_code == 200, str(r.status_code) + r.text[:300])
 r = http.post(
@@ -163,7 +161,7 @@ step(
     r.status_code in (200, 201),
     str(r.status_code) + r.text[:300],
 )
-file_id = r.json().get("id")
+file_id = r.json().get("file_id") or r.json().get("id")
 r = http.get(f"{AGENT}/files/{file_id}/download", headers=user)
 step(
     "agent: download it back",

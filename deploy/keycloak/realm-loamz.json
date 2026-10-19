@@ -431,22 +431,22 @@
       "description": "Backend-for-frontend of the agents UI: confidential, authorization code + PKCE (S256).",
       "enabled": true,
       "publicClient": false,
-      "secret": "${AGENTS_CONSOLE_CLIENT_SECRET:-${SUBSTRATE_UI_CLIENT_SECRET}}",
+      "secret": "${AGENTS_CONSOLE_CLIENT_SECRET}",
       "standardFlowEnabled": true,
       "implicitFlowEnabled": false,
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": false,
       "frontchannelLogout": true,
-      "rootUrl": "${AGENTS_CONSOLE_URL:-${SUBSTRATE_UI_URL:-http://127.0.0.1:3000}}",
+      "rootUrl": "${AGENTS_CONSOLE_URL:http://localhost:3000}",
       "redirectUris": [
-        "${AGENTS_CONSOLE_URL:-${SUBSTRATE_UI_URL:-http://127.0.0.1:3000}}/chat/auth/callback"
+        "${AGENTS_CONSOLE_URL:http://localhost:3000}/chat/auth/callback"
       ],
       "webOrigins": [
-        "${AGENTS_CONSOLE_URL:-${SUBSTRATE_UI_URL:-http://127.0.0.1:3000}}"
+        "${AGENTS_CONSOLE_URL:http://localhost:3000}"
       ],
       "attributes": {
         "pkce.code.challenge.method": "S256",
-        "post.logout.redirect.uris": "${AGENTS_CONSOLE_URL:-${SUBSTRATE_UI_URL:-http://127.0.0.1:3000}}/chat/*"
+        "post.logout.redirect.uris": "${AGENTS_CONSOLE_URL:http://localhost:3000}/chat/*"
       },
       "defaultClientScopes": [
         "basic",
@@ -476,22 +476,22 @@
       "description": "Backend-for-frontend of the data workspace: confidential, authorization code + PKCE (S256).",
       "enabled": true,
       "publicClient": false,
-      "secret": "${DATA_WORKSPACE_CLIENT_SECRET:-${SUBSTRATE_DATA_WEB_CLIENT_SECRET}}",
+      "secret": "${DATA_WORKSPACE_CLIENT_SECRET}",
       "standardFlowEnabled": true,
       "implicitFlowEnabled": false,
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": false,
       "frontchannelLogout": true,
-      "rootUrl": "${DATA_WORKSPACE_URL:-${SUBSTRATE_DATA_WEB_URL:-http://127.0.0.1:3011}}",
+      "rootUrl": "${DATA_WORKSPACE_URL:http://localhost:3011}",
       "redirectUris": [
-        "${DATA_WORKSPACE_URL:-${SUBSTRATE_DATA_WEB_URL:-http://127.0.0.1:3011}}/auth/callback"
+        "${DATA_WORKSPACE_URL:http://localhost:3011}/auth/callback"
       ],
       "webOrigins": [
-        "${DATA_WORKSPACE_URL:-${SUBSTRATE_DATA_WEB_URL:-http://127.0.0.1:3011}}"
+        "${DATA_WORKSPACE_URL:http://localhost:3011}"
       ],
       "attributes": {
         "pkce.code.challenge.method": "S256",
-        "post.logout.redirect.uris": "${DATA_WORKSPACE_URL:-${SUBSTRATE_DATA_WEB_URL:-http://127.0.0.1:3011}}/*"
+        "post.logout.redirect.uris": "${DATA_WORKSPACE_URL:http://localhost:3011}/*"
       },
       "defaultClientScopes": [
         "basic",
@@ -592,7 +592,7 @@
     {
       "clientId": "agent-membership",
       "name": "Agent server membership check",
-      "description": "Service account the agent server uses to confirm a user belongs to an organization before it mints a data token. Keycloak 26 serves organization membership only to manage-realm, so this client holds it: keep its secret on the agent server alone. Follow-up: replace with a narrower check (fine-grained admin permissions) when Keycloak offers one.",
+      "description": "Service account the agent server uses to confirm a user belongs to an organization before minting a data token.",
       "enabled": true,
       "publicClient": false,
       "secret": "${AGENT_MEMBERSHIP_CLIENT_SECRET}",

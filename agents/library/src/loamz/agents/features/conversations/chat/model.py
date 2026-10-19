@@ -15,6 +15,8 @@ class ChatRequest(BaseModel):
     model: str | None = None
     agent_id: str | None = None
     attachments: list[dict[str, object]] = Field(default_factory=list)
+    file_ids: list[str] = Field(default_factory=list)
+    system_instructions: str | None = None
     prompt: str | None = None
 
     def prompt_text(self) -> str:

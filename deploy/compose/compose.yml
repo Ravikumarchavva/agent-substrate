@@ -11,28 +11,28 @@ name: ${COMPOSE_PROJECT_NAME:-loamz-cell}
 
 x-data-env: &data-env
   # The services are on one private Docker network behind (optionally) a TLS-terminating proxy; plain HTTP to these
-  # named hosts is an explicit opt-in in substrate-data, and the proxy flag lets it listen beyond loopback.
-  SUBSTRATE_DATA_INSECURE_HTTP_HOSTS: '["seaweedfs","keycloak","keycloak.localhost","s3.localhost","agent-server"]'
+  # named hosts is an explicit opt-in in loamz-data, and the proxy flag lets it listen beyond loopback.
+  LOAMZ_DATA_INSECURE_HTTP_HOSTS: '["seaweedfs","keycloak","keycloak.localhost","s3.localhost","agent-server"]'
   # Controller and workers serve HTTPS with the cell's private CA (cell-init); the API trusts it.
-  SUBSTRATE_DATA_INTERNAL_CA_FILE: /tls/ca.crt
-  SUBSTRATE_DATA_BEHIND_TLS_PROXY: "true"
-  SUBSTRATE_DATA_OIDC_ISSUER: ${KEYCLOAK_PUBLIC_URL:-http://keycloak.localhost:8080}/realms/loamz
-  SUBSTRATE_DATA_OIDC_AUDIENCE: loamz-data
-  SUBSTRATE_DATA_S3_ENDPOINT_URL: http://seaweedfs:8333
-  SUBSTRATE_DATA_ICEBERG_CATALOG_URL: http://seaweedfs:8181
-  SUBSTRATE_DATA_WAREHOUSE: ${WAREHOUSE_BUCKET:-warehouse}
-  SUBSTRATE_DATA_STAGING_BUCKET: ${STAGING_BUCKET:-substrate-staging}
-  SUBSTRATE_DATA_VOLUMES_BUCKET: ${VOLUMES_BUCKET:-substrate-volumes}
-  SUBSTRATE_DATA_STORAGE_ID: cell-warehouse
-  SUBSTRATE_DATA_CONTROLLER_URL: https://data-controller:8040
+  LOAMZ_DATA_INTERNAL_CA_FILE: /tls/ca.crt
+  LOAMZ_DATA_BEHIND_TLS_PROXY: "true"
+  LOAMZ_DATA_OIDC_ISSUER: ${KEYCLOAK_PUBLIC_URL:-http://keycloak.localhost:8080}/realms/loamz
+  LOAMZ_DATA_OIDC_AUDIENCE: loamz-data
+  LOAMZ_DATA_S3_ENDPOINT_URL: http://seaweedfs:8333
+  LOAMZ_DATA_ICEBERG_CATALOG_URL: http://seaweedfs:8181
+  LOAMZ_DATA_WAREHOUSE: ${WAREHOUSE_BUCKET:-warehouse}
+  LOAMZ_DATA_STAGING_BUCKET: ${STAGING_BUCKET:-substrate-staging}
+  LOAMZ_DATA_VOLUMES_BUCKET: ${VOLUMES_BUCKET:-substrate-volumes}
+  LOAMZ_DATA_STORAGE_ID: cell-warehouse
+  LOAMZ_DATA_CONTROLLER_URL: https://data-controller:8040
 
 x-data-image: &data-image
   image: ${IMAGE_REGISTRY:-ghcr.io/ravikumarchavva}/loamz-data:${IMAGE_TAG:-local}
   build: { context: ../.., dockerfile: deploy/docker/loamz-data.Dockerfile }
 
 x-data-tls: &data-tls
-  SUBSTRATE_DATA_TLS_CERT_FILE: /tls/server.crt
-  SUBSTRATE_DATA_TLS_KEY_FILE: /tls/server.key
+  LOAMZ_DATA_TLS_CERT_FILE: /tls/server.crt
+  LOAMZ_DATA_TLS_KEY_FILE: /tls/server.key
 
 # The controller and workers speak HTTPS, so the image's plain-HTTP probe does not apply.
 x-https-health: &https-health
@@ -44,24 +44,37 @@ x-https-health: &https-health
 
 x-worker-env: &worker-env
   <<: [*data-env, *data-tls]
-  SUBSTRATE_DATA_WORKER_BIND_HOST: 0.0.0.0
-  SUBSTRATE_DATA_WORKER_TOKEN: ${WORKER_TOKEN:?run ./gen-env.sh}
-  SUBSTRATE_DATA_S3_ACCESS_KEY_ID: ${WORKER_S3_ACCESS_KEY_ID:?}
-  SUBSTRATE_DATA_S3_SECRET_ACCESS_KEY: ${WORKER_S3_SECRET_ACCESS_KEY:?}
-  SUBSTRATE_DATA_TICKET_PUBLIC_KEY_FILE: /keys/ticket.pub.pem
-  SUBSTRATE_DATA_WORKER_MEMORY_LIMIT: ${SUBSTRATE_DATA_WORKER_MEMORY_LIMIT:-2GB}
+  LOAMZ_DATA_WORKER_BIND_HOST: 0.0.0.0
+  LOAMZ_DATA_WORKER_TOKEN: ${WORKER_TOKEN:?run ./gen-env.sh}
+  LOAMZ_DATA_S3_ACCESS_KEY_ID: ${WORKER_S3_ACCESS_KEY_ID:?}
+  LOAMZ_DATA_S3_SECRET_ACCESS_KEY: ${WORKER_S3_SECRET_ACCESS_KEY:?}
+  LOAMZ_DATA_TICKET_PUBLIC_KEY_FILE: /keys/ticket.pub.pem
+  LOAMZ_DATA_WORKER_MEMORY_LIMIT: ${LOAMZ_DATA_WORKER_MEMORY_LIMIT:-${SUBSTRATE_DATA_WORKER_MEMORY_LIMIT:-2GB}}
 
 x-agent-image: &agent-image
   image: ${IMAGE_REGISTRY:-ghcr.io/ravikumarchavva}/loamz-agents:${IMAGE_TAG:-local}
   build: { context: ../.., dockerfile: deploy/docker/loamz-agents.Dockerfile }
 
 x-agent-env: &agent-env
-  # SQLAlchemy (asyncpg dialect) wants ssl=, the library's own asyncpg connection wants sslmode=.
-  DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-substrate}:${POSTGRES_PASSWORD:?run ./gen-env.sh}@postgres:5432/agentdb?ssl=require
+  # Loamz Agents native settings tree (LOAMZ_AGENTS_<SECTION>__<NAME>)
+  LOAMZ_AGENTS_DATABASE__URL: postgresql://${POSTGRES_USER:-substrate}:${POSTGRES_PASSWORD:?run ./gen-env.sh}@postgres:5432/agentdb?sslmode=require
+  LOAMZ_AGENTS_REDIS__URL: redis://:${REDIS_PASSWORD:?}@redis:6379/0
+  LOAMZ_AGENTS_OIDC__ISSUER: ${KEYCLOAK_PUBLIC_URL:-http://keycloak.localhost:8080}/realms/loamz
+  LOAMZ_AGENTS_OIDC__AUDIENCE: loamz-agents
+  LOAMZ_AGENTS_OIDC__INSECURE_HTTP: "true"
+  LOAMZ_AGENTS_HTTP__FRONTEND_URL: ${AGENTS_CONSOLE_URL:-${SUBSTRATE_UI_URL:-http://localhost:3000}}
+  LOAMZ_AGENTS_SANDBOX__RUNTIME: ${SANDBOX_RUNTIME:-nsjail}
+  LOAMZ_AGENTS_LLM__MODEL: ${CHAT_MODEL:-google/gemini-3.1-flash-lite}
+  LOAMZ_AGENTS_LLM__OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+  LOAMZ_AGENTS_LLM__ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+  LOAMZ_AGENTS_LLM__GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+  LOAMZ_AGENTS_LLM__OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+  # Legacy env var compatibility
+  DATABASE_URL: postgresql://${POSTGRES_USER:-substrate}:${POSTGRES_PASSWORD}@postgres:5432/agentdb?sslmode=require
   ASYNC_DATABASE_URL: postgresql://${POSTGRES_USER:-substrate}:${POSTGRES_PASSWORD}@postgres:5432/agentdb?sslmode=require
   REDIS_URL: redis://:${REDIS_PASSWORD:?}@redis:6379/0
   STORE_BACKEND: postgres
-  # Files, documents and memory live in substrate-data; the agent server holds no object-store credentials.
+  # Files, documents and memory live in loamz-data; the agent server holds no object-store credentials.
   DATA_SERVICE_URL: http://data-api:8020
   DATA_SERVICE_INSECURE_HOSTS: '["data-api"]'
   # Who may ask for a data token for a user: the agent server confirms organization membership in Keycloak first.
@@ -74,7 +87,7 @@ x-agent-env: &agent-env
   OIDC_INSECURE_HTTP: "true"
   # No collector in the self-host bundle; point OTEL_EXPORTER_OTLP_ENDPOINT at one and unset this to export traces.
   OTEL_SDK_DISABLED: "true"
-  FRONTEND_URL: ${SUBSTRATE_UI_URL:-http://localhost:3000}
+  FRONTEND_URL: ${AGENTS_CONSOLE_URL:-${SUBSTRATE_UI_URL:-http://localhost:3000}}
   SANDBOX_RUNTIME: ${SANDBOX_RUNTIME:-nsjail}
   CHAT_MODEL: ${CHAT_MODEL:-google/gemini-3.1-flash-lite}
   OPENAI_API_KEY: ${OPENAI_API_KEY:-}
@@ -240,10 +253,14 @@ services:
       KC_DB_USERNAME: ${POSTGRES_USER:-substrate}
       KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
       # Substituted into the realm file at import. All three are required: an unset one becomes the literal text.
+      AGENTS_CONSOLE_CLIENT_SECRET: ${AGENTS_CONSOLE_CLIENT_SECRET:-${SUBSTRATE_UI_CLIENT_SECRET:?run ./gen-env.sh}}
+      DATA_WORKSPACE_CLIENT_SECRET: ${DATA_WORKSPACE_CLIENT_SECRET:-${SUBSTRATE_DATA_WEB_CLIENT_SECRET:?}}
       SUBSTRATE_UI_CLIENT_SECRET: ${SUBSTRATE_UI_CLIENT_SECRET:?run ./gen-env.sh}
       SUBSTRATE_DATA_WEB_CLIENT_SECRET: ${SUBSTRATE_DATA_WEB_CLIENT_SECRET:?}
       CELL_ADMIN_CLIENT_SECRET: ${CELL_ADMIN_CLIENT_SECRET:?}
       AGENT_MEMBERSHIP_CLIENT_SECRET: ${AGENT_MEMBERSHIP_CLIENT_SECRET:?}
+      AGENTS_CONSOLE_URL: ${AGENTS_CONSOLE_URL:-${SUBSTRATE_UI_URL:-http://localhost:3000}}
+      DATA_WORKSPACE_URL: ${DATA_WORKSPACE_URL:-${SUBSTRATE_DATA_WEB_URL:-http://localhost:3011}}
       SUBSTRATE_UI_URL: ${SUBSTRATE_UI_URL:-http://localhost:3000}
       SUBSTRATE_DATA_WEB_URL: ${SUBSTRATE_DATA_WEB_URL:-http://localhost:3011}
     volumes:
@@ -268,25 +285,25 @@ services:
     environment:
       <<: *data-env
       PORT: "8020"
-      SUBSTRATE_DATA_METADATA_URL: postgresql://${POSTGRES_USER:-substrate}:${POSTGRES_PASSWORD}@postgres:5432/substrate_data?sslmode=require
-      SUBSTRATE_DATA_CONTROLLER_TOKEN: ${CONTROLLER_TOKEN:?run ./gen-env.sh}
-      SUBSTRATE_DATA_S3_ACCESS_KEY_ID: ${CONTROL_S3_ACCESS_KEY_ID}
-      SUBSTRATE_DATA_S3_SECRET_ACCESS_KEY: ${CONTROL_S3_SECRET_ACCESS_KEY}
-      SUBSTRATE_DATA_TICKET_PRIVATE_KEY_FILE: /keys/ticket.pem
-      SUBSTRATE_DATA_VOLUMES_PUBLIC_ENDPOINT_URL: ${S3_PUBLIC_URL:-http://s3.localhost:8333}
-      SUBSTRATE_DATA_MASK_SALT: ${MASK_SALT:-}
+      LOAMZ_DATA_METADATA_URL: postgresql://${POSTGRES_USER:-substrate}:${POSTGRES_PASSWORD}@postgres:5432/substrate_data?sslmode=require
+      LOAMZ_DATA_CONTROLLER_TOKEN: ${CONTROLLER_TOKEN:?run ./gen-env.sh}
+      LOAMZ_DATA_S3_ACCESS_KEY_ID: ${CONTROL_S3_ACCESS_KEY_ID}
+      LOAMZ_DATA_S3_SECRET_ACCESS_KEY: ${CONTROL_S3_SECRET_ACCESS_KEY}
+      LOAMZ_DATA_TICKET_PRIVATE_KEY_FILE: /keys/ticket.pem
+      LOAMZ_DATA_VOLUMES_PUBLIC_ENDPOINT_URL: ${S3_PUBLIC_URL:-http://s3.localhost:8333}
+      LOAMZ_DATA_MASK_SALT: ${MASK_SALT:-}
       # The documents and memory index (ADR 0008): its own database, with pgvector. The folder holds only scratch (no bundles).
-      SUBSTRATE_DATA_RETRIEVAL_URL: postgresql://${POSTGRES_USER:-substrate}:${POSTGRES_PASSWORD}@postgres:5432/data_retrieval?sslmode=require
-      SUBSTRATE_DATA_RETRIEVAL_DIR: /var/lib/substrate-data/retrieval
-      SUBSTRATE_DATA_DOCUMENT_READER_URL: ${DOCUMENT_READER_URL:-}
-      SUBSTRATE_DATA_DOCUMENT_EMBEDDING_URL: ${DOCUMENT_EMBEDDING_URL:-}
+      LOAMZ_DATA_RETRIEVAL_URL: postgresql://${POSTGRES_USER:-substrate}:${POSTGRES_PASSWORD}@postgres:5432/data_retrieval?sslmode=require
+      LOAMZ_DATA_RETRIEVAL_DIR: /var/lib/loamz-data/retrieval
+      LOAMZ_DATA_DOCUMENT_READER_URL: ${DOCUMENT_READER_URL:-}
+      LOAMZ_DATA_DOCUMENT_EMBEDDING_URL: ${DOCUMENT_EMBEDDING_URL:-}
       # The agent server signs per-run tokens for its users; the data service fetches its public keys. One name may only
       # read; the other (`-files`) may also change files, documents and memory (scopes still bound every token).
-      SUBSTRATE_DATA_TRUSTED_ISSUERS: '[{"issuer":"loamz-agents","audience":"loamz-data","jwks_uri":"http://agent-server:8000/.well-known/data-token-jwks.json","read_only":true},{"issuer":"loamz-agents-files","audience":"loamz-data","jwks_uri":"http://agent-server:8000/.well-known/data-token-jwks.json","read_only":false}]'
+      LOAMZ_DATA_TRUSTED_ISSUERS: '[{"issuer":"loamz-agents","audience":"loamz-data","jwks_uri":"http://agent-server:8000/.well-known/data-token-jwks.json","read_only":true},{"issuer":"loamz-agents-files","audience":"loamz-data","jwks_uri":"http://agent-server:8000/.well-known/data-token-jwks.json","read_only":false}]'
     volumes:
       - ticket-private:/keys:ro
       - internal-tls:/tls:ro
-      - data-api-state:/var/lib/substrate-data
+      - data-api-state:/var/lib/loamz-data
     ports:
       - "${BIND_ADDR:-127.0.0.1}:${PORT_DATA_API:-8020}:8020"
     depends_on:
@@ -301,10 +318,10 @@ services:
     environment:
       <<: [*data-env, *data-tls]
       PORT: "8040"
-      SUBSTRATE_DATA_CONTROLLER_TOKEN: ${CONTROLLER_TOKEN:?}
+      LOAMZ_DATA_CONTROLLER_TOKEN: ${CONTROLLER_TOKEN:?}
     healthcheck: *https-health
     volumes:
-      - controller-state:/var/lib/substrate-data
+      - controller-state:/var/lib/loamz-data
       - internal-tls:/tls:ro
     restart: unless-stopped
 
@@ -328,9 +345,9 @@ services:
       seaweed-init: { condition: service_completed_successfully }
     restart: unless-stopped
 
-  data-worker-rag:
+  data-worker-documents:
     <<: *data-image
-    command: ["worker", "--role", "rag", "--port", "8043"]
+    command: ["worker", "--role", "documents", "--port", "8043"]
     environment: { <<: *worker-env, PORT: "8043" }
     healthcheck: *https-health
     volumes: [ "ticket-public:/keys:ro", "internal-tls:/tls:ro" ]
@@ -343,20 +360,20 @@ services:
     healthcheck: { disable: true }
     command:
       - |
-        for spec in sql:8041 jobs:8042 rag:8043; do
+        for spec in sql:8041 jobs:8042 documents:8043; do
           role=$${spec%%:*}; port=$${spec##*:}
           for i in $$(seq 1 30); do
-            loamz-data attach --name "$$role" --role "$$role" --url "https://data-worker-$$role:$$port" --token-env SUBSTRATE_DATA_WORKER_TOKEN && break
+            loamz-data attach --name "$$role" --role "$$role" --url "https://data-worker-$$role:$$port" --token-env LOAMZ_DATA_WORKER_TOKEN && break
             sleep 2
           done
         done
     environment:
       <<: *data-env
-      SUBSTRATE_DATA_CONTROLLER_TOKEN: ${CONTROLLER_TOKEN:?}
-      SUBSTRATE_DATA_WORKER_TOKEN: ${WORKER_TOKEN:?}
+      LOAMZ_DATA_CONTROLLER_TOKEN: ${CONTROLLER_TOKEN:?}
+      LOAMZ_DATA_WORKER_TOKEN: ${WORKER_TOKEN:?}
     volumes:
       - internal-tls:/tls:ro
-    depends_on: [data-controller, data-worker-sql, data-worker-jobs, data-worker-rag]
+    depends_on: [data-controller, data-worker-sql, data-worker-jobs, data-worker-documents]
     restart: "no"
 
   # ── Agent server: monolith ──────────────────────────────────────────────────
@@ -432,7 +449,7 @@ services:
     build: { context: ../.., dockerfile: deploy/docker/loamz-data-workspace.Dockerfile }
     environment:
       DATA_API_URL: http://data-api:8020
-      SUBSTRATE_DATA_OIDC_ISSUER: ${KEYCLOAK_PUBLIC_URL:-http://keycloak.localhost:8080}/realms/loamz
+      LOAMZ_DATA_OIDC_ISSUER: ${KEYCLOAK_PUBLIC_URL:-http://keycloak.localhost:8080}/realms/loamz
       WEB_CLIENT_ID: data-workspace
       WEB_CLIENT_SECRET: ${DATA_WORKSPACE_CLIENT_SECRET:-${SUBSTRATE_DATA_WEB_CLIENT_SECRET:?}}
       WEB_SESSION_SECRET: ${WEB_SESSION_SECRET:?}

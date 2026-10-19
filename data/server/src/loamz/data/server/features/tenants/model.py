@@ -12,6 +12,7 @@ class TenantEnsure(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
     tenant_id: Annotated[str, Field(pattern=tenancy.TENANT_ID_PATTERN)]
+    alias: str | None = None
 
 
 class Tenant(BaseModel):

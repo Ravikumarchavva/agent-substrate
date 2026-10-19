@@ -20,7 +20,7 @@ resource "google_storage_bucket_iam_member" "cell" {
 }
 
 # Credential vending on Google Cloud: the control plane impersonates this account to mint short-lived, downscoped
-# tokens (Credential Access Boundaries) for attached compute. substrate-data's vending speaks AWS STS today, so
+# tokens (Credential Access Boundaries) for attached compute. loamz-data's vending speaks AWS STS today, so
 # until a GCS provider lands, workers on GCP use the S3-interoperability endpoint with HMAC keys kept in the cell Secret.
 resource "google_service_account" "vending" {
   project      = var.project_id

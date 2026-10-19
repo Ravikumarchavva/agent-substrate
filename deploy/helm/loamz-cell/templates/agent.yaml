@@ -1,4 +1,3 @@
-{{- if .Values.agents.enabled -}}
 {{- define "cell.agentEnv" -}}
 - name: POSTGRES_PASSWORD
   valueFrom: { {{ include "cell.secretRef" (dict "root" . "key" "postgres-password") }} }
@@ -27,6 +26,7 @@
 {{ toYaml . }}
 {{- end }}
 {{- end }}
+{{- if .Values.agents.enabled -}}
 {{- $env := include "cell.agentEnv" . }}
 {{- $img := .Values.agents.image }}
 {{- if eq .Values.mode "monolith" }}

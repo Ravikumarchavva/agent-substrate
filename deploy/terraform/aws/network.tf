@@ -4,7 +4,7 @@ data "aws_availability_zones" "this" {
 
 locals {
   azs  = slice(data.aws_availability_zones.this.names, 0, var.az_count)
-  tags = merge({ "substrate:cell" = var.name }, var.tags)
+  tags = merge({ "loamz:cell" = var.name }, var.tags)
 }
 
 resource "aws_vpc" "this" {

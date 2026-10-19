@@ -11,7 +11,7 @@ resource "aws_s3_bucket" "this" {
   for_each      = local.buckets
   bucket        = each.value
   force_destroy = var.bucket_force_destroy
-  tags          = merge(local.tags, { "substrate:role" = each.key })
+  tags          = merge(local.tags, { "loamz:role" = each.key })
 }
 
 resource "aws_s3_bucket_public_access_block" "this" {

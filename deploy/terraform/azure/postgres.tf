@@ -13,7 +13,7 @@ resource "azurerm_postgresql_flexible_server" "this" {
   delegated_subnet_id           = azurerm_subnet.db.id
   private_dns_zone_id           = azurerm_private_dns_zone.db.id
   public_network_access_enabled = false
-  administrator_login           = "substrate"
+  administrator_login           = "loamz"
   administrator_password        = random_password.db.result
   backup_retention_days         = 14
   zone                          = "1"
@@ -34,7 +34,7 @@ resource "azurerm_postgresql_flexible_server" "this" {
   }
 }
 
-# TLS is mandatory: substrate-data refuses an unencrypted database connection off the machine.
+# TLS is mandatory: loamz-data refuses an unencrypted database connection off the machine.
 resource "azurerm_postgresql_flexible_server_configuration" "require_tls" {
   name      = "require_secure_transport"
   server_id = azurerm_postgresql_flexible_server.this.id
@@ -48,7 +48,7 @@ resource "azurerm_postgresql_flexible_server_configuration" "extensions" {
 }
 
 resource "azurerm_postgresql_flexible_server_database" "this" {
-  for_each  = toset(["agentdb", "keycloak", "substrate_data", "substrate_ui"])
+  for_each  = toset(["agentdb", "keycloak", "loamz_data", "loamz_ui"])
   name      = each.value
   server_id = azurerm_postgresql_flexible_server.this.id
 }

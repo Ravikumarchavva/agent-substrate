@@ -48,12 +48,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { image: substrate-agent-server, file: deploy/docker/agent-server.Dockerfile }
-          - { image: substrate-data, file: deploy/docker/substrate-data.Dockerfile }
-          - { image: substrate-ui, file: deploy/docker/substrate-ui.Dockerfile }
-          - { image: substrate-data-web, file: deploy/docker/substrate-data-web.Dockerfile }
-          - { image: embedding-reranker, file: deploy/docker/embedding-reranker.Dockerfile }
-          - { image: document-intelligence, file: deploy/docker/document-intelligence.Dockerfile }
+          - { image: loamz-agents, file: deploy/docker/loamz-agents.Dockerfile }
+          - { image: loamz-data, file: deploy/docker/loamz-data.Dockerfile }
+          - { image: loamz-agents-console, file: deploy/docker/loamz-agents-console.Dockerfile }
+          - { image: loamz-data-workspace, file: deploy/docker/loamz-data-workspace.Dockerfile }
           - { image: llama-server, file: deploy/docker/llama-server.Dockerfile }
     permissions:
       contents: read
@@ -69,7 +67,7 @@ jobs:
       file: ${{ matrix.file }}
 
   chart:
-    name: Chart / substrate-cell
+    name: Chart / loamz-cell
     needs: [plan, image]
     runs-on: ubuntu-latest
     permissions:
@@ -88,5 +86,5 @@ jobs:
         run: |
           owner="${GITHUB_REPOSITORY_OWNER,,}"
           echo "$TOKEN" | helm registry login ghcr.io -u "$ACTOR" --password-stdin
-          helm package deploy/helm/substrate-cell --version "$VERSION" --app-version "$VERSION"
-          helm push "substrate-cell-${VERSION}.tgz" "oci://ghcr.io/${owner}/charts"
+          helm package deploy/helm/loamz-cell --version "$VERSION" --app-version "$VERSION"
+          helm push "loamz-cell-${VERSION}.tgz" "oci://ghcr.io/${owner}/charts"

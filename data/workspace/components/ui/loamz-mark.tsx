@@ -1,10 +1,9 @@
 import type { SVGProps } from "react";
 
 /**
- * The official Substrate product mark (two overlapping rounded squares),
- * matching substrate-ui branding.
+ * The official Loamz product mark (two overlapping rounded squares).
  */
-export function SubstrateMark({
+export function LoamzMark({
   className,
   ...props
 }: SVGProps<SVGSVGElement>) {

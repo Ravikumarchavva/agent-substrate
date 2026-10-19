@@ -15,15 +15,16 @@
 /docs/adr/                      @Ravikumarchavva
 
 # Packages
-/agents/agent-substrate/        @Ravikumarchavva
-/agents/substrate-cloud/        @Ravikumarchavva
-/agents/substrate-ui/           @Ravikumarchavva
-/data/substrate-data/           @Ravikumarchavva
-/data/substrate-data-client/    @Ravikumarchavva
-/data/substrate-data-web/       @Ravikumarchavva
-/data/document-intelligence/    @Ravikumarchavva
-/data/embedding-reranker/       @Ravikumarchavva
-/data/inference-pool/           @Ravikumarchavva
+/agents/library/                @Ravikumarchavva
+/agents/console/                @Ravikumarchavva
+/data/storage/                  @Ravikumarchavva
+/data/client/                   @Ravikumarchavva
+/data/server/                   @Ravikumarchavva
+/data/reader/                   @Ravikumarchavva
+/data/workspace/                @Ravikumarchavva
+/identity/python/               @Ravikumarchavva
+/identity/oidc-bff/             @Ravikumarchavva
+/meta/loamz/                    @Ravikumarchavva
 
 # Repo governance, CI and release machinery
 /.github/                       @Ravikumarchavva

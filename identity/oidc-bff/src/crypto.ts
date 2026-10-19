@@ -43,7 +43,7 @@ async function key(secret: string, purpose: string): Promise<CryptoKey> {
     {
       name: "HKDF",
       hash: "SHA-256",
-      salt: encoder.encode("substrate-oidc-bff"),
+      salt: encoder.encode("loamz-oidc-bff"),
       info: encoder.encode(purpose),
     },
     material,

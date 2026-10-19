@@ -15,7 +15,7 @@ resource "google_storage_bucket" "this" {
   uniform_bucket_level_access = true
   public_access_prevention    = "enforced"
   force_destroy               = var.bucket_force_destroy
-  labels                      = merge(local.labels, { substrate-role = each.key })
+  labels                      = merge(local.labels, { loamz-role = each.key })
 
   dynamic "versioning" {
     for_each = each.key == "volumes" ? [1] : []

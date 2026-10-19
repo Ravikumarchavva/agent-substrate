@@ -23,7 +23,7 @@ resource "aws_vpc_security_group_ingress_rule" "db_from_cluster" {
   to_port                      = 5432
 }
 
-# TLS is mandatory: substrate-data refuses an unencrypted database connection off the machine.
+# TLS is mandatory: loamz-data refuses an unencrypted database connection off the machine.
 resource "aws_db_parameter_group" "this" {
   name_prefix = "${var.name}-pg16-"
   family      = "postgres16"
@@ -48,7 +48,7 @@ resource "aws_db_instance" "this" {
   storage_type           = "gp3"
   storage_encrypted      = true
   db_name                = "agentdb"
-  username               = "substrate"
+  username               = "loamz"
   parameter_group_name   = aws_db_parameter_group.this.name
   db_subnet_group_name   = aws_db_subnet_group.this.name
   vpc_security_group_ids = [aws_security_group.db.id]

@@ -7,7 +7,7 @@ import { challenge, claimsOf, randomToken, seal, unseal } from "./crypto";
 import { clearCookies, hasCookie, readCookie, setCookies } from "./cookies";
 
 export type BffConfig = {
-  /** Realm URL, e.g. https://id.example.com/realms/substrate */
+  /** Realm URL, e.g. https://id.example.com/realms/loamz */
   issuer: string;
   clientId: string;
   clientSecret: string;
@@ -77,7 +77,7 @@ export function problem(
 ): Response {
   return new Response(
     JSON.stringify({
-      type: `https://substrate.dev/problems/${title.toLowerCase().replace(/\s+/g, "-")}`,
+      type: `https://loamz.dev/problems/${title.toLowerCase().replace(/\s+/g, "-")}`,
       title,
       status,
       detail,

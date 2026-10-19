@@ -1,5 +1,5 @@
 locals {
-  labels = merge({ substrate-cell = var.name }, var.labels)
+  labels = merge({ loamz-cell = var.name }, var.labels)
 }
 
 resource "google_compute_network" "this" {

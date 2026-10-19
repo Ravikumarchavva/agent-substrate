@@ -29,17 +29,17 @@ jobs:
             chore
             revert
           scopes: |
-            agent-substrate
-            substrate-cloud
-            substrate-ui
-            substrate-data
-            substrate-data-client
-            substrate-data-web
-            document-intelligence
-            embedding-reranker
-            inference-pool
+            loamz
+            loamz-agents
+            loamz-data-storage
+            loamz-data-client
+            loamz-data-server
+            loamz-data-reader
+            loamz-identity
+            agents-console
+            data-workspace
+            oidc-bff
             contracts
-            identity
             deploy
             docs
             adr

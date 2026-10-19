@@ -21,7 +21,7 @@ import { OverviewScreen } from "../components/screens/overview";
 import { PipelinesScreen } from "../components/screens/pipelines";
 import { SqlScreen } from "../components/screens/sql-workspace";
 import { SidebarToggleIcon } from "../components/ui/sidebar-toggle-icon";
-import { SubstrateMark } from "../components/ui/substrate-mark";
+import { LoamzMark } from "../components/ui/loamz-mark";
 import { UserMenu } from "../components/user-menu";
 import { usePanelPreference } from "../hooks/use-panel-preference";
 import { useWorkspace } from "../hooks/use-workspace";
@@ -100,13 +100,13 @@ function Workspace() {
           <Link
             className="brand"
             href="/"
-            aria-label="Substrate Data"
-            title="Substrate Data"
+            aria-label="Loamz Data"
+            title="Loamz Data"
           >
-            <SubstrateMark className="app-brand-icon" width={22} height={22} />
+            <LoamzMark className="app-brand-icon" width={22} height={22} />
             {!sidebarCollapsed && (
               <span>
-                Substrate <strong>Data</strong>
+                Loamz <strong>Data</strong>
               </span>
             )}
           </Link>

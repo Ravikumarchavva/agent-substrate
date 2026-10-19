@@ -14,9 +14,9 @@ updates:
       python-minor-patch:
         update-types: [minor, patch]
 
-  # document-intelligence is outside the uv workspace (Python 3.13, own project).
+  # reader is outside the uv workspace (Python 3.13, own project).
   - package-ecosystem: uv
-    directory: /data/document-intelligence
+    directory: /data/reader
     schedule:
       interval: monthly
     open-pull-requests-limit: 2
@@ -27,7 +27,7 @@ updates:
       python-minor-patch:
         update-types: [minor, patch]
 
-  # pnpm workspace at the root (covers agents/substrate-ui and data/substrate-data-web).
+  # pnpm workspace at the root (covers agents/console, data/workspace and identity/oidc-bff).
   - package-ecosystem: npm
     directory: /
     schedule:
@@ -52,42 +52,9 @@ updates:
       actions-minor-patch:
         update-types: [minor, patch]
 
-  # One entry per directory that holds a Dockerfile.
+  # Dockerfiles in deploy/docker.
   - package-ecosystem: docker
     directory: /deploy/docker
-    schedule:
-      interval: monthly
-    open-pull-requests-limit: 2
-    ignore:
-      - dependency-name: "*"
-        update-types: [version-update:semver-major]
-    groups:
-      docker-minor-patch:
-        update-types: [minor, patch]
-  - package-ecosystem: docker
-    directory: /data/substrate-data/scripts/e2e_agent_sandbox
-    schedule:
-      interval: monthly
-    open-pull-requests-limit: 2
-    ignore:
-      - dependency-name: "*"
-        update-types: [version-update:semver-major]
-    groups:
-      docker-minor-patch:
-        update-types: [minor, patch]
-  - package-ecosystem: docker
-    directory: /agents/agent-substrate/src/substrate/integrations/tools/code_interpreter/code_interpreter/agent-sandbox
-    schedule:
-      interval: monthly
-    open-pull-requests-limit: 2
-    ignore:
-      - dependency-name: "*"
-        update-types: [version-update:semver-major]
-    groups:
-      docker-minor-patch:
-        update-types: [minor, patch]
-  - package-ecosystem: docker
-    directory: /agents/substrate-cloud/src/substrate_cloud/deployment/docker/mcp_server
     schedule:
       interval: monthly
     open-pull-requests-limit: 2

@@ -24,7 +24,7 @@ resource "azurerm_role_assignment" "cell" {
 }
 
 # Credential vending on Azure: the control plane requests user-delegation SAS tokens scoped to the files of one
-# statement. That needs the delegator role at account level and nothing else. substrate-data's vending speaks AWS STS
+# statement. That needs the delegator role at account level and nothing else. loamz-data's vending speaks AWS STS
 # today; until an Azure provider lands, workers use the identity above directly.
 resource "azurerm_role_assignment" "delegator" {
   scope                = azurerm_storage_account.this.id

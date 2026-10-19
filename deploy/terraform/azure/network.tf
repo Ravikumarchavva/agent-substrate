@@ -1,5 +1,5 @@
 locals {
-  tags = merge({ "substrate-cell" = var.name }, var.tags)
+  tags = merge({ "loamz-cell" = var.name }, var.tags)
 }
 
 resource "azurerm_resource_group" "this" {

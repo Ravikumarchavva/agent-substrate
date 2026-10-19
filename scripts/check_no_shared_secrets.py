@@ -74,7 +74,7 @@ def find_violations() -> list[str]:
             continue
         try:
             text = path.read_text(encoding="utf-8")
-        except (UnicodeDecodeError, OSError):
+        except UnicodeDecodeError, OSError:
             continue
         for number, line in enumerate(text.splitlines(), 1):
             if PATTERN.search(line):

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createBff, safeNext, seal, type BffConfig } from "../src/index";
 
-const ISSUER = "https://id.example.com/realms/substrate";
+const ISSUER = "https://id.example.com/realms/loamz";
 const SECRET = "x".repeat(40);
 const PUBLIC = "https://app.example.com";
 

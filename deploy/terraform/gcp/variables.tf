@@ -78,7 +78,7 @@ variable "browser_origins" {
 
 variable "kubernetes_namespace" {
   type    = string
-  default = "substrate"
+  default = "loamz"
 }
 
 variable "release_name" {

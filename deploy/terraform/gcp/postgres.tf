@@ -19,7 +19,7 @@ resource "google_sql_database_instance" "this" {
     ip_configuration {
       ipv4_enabled    = false
       private_network = google_compute_network.this.id
-      # TLS is mandatory: substrate-data refuses an unencrypted database connection off the machine.
+      # TLS is mandatory: loamz-data refuses an unencrypted database connection off the machine.
       ssl_mode = "ENCRYPTED_ONLY"
     }
 
@@ -32,15 +32,15 @@ resource "google_sql_database_instance" "this" {
   depends_on = [google_service_networking_connection.private_services]
 }
 
-resource "google_sql_user" "substrate" {
-  name     = "substrate"
+resource "google_sql_user" "loamz" {
+  name     = "loamz"
   project  = var.project_id
   instance = google_sql_database_instance.this.name
   password = random_password.db.result
 }
 
 resource "google_sql_database" "this" {
-  for_each = toset(["agentdb", "keycloak", "substrate_data", "substrate_ui"])
+  for_each = toset(["agentdb", "keycloak", "loamz_data", "loamz_ui"])
   name     = each.value
   project  = var.project_id
   instance = google_sql_database_instance.this.name

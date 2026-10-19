@@ -16,7 +16,7 @@ x-data-env: &data-env
   # Controller and workers serve HTTPS with the cell's private CA (cell-init); the API trusts it.
   LOAMZ_DATA_INTERNAL_CA_FILE: /tls/ca.crt
   LOAMZ_DATA_BEHIND_TLS_PROXY: "true"
-  LOAMZ_DATA_OIDC_ISSUER: ${KEYCLOAK_PUBLIC_URL:-http://keycloak.localhost:8080}/realms/loamz
+  LOAMZ_DATA_OIDC_ISSUER: ${KEYCLOAK_PUBLIC_URL:-http://keycloak.localhost:${PORT_KEYCLOAK:-8081}}/realms/loamz
   LOAMZ_DATA_OIDC_AUDIENCE: loamz-data
   LOAMZ_DATA_S3_ENDPOINT_URL: http://seaweedfs:8333
   LOAMZ_DATA_ICEBERG_CATALOG_URL: http://seaweedfs:8181
@@ -59,7 +59,7 @@ x-agent-env: &agent-env
   # Loamz Agents native settings tree (LOAMZ_AGENTS_<SECTION>__<NAME>)
   LOAMZ_AGENTS_DATABASE__URL: postgresql://${POSTGRES_USER:-substrate}:${POSTGRES_PASSWORD:?run ./gen-env.sh}@postgres:5432/agentdb?sslmode=require
   LOAMZ_AGENTS_REDIS__URL: redis://:${REDIS_PASSWORD:?}@redis:6379/0
-  LOAMZ_AGENTS_OIDC__ISSUER: ${KEYCLOAK_PUBLIC_URL:-http://keycloak.localhost:8080}/realms/loamz
+  LOAMZ_AGENTS_OIDC__ISSUER: ${KEYCLOAK_PUBLIC_URL:-http://keycloak.localhost:${PORT_KEYCLOAK:-8081}}/realms/loamz
   LOAMZ_AGENTS_OIDC__AUDIENCE: loamz-agents
   LOAMZ_AGENTS_OIDC__INSECURE_HTTP: "true"
   LOAMZ_AGENTS_HTTP__FRONTEND_URL: ${AGENTS_CONSOLE_URL:-${SUBSTRATE_UI_URL:-http://localhost:3000}}
@@ -81,7 +81,7 @@ x-agent-env: &agent-env
   OIDC_ADMIN_CLIENT_ID: agent-membership
   OIDC_ADMIN_CLIENT_SECRET: ${AGENT_MEMBERSHIP_CLIENT_SECRET:?run ./gen-env.sh}
   # Keycloak resource-server settings (the verifier in the agent server reads these).
-  OIDC_ISSUER: ${KEYCLOAK_PUBLIC_URL:-http://keycloak.localhost:8080}/realms/loamz
+  OIDC_ISSUER: ${KEYCLOAK_PUBLIC_URL:-http://keycloak.localhost:${PORT_KEYCLOAK:-8081}}/realms/loamz
   OIDC_AUDIENCE: loamz-agents
   # Keycloak is on the cell's private network over plain http (TLS terminates at the proxy in front, if any).
   OIDC_INSECURE_HTTP: "true"
@@ -244,7 +244,7 @@ services:
     # The public name (keycloak.localhost) reaches this container from inside the cell too: one address for browsers and services.
     networks: { default: { aliases: ['keycloak.localhost'] } }
     image: quay.io/keycloak/keycloak:26.8.1
-    command: ["start", "--import-realm", "--http-enabled=true", "--hostname=${KEYCLOAK_PUBLIC_URL:-http://keycloak.localhost:8080}", "--hostname-strict=true", "--health-enabled=true", "--proxy-headers=xforwarded"]
+    command: ["start", "--import-realm", "--http-enabled=true", "--http-port=${PORT_KEYCLOAK:-8081}", "--hostname=${KEYCLOAK_PUBLIC_URL:-http://keycloak.localhost:${PORT_KEYCLOAK:-8081}}", "--hostname-strict=true", "--health-enabled=true", "--proxy-headers=xforwarded"]
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USER:-admin}
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?run ./gen-env.sh}
@@ -266,7 +266,7 @@ services:
     volumes:
       - ../keycloak/realm-loamz.json:/opt/keycloak/data/import/realm-loamz.json:ro
     ports:
-      - "${BIND_ADDR:-127.0.0.1}:${PORT_KEYCLOAK:-8080}:8080"
+      - "${BIND_ADDR:-127.0.0.1}:${PORT_KEYCLOAK:-8081}:${PORT_KEYCLOAK:-8081}"
     healthcheck:
       # The image has no curl; the management port (9000) answers /health/ready.
       test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /health/ready HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && grep -q '\"status\": \"UP\"' <&3"]
@@ -433,7 +433,7 @@ services:
     environment:
       BACKEND_API_URL: http://${AGENT_UPSTREAM:-agent-server:8000}
       DATABASE_URL: postgresql://${POSTGRES_USER:-substrate}:${POSTGRES_PASSWORD}@postgres:5432/substrate_ui?sslmode=require
-      OIDC_ISSUER: ${KEYCLOAK_PUBLIC_URL:-http://keycloak.localhost:8080}/realms/loamz
+      OIDC_ISSUER: ${KEYCLOAK_PUBLIC_URL:-http://keycloak.localhost:${PORT_KEYCLOAK:-8081}}/realms/loamz
       OIDC_CLIENT_ID: agents-console
       OIDC_CLIENT_SECRET: ${AGENTS_CONSOLE_CLIENT_SECRET:-${SUBSTRATE_UI_CLIENT_SECRET:?}}
       SESSION_SECRET: ${UI_SESSION_SECRET:?}
@@ -449,7 +449,7 @@ services:
     build: { context: ../.., dockerfile: deploy/docker/loamz-data-workspace.Dockerfile }
     environment:
       DATA_API_URL: http://data-api:8020
-      LOAMZ_DATA_OIDC_ISSUER: ${KEYCLOAK_PUBLIC_URL:-http://keycloak.localhost:8080}/realms/loamz
+      LOAMZ_DATA_OIDC_ISSUER: ${KEYCLOAK_PUBLIC_URL:-http://keycloak.localhost:${PORT_KEYCLOAK:-8081}}/realms/loamz
       WEB_CLIENT_ID: data-workspace
       WEB_CLIENT_SECRET: ${DATA_WORKSPACE_CLIENT_SECRET:-${SUBSTRATE_DATA_WEB_CLIENT_SECRET:?}}
       WEB_SESSION_SECRET: ${WEB_SESSION_SECRET:?}

@@ -63,38 +63,38 @@ app.kubernetes.io/component: {{ .component }}
 {{- define "cell.dataEnv" -}}
 - name: POSTGRES_PASSWORD
   valueFrom: { {{ include "cell.secretRef" (dict "root" . "key" "postgres-password") }} }
-- name: SUBSTRATE_DATA_INSECURE_HTTP_HOSTS
+- name: LOAMZ_DATA_INSECURE_HTTP_HOSTS
   value: {{ include "cell.insecureHosts" . | quote }}
-- name: SUBSTRATE_DATA_BEHIND_TLS_PROXY
+- name: LOAMZ_DATA_BEHIND_TLS_PROXY
   value: {{ .Values.data.behindTlsProxy | quote }}
-- name: SUBSTRATE_DATA_OIDC_ISSUER
+- name: LOAMZ_DATA_OIDC_ISSUER
   value: {{ include "cell.issuer" . | quote }}
 {{- if .Values.keycloak.internalJwks }}
-- name: SUBSTRATE_DATA_OIDC_JWKS_URL
+- name: LOAMZ_DATA_OIDC_JWKS_URL
   value: "{{ include "cell.keycloakInternal" . }}/realms/{{ .Values.keycloak.realm.name }}/protocol/openid-connect/certs"
 {{- end }}
-- name: SUBSTRATE_DATA_OIDC_AUDIENCE
+- name: LOAMZ_DATA_OIDC_AUDIENCE
   value: substrate-data
-- name: SUBSTRATE_DATA_S3_ENDPOINT_URL
+- name: LOAMZ_DATA_S3_ENDPOINT_URL
   value: {{ include "cell.s3Endpoint" . | quote }}
-- name: SUBSTRATE_DATA_S3_REGION
+- name: LOAMZ_DATA_S3_REGION
   value: {{ if .Values.s3.bundled.enabled }}us-east-1{{ else }}{{ .Values.s3.external.region }}{{ end }}
-- name: SUBSTRATE_DATA_ICEBERG_CATALOG_URL
+- name: LOAMZ_DATA_ICEBERG_CATALOG_URL
   value: {{ include "cell.icebergUrl" . | quote }}
-- name: SUBSTRATE_DATA_WAREHOUSE
+- name: LOAMZ_DATA_WAREHOUSE
   value: {{ .Values.s3.buckets.warehouse | quote }}
-- name: SUBSTRATE_DATA_STAGING_BUCKET
+- name: LOAMZ_DATA_STAGING_BUCKET
   value: {{ .Values.s3.buckets.staging | quote }}
-- name: SUBSTRATE_DATA_VOLUMES_BUCKET
+- name: LOAMZ_DATA_VOLUMES_BUCKET
   value: {{ .Values.s3.buckets.volumes | quote }}
-- name: SUBSTRATE_DATA_STORAGE_ID
+- name: LOAMZ_DATA_STORAGE_ID
   value: {{ default (printf "%s-warehouse" .Release.Name) .Values.s3.storageId | quote }}
-- name: SUBSTRATE_DATA_CONTROLLER_URL
+- name: LOAMZ_DATA_CONTROLLER_URL
   value: "https://{{ include "cell.fullname" . }}-data-controller:8040"
-- name: SUBSTRATE_DATA_INTERNAL_CA_FILE
+- name: LOAMZ_DATA_INTERNAL_CA_FILE
   value: /tls/ca.crt
 {{- if .Values.s3.stsRoleArn }}
-- name: SUBSTRATE_DATA_STORAGE_STS_ROLE_ARN
+- name: LOAMZ_DATA_STORAGE_STS_ROLE_ARN
   value: {{ .Values.s3.stsRoleArn | quote }}
 {{- end }}
 {{- end -}}

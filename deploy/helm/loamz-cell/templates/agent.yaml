@@ -3,22 +3,19 @@
   valueFrom: { {{ include "cell.secretRef" (dict "root" . "key" "postgres-password") }} }
 - name: REDIS_PASSWORD
   valueFrom: { {{ include "cell.secretRef" (dict "root" . "key" "redis-password") }} }
-- { name: DATABASE_URL, value: "postgresql+asyncpg://{{ include "cell.pgUser" . }}:$(POSTGRES_PASSWORD)@{{ include "cell.pgHost" . }}:{{ include "cell.pgPort" . }}/{{ .Values.postgres.databases.agent }}?ssl={{ include "cell.pgSslmode" . }}" }
-- { name: ASYNC_DATABASE_URL, value: "postgresql://{{ include "cell.pgUser" . }}:$(POSTGRES_PASSWORD)@{{ include "cell.pgHost" . }}:{{ include "cell.pgPort" . }}/{{ .Values.postgres.databases.agent }}?sslmode={{ include "cell.pgSslmode" . }}" }
-- { name: REDIS_URL, value: "redis://:$(REDIS_PASSWORD)@{{ include "cell.redisHost" . }}:{{ if and .Values.redis.enabled .Values.redis.bundled.enabled }}6379{{ else }}{{ .Values.redis.external.port }}{{ end }}/0" }
-- { name: STORE_BACKEND, value: postgres }
-- { name: DATA_SERVICE_URL, value: "http://{{ include "cell.fullname" . }}-data-api:8020" }
-- { name: OIDC_ISSUER, value: {{ include "cell.issuer" . | quote }} }
-- { name: OIDC_AUDIENCE, value: loamz-agents }
-- { name: LOAMZ_ROLES, value: {{ .Values.agents.roles | default "all" | quote }} }
-- { name: SERVICE_URL_TEMPLATE, value: "http://{{ include "cell.fullname" . }}-agent-{name}:{port}" }
-- { name: FRONTEND_URL, value: {{ .Values.publicUrls.ui | quote }} }
-- { name: CHAT_MODEL, value: {{ .Values.agents.model | default "google/gemini-3.1-flash-lite" | quote }} }
-- { name: SANDBOX_RUNTIME, value: {{ .Values.agents.sandbox.runtime | default "k8s" | quote }} }
-{{- with .Values.agents.sandbox.runtimeClassName }}
-- { name: SANDBOX_RUNTIME_CLASS, value: {{ . | quote }} }
+- { name: LOAMZ_AGENTS_DATABASE__URL, value: "postgresql://{{ include "cell.pgUser" . }}:$(POSTGRES_PASSWORD)@{{ include "cell.pgHost" . }}:{{ include "cell.pgPort" . }}/{{ .Values.postgres.databases.agent }}?sslmode={{ include "cell.pgSslmode" . }}" }
+{{- if .Values.redis.enabled }}
+- { name: LOAMZ_AGENTS_REDIS__URL, value: "redis://:$(REDIS_PASSWORD)@{{ include "cell.redisHost" . }}:{{ if .Values.redis.bundled.enabled }}6379{{ else }}{{ .Values.redis.external.port }}{{ end }}/0" }
 {{- end }}
-{{- range $env, $key := dict "OPENAI_API_KEY" "openai-api-key" "ANTHROPIC_API_KEY" "anthropic-api-key" "GEMINI_API_KEY" "gemini-api-key" "OPENROUTER_API_KEY" "openrouter-api-key" }}
+- { name: LOAMZ_AGENTS_OIDC__ISSUER, value: {{ include "cell.issuer" . | quote }} }
+- { name: LOAMZ_AGENTS_OIDC__AUDIENCE, value: loamz-agents }
+- { name: LOAMZ_AGENTS_HTTP__FRONTEND_URL, value: {{ .Values.publicUrls.ui | quote }} }
+- { name: LOAMZ_AGENTS_LLM__MODEL, value: {{ .Values.agents.model | default "google/gemini-3.1-flash-lite" | quote }} }
+- { name: LOAMZ_AGENTS_SANDBOX__RUNTIME, value: {{ .Values.agents.sandbox.runtime | default "k8s" | quote }} }
+{{- with .Values.agents.sandbox.runtimeClassName }}
+- { name: LOAMZ_AGENTS_SANDBOX__RUNTIME_CLASS, value: {{ . | quote }} }
+{{- end }}
+{{- range $env, $key := dict "LOAMZ_AGENTS_LLM__OPENAI_API_KEY" "openai-api-key" "LOAMZ_AGENTS_LLM__ANTHROPIC_API_KEY" "anthropic-api-key" "LOAMZ_AGENTS_LLM__GEMINI_API_KEY" "gemini-api-key" "LOAMZ_AGENTS_LLM__OPENROUTER_API_KEY" "openrouter-api-key" }}
 - name: {{ $env }}
   valueFrom: { secretKeyRef: { name: {{ include "cell.secretName" $ }}, key: {{ $key }}, optional: true } }
 {{- end }}

@@ -34,7 +34,7 @@ on the cell's private network.
 | 8044 | loamz-data worker, `inference` | reserved | not deployed by default |
 | 8050 | loamz-data worker `inference` (profile `ml`) | internal | image default is 8080 |
 | 8060 | loamz-data-reader | reserved | image default is 8080; start with `--port 8060` |
-| 8080 | Keycloak | published (`PORT_KEYCLOAK`) | management/health on 9000 (internal) |
+| 8081 | Keycloak | published (`PORT_KEYCLOAK`) | management/health on 9000 (internal) |
 | 8181 | SeaweedFS Iceberg REST catalog | internal | |
 | 8333 | SeaweedFS S3 API | published (`PORT_S3`) | browsers use presigned URLs against it |
 | 9000 | Keycloak management | internal | `/health/ready` |

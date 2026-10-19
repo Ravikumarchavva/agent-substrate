@@ -5,30 +5,30 @@
 {{- $worker := list }}
 {{- /* control plane API */}}
 {{- $apiEnv := printf `%s
-- name: SUBSTRATE_DATA_METADATA_URL
+- name: LOAMZ_DATA_METADATA_URL
   value: "postgresql://%s:$(POSTGRES_PASSWORD)@%s:%s/%s?sslmode=%s"
-- name: SUBSTRATE_DATA_CONTROLLER_TOKEN
+- name: LOAMZ_DATA_CONTROLLER_TOKEN
   valueFrom: { %s }
-- name: SUBSTRATE_DATA_S3_ACCESS_KEY_ID
+- name: LOAMZ_DATA_S3_ACCESS_KEY_ID
   valueFrom: { %s }
-- name: SUBSTRATE_DATA_S3_SECRET_ACCESS_KEY
+- name: LOAMZ_DATA_S3_SECRET_ACCESS_KEY
   valueFrom: { %s }
-- name: SUBSTRATE_DATA_MASK_SALT
+- name: LOAMZ_DATA_MASK_SALT
   valueFrom: { %s }
-- name: SUBSTRATE_DATA_RETRIEVAL_URL
+- name: LOAMZ_DATA_RETRIEVAL_URL
   value: "postgresql://%s:$(POSTGRES_PASSWORD)@%s:%s/%s?sslmode=%s"
-- { name: SUBSTRATE_DATA_RETRIEVAL_DIR, value: /var/lib/substrate-data/retrieval }
-- { name: SUBSTRATE_DATA_TICKET_PRIVATE_KEY_FILE, value: /keys/ticket.pem }
-- { name: SUBSTRATE_DATA_VOLUMES_PUBLIC_ENDPOINT_URL, value: %s }
-- { name: SUBSTRATE_DATA_SCRATCH, value: /var/lib/substrate-data/tmp }` $dataEnv (include "cell.pgUser" .) (include "cell.pgHost" .) (include "cell.pgPort" .) .Values.postgres.databases.data (include "cell.pgSslmode" .) (include "cell.secretRef" (dict "root" . "key" "controller-token")) (include "cell.secretRef" (dict "root" . "key" "control-s3-access-key-id")) (include "cell.secretRef" (dict "root" . "key" "control-s3-secret-access-key")) (include "cell.secretRef" (dict "root" . "key" "mask-salt")) (include "cell.pgUser" .) (include "cell.pgHost" .) (include "cell.pgPort" .) .Values.postgres.databases.retrieval (include "cell.pgSslmode" .) (.Values.publicUrls.s3 | quote) }}
+- { name: LOAMZ_DATA_RETRIEVAL_DIR, value: /var/lib/substrate-data/retrieval }
+- { name: LOAMZ_DATA_TICKET_PRIVATE_KEY_FILE, value: /keys/ticket.pem }
+- { name: LOAMZ_DATA_VOLUMES_PUBLIC_ENDPOINT_URL, value: %s }
+- { name: LOAMZ_DATA_SCRATCH, value: /var/lib/substrate-data/tmp }` $dataEnv (include "cell.pgUser" .) (include "cell.pgHost" .) (include "cell.pgPort" .) .Values.postgres.databases.data (include "cell.pgSslmode" .) (include "cell.secretRef" (dict "root" . "key" "controller-token")) (include "cell.secretRef" (dict "root" . "key" "control-s3-access-key-id")) (include "cell.secretRef" (dict "root" . "key" "control-s3-secret-access-key")) (include "cell.secretRef" (dict "root" . "key" "mask-salt")) (include "cell.pgUser" .) (include "cell.pgHost" .) (include "cell.pgPort" .) .Values.postgres.databases.retrieval (include "cell.pgSslmode" .) (.Values.publicUrls.s3 | quote) }}
 {{- include "cell.workload" (dict "root" . "component" "data-api" "repo" "substrate-data" "override" $img "port" 8020 "probePath" "/readyz" "args" (list "serve" "--host" "0.0.0.0" "--port" "8020") "cfg" .Values.data.api "env" $apiEnv "writable" (list (dict "name" "state" "path" "/var/lib/substrate-data") (dict "name" "home" "path" "/opt/substrate/home-rw")) "scheme" "HTTP" "volumes" (list (dict "name" "ticket" "secret" (dict "secretName" $tkName "items" (list (dict "key" "ticket.pem" "path" "ticket.pem")))) (dict "name" "tls" "secret" (dict "secretName" (printf "%s-internal-tls" $kc)))) "volumeMounts" (list (dict "name" "ticket" "mountPath" "/keys" "readOnly" true) (dict "name" "tls" "mountPath" "/tls" "readOnly" true))) }}
 
 {{- /* controller: one active, its queue in a PVC */}}
 {{- $ctrlEnv := printf `%s
-- name: SUBSTRATE_DATA_CONTROLLER_TOKEN
+- name: LOAMZ_DATA_CONTROLLER_TOKEN
   valueFrom: { %s }
-- { name: SUBSTRATE_DATA_TLS_CERT_FILE, value: /tls/tls.crt }
-- { name: SUBSTRATE_DATA_TLS_KEY_FILE, value: /tls/tls.key }` $dataEnv (include "cell.secretRef" (dict "root" . "key" "controller-token")) }}
+- { name: LOAMZ_DATA_TLS_CERT_FILE, value: /tls/tls.crt }
+- { name: LOAMZ_DATA_TLS_KEY_FILE, value: /tls/tls.key }` $dataEnv (include "cell.secretRef" (dict "root" . "key" "controller-token")) }}
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -46,17 +46,17 @@ spec:
 {{- /* workers: SQL, jobs, RAG */}}
 {{- $ports := dict "sql" 8041 "jobs" 8042 "rag" 8043 }}
 {{- $workerEnv := printf `%s
-- name: SUBSTRATE_DATA_WORKER_TOKEN
+- name: LOAMZ_DATA_WORKER_TOKEN
   valueFrom: { %s }
-- name: SUBSTRATE_DATA_S3_ACCESS_KEY_ID
+- name: LOAMZ_DATA_S3_ACCESS_KEY_ID
   valueFrom: { %s }
-- name: SUBSTRATE_DATA_S3_SECRET_ACCESS_KEY
+- name: LOAMZ_DATA_S3_SECRET_ACCESS_KEY
   valueFrom: { %s }
-- { name: SUBSTRATE_DATA_WORKER_BIND_HOST, value: 0.0.0.0 }
-- { name: SUBSTRATE_DATA_WORKER_MEMORY_LIMIT, value: %s }
-- { name: SUBSTRATE_DATA_TICKET_PUBLIC_KEY_FILE, value: /keys/ticket.pub.pem }
-- { name: SUBSTRATE_DATA_TLS_CERT_FILE, value: /tls/tls.crt }
-- { name: SUBSTRATE_DATA_TLS_KEY_FILE, value: /tls/tls.key }` $dataEnv (include "cell.secretRef" (dict "root" . "key" "worker-token")) (include "cell.secretRef" (dict "root" . "key" "worker-s3-access-key-id")) (include "cell.secretRef" (dict "root" . "key" "worker-s3-secret-access-key")) (.Values.data.workers.memoryLimit | quote) }}
+- { name: LOAMZ_DATA_WORKER_BIND_HOST, value: 0.0.0.0 }
+- { name: LOAMZ_DATA_WORKER_MEMORY_LIMIT, value: %s }
+- { name: LOAMZ_DATA_TICKET_PUBLIC_KEY_FILE, value: /keys/ticket.pub.pem }
+- { name: LOAMZ_DATA_TLS_CERT_FILE, value: /tls/tls.crt }
+- { name: LOAMZ_DATA_TLS_KEY_FILE, value: /tls/tls.key }` $dataEnv (include "cell.secretRef" (dict "root" . "key" "worker-token")) (include "cell.secretRef" (dict "root" . "key" "worker-s3-access-key-id")) (include "cell.secretRef" (dict "root" . "key" "worker-s3-secret-access-key")) (.Values.data.workers.memoryLimit | quote) }}
 {{- range $role, $port := $ports }}
 {{- include "cell.workload" (dict "root" $ "component" (printf "data-worker-%s" $role) "repo" "substrate-data" "override" $img "port" $port "probePath" "/readyz" "args" (list "worker" "--role" $role "--port" ($port | toString)) "cfg" (index $.Values.data.workers $role) "env" $workerEnv "writable" (list (dict "name" "state" "path" "/var/lib/substrate-data")) "scheme" "HTTPS" "volumes" (list (dict "name" "ticket" "secret" (dict "secretName" $tkName "items" (list (dict "key" "ticket.pub.pem" "path" "ticket.pub.pem")))) (dict "name" "tls" "secret" (dict "secretName" (printf "%s-internal-tls" $kc)))) "volumeMounts" (list (dict "name" "ticket" "mountPath" "/keys" "readOnly" true) (dict "name" "tls" "mountPath" "/tls" "readOnly" true))) }}
 {{- end }}
@@ -156,13 +156,13 @@ spec:
             - |
               for role in sql jobs rag; do
                 case $role in sql) port=8041;; jobs) port=8042;; rag) port=8043;; esac
-                substrate-data attach --name "$role" --role "$role" --url "https://{{ $kc }}-data-worker-$role:$port" --token-env SUBSTRATE_DATA_WORKER_TOKEN
+                substrate-data attach --name "$role" --role "$role" --url "https://{{ $kc }}-data-worker-$role:$port" --token-env LOAMZ_DATA_WORKER_TOKEN
               done
           env:
             {{- $dataEnv | nindent 12 }}
-            - name: SUBSTRATE_DATA_CONTROLLER_TOKEN
+            - name: LOAMZ_DATA_CONTROLLER_TOKEN
               valueFrom: { {{ include "cell.secretRef" (dict "root" . "key" "controller-token") }} }
-            - name: SUBSTRATE_DATA_WORKER_TOKEN
+            - name: LOAMZ_DATA_WORKER_TOKEN
               valueFrom: { {{ include "cell.secretRef" (dict "root" . "key" "worker-token") }} }
           securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: [ALL] } }
           volumeMounts: [ { name: tmp, mountPath: /tmp }, { name: tls, mountPath: /tls, readOnly: true } ]

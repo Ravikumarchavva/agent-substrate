@@ -16,13 +16,13 @@ ENV = dict(
     for line in Path(sys.argv[1]).read_text().splitlines()
     if "=" in line and not line.startswith("#")
 )
-KC = f"http://localhost:{ENV.get('PORT_KEYCLOAK', '8080')}"
+KC = f"http://localhost:{ENV.get('PORT_KEYCLOAK', '8081')}"
 REALM = f"{KC}/realms/loamz"
 AGENT = "http://localhost:8000/api/v1"
 DATA = f"http://localhost:{ENV.get('PORT_DATA_API', '8020')}/api/v1"
-# Keycloak only answers for its configured hostname; browsers and containers know it as keycloak:8080.
+# Keycloak only answers for its configured hostname; browsers and containers know it as keycloak.localhost:8081.
 KC_HOST = {
-    "Host": ENV.get("KEYCLOAK_PUBLIC_URL", "http://keycloak.localhost:8080").split("://", 1)[1]
+    "Host": ENV.get("KEYCLOAK_PUBLIC_URL", "http://keycloak.localhost:8081").split("://", 1)[1]
 }
 http = httpx.Client(timeout=60)
 

@@ -405,7 +405,7 @@ class Stack:
     def client(self, name: str, *groups: str):
         from loamz.data import DataClient
 
-        return DataClient(self.api, token=lambda: self.token(name, *groups))
+        return DataClient(self.api, credential=lambda: self.token(name, *groups))
 
     def member(self, name: str, tenant: str, *groups: str, **claims: Any):
         """A client signed in to the organization `tenant` (its Keycloak `organization` claim)."""
@@ -413,14 +413,16 @@ class Stack:
 
         return DataClient(
             self.api,
-            token=lambda: self.identity.token(name, groups, organization=[tenant], **claims),
+            credential=lambda: self.identity.token(name, groups, organization=[tenant], **claims),
         )
 
     def agent_client(self, user: str, tenant: str = "acme", **claims: Any):
         """A client holding an agent's delegated token; `scopes=("files:write", …)` sets its scopes."""
         from loamz.data import DataClient
 
-        return DataClient(self.api, token=lambda: self.identity.agent_token(user, tenant, **claims))
+        return DataClient(
+            self.api, credential=lambda: self.identity.agent_token(user, tenant, **claims)
+        )
 
     def http(self, name: str | None, *groups: str) -> httpx.Client:
         headers = {"Authorization": "Bearer " + self.token(name, *groups)} if name else {}
@@ -626,13 +628,16 @@ class DocsService:
     def client(self, user: str, tenant: str = "acme", *scopes: str, **claims: Any):
         from loamz.data import DataClient
 
-        return DataClient(self.url, token=lambda: self.agent_token(user, tenant, *scopes, **claims))
+        return DataClient(
+            self.url, credential=lambda: self.agent_token(user, tenant, *scopes, **claims)
+        )
 
     def admin(self, tenant: str = "acme"):
         from loamz.data import DataClient
 
         return DataClient(
-            self.url, token=lambda: self.identity.token("alice", ("data-admins",), tenant_id=tenant)
+            self.url,
+            credential=lambda: self.identity.token("alice", ("data-admins",), tenant_id=tenant),
         )
 
     def http(self, user: str, tenant: str = "acme", *scopes: str, **claims: Any) -> httpx.Client:
@@ -892,7 +897,8 @@ class ProcessStack:
 
         groups = groups or ADMIN
         return DataClient(
-            f"http://127.0.0.1:{self.ports['api']}", token=lambda: self.identity.token(name, groups)
+            f"http://127.0.0.1:{self.ports['api']}",
+            credential=lambda: self.identity.token(name, groups),
         )
 
 

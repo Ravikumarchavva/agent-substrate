@@ -11,7 +11,12 @@ import json
 
 import pytest
 
-from loamz.data import DataError, ForbiddenError, InsufficientScopeError, NotFoundError
+from loamz.core.exceptions import (
+    ForbiddenError,
+    HttpResponseError,
+    InsufficientScopeError,
+    NotFoundError,
+)
 from loamz.engine.documents.types import (
     ExtractedImage,
     ExtractedImageLabel,
@@ -185,7 +190,7 @@ def test_enrichment_is_written_back_by_the_caller(alice):
     alice.documents.set_topics(cid, {doc: ["ops/finance"]}, "tester")
     assert alice.documents.get(cid, doc)["topics"] == ["ops/finance"]
     assert alice.documents.pending_all(f"tenants/{T1}/users/alice/%", enricher=enricher)
-    with pytest.raises(DataError):  # a pattern outside the tenant is refused
+    with pytest.raises(HttpResponseError):  # a pattern outside the tenant is refused
         alice.documents.pending_all("tenants/%", enricher=enricher)
 
 

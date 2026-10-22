@@ -1,4 +1,4 @@
-"""RFC 9457 problems from Loamz Data as exceptions, one class per problem `code`.
+"""RFC 9457 problems from any Loamz service as exceptions, one class per problem `code`.
 
     try:
         client.files.upload("tenant_acme.workspace.files", "a.txt", b"hello", if_none_match=True)
@@ -18,7 +18,7 @@ from __future__ import annotations
 from typing import Any, ClassVar
 
 
-class DataError(Exception):
+class HttpResponseError(Exception):
     """A problem returned by the service, or a failure reaching it."""
 
     code = "error"
@@ -37,7 +37,7 @@ class DataError(Exception):
         super().__init__(f"{status} {self.code}: {self.detail}")
 
 
-class InvalidRequestError(DataError):
+class InvalidRequestError(HttpResponseError):
     code = "invalid-request"
 
 
@@ -49,13 +49,13 @@ class UnsupportedContentError(InvalidRequestError):
     code = "unsupported-content"
 
 
-class UnauthenticatedError(DataError):
+class UnauthenticatedError(HttpResponseError):
     """401: no token, or an expired or untrusted one."""
 
     code = "unauthenticated"
 
 
-class ForbiddenError(DataError):
+class ForbiddenError(HttpResponseError):
     """403: the caller may not do this (grants, ownership, a read-only token)."""
 
     code = "forbidden"
@@ -71,30 +71,30 @@ class InsufficientScopeError(ForbiddenError):
         return list(self.problem.get("required", []))
 
 
-class NotFoundError(DataError):
+class NotFoundError(HttpResponseError):
     code = "not-found"
 
 
-class ConflictError(DataError):
+class ConflictError(HttpResponseError):
     """409: the state does not allow this (already exists, an incomplete upload, a size mismatch)."""
 
     code = "conflict"
     retryable = True
 
 
-class ScopeViolationError(DataError):
+class ScopeViolationError(HttpResponseError):
     """409: the record id belongs to another owner."""
 
     code = "scope-violation"
 
 
-class PreconditionFailedError(DataError):
+class PreconditionFailedError(HttpResponseError):
     """412: `If-Match` / `If-None-Match` did not hold; reload and decide again."""
 
     code = "precondition-failed"
 
 
-class QuotaExceededError(DataError):
+class QuotaExceededError(HttpResponseError):
     """413: a size or count limit (a volume's byte quota, a file or result too large)."""
 
     code = "quota-exceeded"
@@ -108,29 +108,29 @@ class QuotaExceededError(DataError):
         return self.problem.get("used")
 
 
-class VectorSpaceError(DataError):
+class VectorSpaceError(HttpResponseError):
     code = "vector-space"
 
 
-class SchemaVersionError(DataError):
+class SchemaVersionError(HttpResponseError):
     code = "schema-version"
 
 
-class RateLimitedError(DataError):
+class RateLimitedError(HttpResponseError):
     """429: slow down; `retry_after` seconds when the server said."""
 
     code = "rate-limited"
     retryable = True
 
 
-class ServiceUnavailableError(DataError):
+class ServiceUnavailableError(HttpResponseError):
     """502, 503, 504, or the service could not be reached at all."""
 
     code = "unavailable"
     retryable = True
 
 
-class ResultTooLargeError(DataError):
+class ResultTooLargeError(HttpResponseError):
     """The result is bigger than this process should hold. Aggregate in SQL, or use `stream()`."""
 
     code = "result-too-large"
@@ -148,7 +148,7 @@ class ResultTooLargeError(DataError):
         )
 
 
-ERRORS: dict[str, type[DataError]] = {
+ERRORS: dict[str, type[HttpResponseError]] = {
     cls.code: cls
     for cls in (
         InvalidRequestError,
@@ -170,7 +170,7 @@ ERRORS: dict[str, type[DataError]] = {
 }
 """Problem `code` -> class."""
 
-_BY_STATUS: dict[int, type[DataError]] = {
+_BY_STATUS: dict[int, type[HttpResponseError]] = {
     400: InvalidRequestError,
     401: UnauthenticatedError,
     403: ForbiddenError,
@@ -186,23 +186,36 @@ _BY_STATUS: dict[int, type[DataError]] = {
 }
 
 
+# Azure-style names for the same classes, so code written against any cloud SDK reads the same here.
+ResourceNotFoundError = NotFoundError
+ResourceExistsError = ConflictError
+ClientAuthenticationError = UnauthenticatedError
+PermissionDeniedError = ForbiddenError
+ServiceRequestError = ServiceUnavailableError
+
+
 def code_of(problem: dict[str, Any]) -> str:
     return str(problem.get("type", "")).rsplit("/", 1)[-1]
 
 
 def error_for(
     status: int, problem: dict[str, Any], *, retry_after: float | None = None
-) -> DataError:
+) -> HttpResponseError:
     """The class for a problem: its `code` first, then the HTTP status."""
-    cls = ERRORS.get(code_of(problem)) or _BY_STATUS.get(status, DataError)
+    cls = ERRORS.get(code_of(problem)) or _BY_STATUS.get(status, HttpResponseError)
     return cls(status, problem, retry_after=retry_after)
 
 
 __all__ = [
     "ERRORS",
+    "ClientAuthenticationError",
+    "PermissionDeniedError",
+    "ResourceExistsError",
+    "ResourceNotFoundError",
+    "ServiceRequestError",
     "ConflictError",
     "ContextLengthError",
-    "DataError",
+    "HttpResponseError",
     "ForbiddenError",
     "InsufficientScopeError",
     "InvalidRequestError",

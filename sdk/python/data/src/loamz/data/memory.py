@@ -12,7 +12,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from loamz.data._http import AsyncCore, SyncCore
+from loamz.core.transport import AsyncTransport, SyncTransport
 
 
 def _owner(user_id: str | None, agent_id: str | None, session_id: str | None) -> dict[str, str]:
@@ -106,7 +106,7 @@ class _MemoryCalls:
 
 
 class Memory(_MemoryCalls):
-    def __init__(self, core: SyncCore):
+    def __init__(self, core: SyncTransport):
         self._core = core
 
     def _do(self, method, path, post=None, **kwargs):
@@ -115,7 +115,7 @@ class Memory(_MemoryCalls):
 
 
 class AsyncMemory(_MemoryCalls):
-    def __init__(self, core: AsyncCore):
+    def __init__(self, core: AsyncTransport):
         self._core = core
 
     async def _do(self, method, path, post=None, **kwargs):

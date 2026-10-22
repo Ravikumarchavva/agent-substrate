@@ -9,7 +9,7 @@ import httpx
 import polars as pl
 import pytest
 
-from loamz.data import DataError
+from loamz.core.exceptions import HttpResponseError
 from tests.data.conftest import ADMIN
 
 pytestmark = pytest.mark.integration
@@ -120,7 +120,7 @@ def test_multifile_csv_import(stack, tmp_path):
 
 def test_governance_for_an_analyst(stack, taxi):
     bob = stack.client("bob", "analysts")
-    with pytest.raises(DataError) as caught:
+    with pytest.raises(HttpResponseError) as caught:
         bob.sql("SELECT count(*) FROM main.nyc.trips")
     assert caught.value.status == 404  # existence is not disclosed
     with stack.http("alice", *ADMIN) as admin:
@@ -130,7 +130,7 @@ def test_governance_for_an_analyst(stack, taxi):
         )
         assert changed.status_code == 200, changed.text
     assert bob.sql("SELECT count(*) AS n FROM main.nyc.trips").item() == 9000
-    with pytest.raises(DataError) as caught:
+    with pytest.raises(HttpResponseError) as caught:
         bob.request(
             "POST",
             "/imports",
@@ -150,7 +150,7 @@ def test_governance_for_an_analyst(stack, taxi):
         assert any(
             e["action"] == "grants.update" and e["principal"] == "user:alice" for e in events
         )
-    with pytest.raises(DataError) as caught:
+    with pytest.raises(HttpResponseError) as caught:
         bob.sql("SELECT count(*) FROM main.nyc.trips")
     assert caught.value.status == 404  # no privilege left: the table is hidden again
     history = bob.request("GET", "/statements")["statements"]
@@ -283,7 +283,7 @@ def test_views_share_a_slice_without_exposing_the_table(stack, sales):
         created["owner"] == "user:alice" and created["full_name"] == "main.sales.revenue_by_region"
     )
     # Bob sees neither table nor view until granted the view only.
-    with pytest.raises(DataError) as caught:
+    with pytest.raises(HttpResponseError) as caught:
         bob.sql("SELECT * FROM main.sales.revenue_by_region")
     assert caught.value.status == 404
     with stack.http("alice", *ADMIN) as http:
@@ -300,7 +300,7 @@ def test_views_share_a_slice_without_exposing_the_table(stack, sales):
         "SELECT * FROM main.sales.orders",
         "SELECT customer FROM main.sales.orders LIMIT 1",
     ]:
-        with pytest.raises(DataError) as caught:
+        with pytest.raises(HttpResponseError) as caught:
             bob.sql(sql)
         assert caught.value.status == 404
     history = bob.request("GET", "/statements")["statements"]
@@ -339,10 +339,10 @@ def test_view_definition_is_validated_and_authorized_at_creation(stack, sales):
         "SELECT * FROM read_csv('/etc/passwd')",
         "SELECT 1; SELECT 2",
     ]:
-        with pytest.raises(DataError) as caught:
+        with pytest.raises(HttpResponseError) as caught:
             admin.create_view("main.sales.bad", sql)
         assert caught.value.status == 400
-    with pytest.raises(DataError) as caught:
+    with pytest.raises(HttpResponseError) as caught:
         admin.create_view("main.sales.bad", "SELECT * FROM main.sales.missing")
     assert caught.value.status == 404
     with stack.http("alice", *ADMIN) as http:
@@ -351,10 +351,10 @@ def test_view_definition_is_validated_and_authorized_at_creation(stack, sales):
             json={"changes": [{"principal": "group:analysts", "add": ["CREATE_TABLE"]}]},
         )
     # Bob may create objects in the schema but cannot define a view over data he cannot read.
-    with pytest.raises(DataError) as caught:
+    with pytest.raises(HttpResponseError) as caught:
         bob.create_view("main.sales.sneaky", "SELECT customer FROM main.sales.orders")
     assert caught.value.status == 404
-    with pytest.raises(DataError) as caught:
+    with pytest.raises(HttpResponseError) as caught:
         admin.create_view("main.sales.orders", "SELECT 1 AS x")  # a table already has that name
     assert caught.value.status == 409
 

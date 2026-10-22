@@ -7,7 +7,7 @@ import time
 import polars as pl
 import pytest
 
-from loamz.data import DataError
+from loamz.core.exceptions import HttpResponseError
 from tests.data.conftest import ADMIN
 
 pytestmark = pytest.mark.integration
@@ -291,5 +291,5 @@ def test_the_salt_never_appears_in_history_or_to_clients(stack, people):
     erin.sql("SELECT email FROM main.pol.people")
     history = erin.request("GET", "/statements")["statements"]
     assert history and "test-salt-9f3a" not in str(history)
-    with pytest.raises(DataError):
+    with pytest.raises(HttpResponseError):
         erin.request("GET", "/catalogs/main/schemas/pol/tables/people/policy")  # 403: not the owner

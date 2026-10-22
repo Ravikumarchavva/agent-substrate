@@ -8,8 +8,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from loamz.core.exceptions import NotFoundError as ClientNotFoundError
 from loamz.data.documents import collection_id
-from loamz.data.errors import NotFoundError as ClientNotFoundError
 from loamz.engine.agents.data._connection import (
     DataServiceConnection,
     TokenProvider,

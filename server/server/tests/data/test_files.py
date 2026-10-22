@@ -13,17 +13,16 @@ import pytest
 from botocore.client import Config
 from botocore.exceptions import ClientError
 
-from loamz.data import (
-    AsyncDataClient,
-    DataClient,
-    DataError,
+from loamz.core.exceptions import (
     ForbiddenError,
+    HttpResponseError,
     InsufficientScopeError,
     InvalidRequestError,
     NotFoundError,
     PreconditionFailedError,
     QuotaExceededError,
 )
+from loamz.data import AsyncDataClient, DataClient
 from loamz.engine.errors import LoamzError
 from loamz.server.data.features.files.service import files_service
 from tests.data.conftest import ADMIN, VOLUMES_BUCKET
@@ -149,20 +148,20 @@ def test_the_bytes_that_arrive_must_match_what_was_declared(env, admin):
         "object_key"
     ]
     storage(env.settings).put_object(Bucket=VOLUMES_BUCKET, Key=key, Body=b"123456789")
-    with pytest.raises(DataError) as mismatch:
+    with pytest.raises(HttpResponseError) as mismatch:
         admin.files.complete_upload(VOL, swapped["upload_id"])
     assert mismatch.value.status == 409 and mismatch.value.code == "conflict"
     assert not admin.files.exists(VOL, "checks/swapped.bin")
     # An upload never sent is incomplete, and can be completed once it arrives.
     late = admin.files.initiate_upload(VOL, "checks/late.bin", 3)
-    with pytest.raises(DataError) as missing:
+    with pytest.raises(HttpResponseError) as missing:
         admin.files.complete_upload(VOL, late["upload_id"])
     assert missing.value.code == "upload-incomplete"
     admin.files.put_to_url(late["url"], b"abc", late["headers"])
     assert admin.files.complete_upload(VOL, late["upload_id"]).size == 3
     # A wrong SHA-256 is refused by the object store itself, before anything is stored.
     wrong = admin.files.initiate_upload(VOL, "checks/wrong.bin", 5, sha256="0" * 64)
-    with pytest.raises(DataError) as refused:
+    with pytest.raises(HttpResponseError) as refused:
         admin.files.put_to_url(wrong["url"], b"12345", wrong["headers"])
     assert refused.value.status == 400
     with pytest.raises(NotFoundError):
@@ -303,7 +302,9 @@ def test_many_small_files_move_with_batch_signing(admin):
         f"batch/f{i:03d}.txt": f"file {i}".encode() for i in range(230)
     }  # > 200: two sign calls
     written = admin.files.put_many(VOL, files)
-    assert all(not isinstance(v, DataError) for v in written.values()) and len(written) == 230
+    assert (
+        all(not isinstance(v, HttpResponseError) for v in written.values()) and len(written) == 230
+    )
     got = admin.files.get_many(VOL, [*files, "batch/missing.txt", "batch/../escape.txt"])
     assert {p: v for p, v in got.items() if isinstance(v, bytes)} == files
     assert isinstance(got["batch/missing.txt"], NotFoundError)
@@ -362,13 +363,13 @@ def test_traversal_and_malformed_paths_are_refused_everywhere(admin, path):
         lambda: admin.files.download_url(VOL, path),
         lambda: admin.files.restore(VOL, path),
     ):
-        with pytest.raises((InvalidRequestError, NotFoundError, DataError)) as refused:
+        with pytest.raises((InvalidRequestError, NotFoundError, HttpResponseError)) as refused:
             call()
         assert refused.value.status in {400, 404}
     for prefix in ("../", "/", "a\\b"):
-        with pytest.raises(DataError):
+        with pytest.raises(HttpResponseError):
             list(admin.files.list(VOL, prefix))
-        with pytest.raises(DataError):
+        with pytest.raises(HttpResponseError):
             admin.files.copy_prefix(VOL, prefix, "ok/")
 
 
@@ -541,7 +542,7 @@ def test_an_upload_session_is_promoted_into_a_volume_by_a_server_side_copy(env, 
         bob.files.promote_session(started["id"], VOL, "sessions/a.txt")  # someone else's session
     info = admin.files.promote_session(started["id"], VOL, "sessions/a.txt", if_none_match=True)
     assert info.size == 11 and admin.files.read(VOL, "sessions/a.txt") == b"hello world"
-    with pytest.raises(DataError) as spent:
+    with pytest.raises(HttpResponseError) as spent:
         admin.files.promote_session(started["id"], VOL, "sessions/again.txt")
     assert spent.value.status == 409
     # Promotion respects quotas and grants of the target volume.
@@ -622,7 +623,9 @@ def test_files_of_an_unregistered_volume_are_removed_by_the_sweeper(env, admin):
 # ------------------------------------------------------------------ the asyncio client
 def test_the_async_client_does_the_same_things_concurrently(env):
     async def scenario() -> None:
-        async with AsyncDataClient(env.api, token=lambda: env.token("alice", *ADMIN)) as client:
+        async with AsyncDataClient(
+            env.api, credential=lambda: env.token("alice", *ADMIN)
+        ) as client:
             files = client.files
             await asyncio.gather(
                 *(files.upload(VOL, f"aio/f{i}.txt", f"async {i}".encode()) for i in range(12))
@@ -633,7 +636,7 @@ def test_the_async_client_does_the_same_things_concurrently(env):
             many = await files.get_many(VOL, listed)
             assert many["aio/f11.txt"] == b"async 11"
             written = await files.put_many(VOL, {"aio/batch/a": b"a", "aio/batch/b": b"b"})
-            assert all(not isinstance(v, DataError) for v in written.values())
+            assert all(not isinstance(v, HttpResponseError) for v in written.values())
             with pytest.raises(PreconditionFailedError):
                 await files.upload(VOL, "aio/f3.txt", b"x", if_none_match=True)
             big = os.urandom(70 * MiB)

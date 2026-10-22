@@ -9,7 +9,8 @@ import json
 import httpx
 import pytest
 
-from loamz.data import AsyncDataClient, DataClient, NotFoundError
+from loamz.core.exceptions import NotFoundError
+from loamz.data import AsyncDataClient, DataClient
 
 
 class Recorder:
@@ -43,9 +44,11 @@ class Recorder:
 
 def clients(recorder: Recorder):
     return (
-        DataClient("http://data", token="t", transport=httpx.MockTransport(recorder), retry=None),
+        DataClient(
+            "http://data", credential="t", transport=httpx.MockTransport(recorder), retry=None
+        ),
         AsyncDataClient(
-            "http://data", token="t", transport=httpx.MockTransport(recorder), retry=None
+            "http://data", credential="t", transport=httpx.MockTransport(recorder), retry=None
         ),
     )
 

@@ -6,30 +6,27 @@ import asyncio
 import re
 import subprocess
 import sys
-import types
 
 import httpx
 import pytest
 
 import loamz.data as sd
-from loamz.data import (
-    AsyncDataClient,
+from loamz.core import RetryPolicy
+from loamz.core.exceptions import (
     ConflictError,
-    DataClient,
-    DataError,
     ForbiddenError,
+    HttpResponseError,
     InsufficientScopeError,
     InvalidRequestError,
     NotFoundError,
     PreconditionFailedError,
     QuotaExceededError,
     RateLimitedError,
-    RetryPolicy,
     ServiceUnavailableError,
     UnauthenticatedError,
-    trace_context,
 )
-from loamz.data.auth import ClientCredentials
+from loamz.core.transport import trace_context
+from loamz.data import AsyncDataClient, DataClient
 
 
 def problem(status: int, slug: str, detail: str = "nope", **extra):
@@ -61,7 +58,7 @@ class Recorder:
 def client(*responses, **options):
     recorder = Recorder(*responses)
     sleeps: list[float] = []
-    options.setdefault("token", "tok")
+    options.setdefault("credential", "tok")
     api = DataClient(
         "http://data.test",
         transport=httpx.MockTransport(recorder),
@@ -89,17 +86,17 @@ def client(*responses, **options):
         (429, "rate-limited", RateLimitedError),
         (503, "storage-unavailable", ServiceUnavailableError),
         (502, "result-incomplete", ServiceUnavailableError),
-        (500, "internal-error", DataError),
+        (500, "internal-error", HttpResponseError),
     ],
 )
 def test_problem_types_map_to_exception_classes(status, slug, expected):
     api, _, _ = client(problem(status, slug), retry=None)
-    with pytest.raises(DataError) as caught:
+    with pytest.raises(HttpResponseError) as caught:
         api.request("POST", "/anything")
     error = caught.value
     assert type(error) is expected
     assert error.status == status and error.code == slug and error.request_id == "req-1"
-    assert isinstance(error, DataError) and str(status) in str(error)
+    assert isinstance(error, HttpResponseError) and str(status) in str(error)
 
 
 def test_error_details_survive_on_the_exception():
@@ -115,7 +112,7 @@ def test_error_details_survive_on_the_exception():
 
 def test_a_non_json_error_body_still_becomes_a_data_error():
     api, _, _ = client(httpx.Response(500, text="<html>boom</html>"), retry=None)
-    with pytest.raises(DataError) as caught:
+    with pytest.raises(HttpResponseError) as caught:
         api.request("GET", "/x")
     assert caught.value.status == 500 and "boom" in caught.value.detail
 
@@ -217,15 +214,15 @@ def bearer(request: httpx.Request) -> str:
 
 
 def test_a_string_token_and_a_function_token_are_sent_as_bearer():
-    api, recorder, _ = client(httpx.Response(200, json={}), token="fixed")
+    api, recorder, _ = client(httpx.Response(200, json={}), credential="fixed")
     api.request("GET", "/x")
     assert bearer(recorder.requests[0]) == "Bearer fixed"
     counter = iter(range(10))
-    api, recorder, _ = client(httpx.Response(200, json={}), token=lambda: f"t{next(counter)}")
+    api, recorder, _ = client(httpx.Response(200, json={}), credential=lambda: f"t{next(counter)}")
     api.request("GET", "/x")
     api.request("GET", "/x")
     assert [bearer(r) for r in recorder.requests] == ["Bearer t0", "Bearer t1"]  # asked per request
-    api, recorder, _ = client(httpx.Response(200, json={}), token=None)
+    api, recorder, _ = client(httpx.Response(200, json={}), credential=None)
     api.request("GET", "/x")
     assert "authorization" not in recorder.requests[0].headers
 
@@ -238,80 +235,20 @@ def test_an_async_token_function_needs_the_async_client():
 
     async def run():
         async with AsyncDataClient(
-            "http://data.test", token=token, transport=httpx.MockTransport(recorder)
+            "http://data.test", credential=token, transport=httpx.MockTransport(recorder)
         ) as api:
             await api.request("GET", "/x")
         # and a plain function works there too
         async with AsyncDataClient(
-            "http://data.test", token=lambda: "plain", transport=httpx.MockTransport(recorder)
+            "http://data.test", credential=lambda: "plain", transport=httpx.MockTransport(recorder)
         ) as api:
             await api.request("GET", "/x")
 
     asyncio.run(run())
     assert [bearer(r) for r in recorder.requests] == ["Bearer from-async", "Bearer plain"]
-    sync_api, _, _ = client(httpx.Response(200, json={}), token=token)
-    with pytest.raises(TypeError, match="AsyncDataClient"):
+    sync_api, _, _ = client(httpx.Response(200, json={}), credential=token)
+    with pytest.raises(TypeError, match="async client"):
         sync_api.request("GET", "/x")
-
-
-def test_client_credentials_fetch_once_and_cache_until_near_expiry(monkeypatch):
-    issued = []
-
-    def fake_post(url, data, timeout):
-        issued.append((url, dict(data)))
-        return httpx.Response(
-            200,
-            json={"access_token": f"jwt-{len(issued)}", "expires_in": 300},
-            request=httpx.Request("POST", url),
-        )
-
-    monkeypatch.setattr("loamz.data.auth.httpx", types.SimpleNamespace(post=fake_post))
-    credentials = ClientCredentials("https://idp/realms/x/", "svc", "s3cret", scope="data:read")
-    api, recorder, _ = client(httpx.Response(200, json={}), token=credentials)
-    api.request("GET", "/x")
-    api.request("GET", "/x")
-    assert len(issued) == 1 and issued[0][0] == "https://idp/realms/x/protocol/openid-connect/token"
-    assert (
-        issued[0][1]["grant_type"] == "client_credentials" and issued[0][1]["scope"] == "data:read"
-    )
-    assert [bearer(r) for r in recorder.requests] == ["Bearer jwt-1", "Bearer jwt-1"]
-
-
-def test_client_credentials_work_with_the_async_client(monkeypatch):
-    seen = []
-
-    class FakeHttp:
-        def __init__(self, **kwargs):
-            pass
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, *args):
-            return None
-
-        async def post(self, url, data):
-            seen.append(url)
-            return httpx.Response(
-                200,
-                json={"access_token": "async-jwt", "expires_in": 300},
-                request=httpx.Request("POST", url),
-            )
-
-    monkeypatch.setattr("loamz.data.auth.httpx", types.SimpleNamespace(AsyncClient=FakeHttp))
-    recorder = Recorder(httpx.Response(200, json={}))
-
-    async def run():
-        async with AsyncDataClient(
-            "http://data.test",
-            token=ClientCredentials("https://idp/realms/x", "svc", "s"),
-            transport=httpx.MockTransport(recorder),
-        ) as api:
-            await api.request("GET", "/x")
-            await api.request("GET", "/x")
-
-    asyncio.run(run())
-    assert len(seen) == 1 and bearer(recorder.requests[1]) == "Bearer async-jwt"
 
 
 # ------------------------------------------------------------------ trace context
@@ -357,7 +294,7 @@ def test_retried_requests_share_a_trace_and_storage_calls_carry_no_api_headers()
     storage = Recorder(httpx.Response(200, content=b"x"))
     plain = DataClient(
         "http://data.test",
-        token="secret",
+        credential="secret",
         transport=httpx.MockTransport(Recorder(httpx.Response(200, json={}))),
         storage_transport=httpx.MockTransport(storage),
     )

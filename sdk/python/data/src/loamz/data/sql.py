@@ -15,9 +15,9 @@ import threading
 from collections.abc import AsyncIterator, Iterator
 from typing import Any
 
+from loamz.core.exceptions import ResultTooLargeError
+from loamz.core.transport import AsyncTransport, SyncTransport
 from loamz.data import _arrow
-from loamz.data._http import AsyncCore, SyncCore
-from loamz.data.errors import ResultTooLargeError
 from loamz.data.models import QueryResult
 
 ARROW = "application/vnd.apache.arrow.stream"
@@ -101,7 +101,7 @@ def _queued(source: queue.Queue) -> Iterator[bytes]:
 
 
 class Sql:
-    def __init__(self, core: SyncCore):
+    def __init__(self, core: SyncTransport):
         self._core = core
 
     def __call__(self, query: str, **options: Any):
@@ -173,7 +173,7 @@ class Sql:
 
 
 class AsyncSql:
-    def __init__(self, core: AsyncCore):
+    def __init__(self, core: AsyncTransport):
         self._core = core
 
     async def __call__(self, query: str, **options: Any):

@@ -13,6 +13,7 @@ members = [
     "loamz-core",
     "loamz-data",
     "loamz-engine",
+    "loamz-identity",
     "loamz-server",
 ]
 
@@ -1786,6 +1787,7 @@ source = { editable = "meta/loamz" }
 dependencies = [
     { name = "loamz-core" },
     { name = "loamz-data" },
+    { name = "loamz-identity" },
 ]
 
 [package.optional-dependencies]
@@ -1801,6 +1803,7 @@ requires-dist = [
     { name = "loamz-core", editable = "sdk/python/core" },
     { name = "loamz-data", editable = "sdk/python/data" },
     { name = "loamz-engine", marker = "extra == 'engine'", editable = "server/engine" },
+    { name = "loamz-identity", editable = "sdk/python/identity" },
     { name = "loamz-server", marker = "extra == 'server'", editable = "server/server" },
 ]
 provides-extras = ["engine", "server"]
@@ -1839,6 +1842,7 @@ source = { editable = "sdk/python/data" }
 dependencies = [
     { name = "httpx" },
     { name = "loamz-core" },
+    { name = "loamz-identity" },
 ]
 
 [package.optional-dependencies]
@@ -1865,6 +1869,7 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.28,<1" },
     { name = "httpx", extras = ["http2"], marker = "extra == 'http2'", specifier = ">=0.28,<1" },
     { name = "loamz-core", editable = "sdk/python/core" },
+    { name = "loamz-identity", editable = "sdk/python/identity" },
     { name = "polars", marker = "extra == 'arrow'", specifier = ">=1.44.2,<2" },
     { name = "pyarrow", marker = "extra == 'arrow'", specifier = ">=22,<27" },
 ]
@@ -2068,6 +2073,37 @@ dev = [
     { name = "pytest-timeout", specifier = ">=2.3" },
     { name = "pytest-xdist", specifier = ">=3.6" },
     { name = "pyyaml", specifier = ">=6.0.3" },
+]
+
+[[package]]
+name = "loamz-identity"
+version = "0.1.0"
+source = { editable = "sdk/python/identity" }
+dependencies = [
+    { name = "httpx" },
+    { name = "loamz-core" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-timeout" },
+    { name = "pytest-xdist" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "httpx", specifier = ">=0.28,<1" },
+    { name = "loamz-core", editable = "sdk/python/core" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=9" },
+    { name = "pytest-asyncio", specifier = ">=1.4" },
+    { name = "pytest-timeout", specifier = ">=2.3" },
+    { name = "pytest-xdist", specifier = ">=3.6" },
 ]
 
 [[package]]

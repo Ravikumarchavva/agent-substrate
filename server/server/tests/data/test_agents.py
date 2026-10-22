@@ -12,7 +12,8 @@ import uvicorn
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 import loamz.data as sd
-from loamz.data import DataClient, DataError, ResultTooLargeError
+from loamz.core.exceptions import HttpResponseError, ResultTooLargeError
+from loamz.data import DataClient
 from tests.data.conftest import ADMIN, AGENT_ISSUER
 
 pytestmark = pytest.mark.integration
@@ -52,7 +53,7 @@ def revoke_tenant(stack):
 
 def test_agent_tokens_follow_grants_and_are_audited(stack, orders):
     agent = stack.agent_client("user-42", "acme", run_id="run-9", thread_id="thread-7")
-    with pytest.raises(DataError) as caught:
+    with pytest.raises(HttpResponseError) as caught:
         agent.sql("SELECT count(*) FROM main.agents.orders")
     assert caught.value.status == 404  # no grant yet: the table is invisible
     assert agent.search("orders") == []
@@ -77,7 +78,7 @@ def test_agent_tokens_follow_grants_and_are_audited(stack, orders):
         }
     finally:
         revoke_tenant(stack)
-    with pytest.raises(DataError) as caught:
+    with pytest.raises(HttpResponseError) as caught:
         agent.sql("SELECT count(*) FROM main.agents.orders")
     assert caught.value.status == 404
 
@@ -111,7 +112,7 @@ def test_agent_tokens_cannot_change_anything(stack, orders):
                 {"name": "x", "role": "sql", "url": "http://127.0.0.1:1"},
             ),
         ]:
-            with pytest.raises(DataError) as caught:
+            with pytest.raises(HttpResponseError) as caught:
                 agent.request(method, path, json=body)
             assert caught.value.status == 403 and caught.value.code == "forbidden", path
     finally:
@@ -233,7 +234,7 @@ def test_sandbox_discovery_over_a_unix_socket(stack, orders, tmp_path, monkeypat
         assert sd.describe("main.agents.orders", sample=2)["sample"].height == 2
         # A token file that stops working (run over) stops all access immediately.
         (tmp_path / "token").write_text(stack.identity.agent_token("user-42", expires_in=-120))
-        with pytest.raises(DataError) as caught:
+        with pytest.raises(HttpResponseError) as caught:
             sd.sql("SELECT 1")
         assert caught.value.status == 401
     finally:

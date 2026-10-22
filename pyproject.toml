@@ -8,6 +8,7 @@ members = [
     "server/engine",
     "server/server",
     "sdk/python/core",
+    "sdk/python/identity",
     "sdk/python/data",
     "meta/loamz",
 ]
@@ -25,6 +26,7 @@ torch = { index = "pytorch-cpu" }
 loamz-engine = { workspace = true }
 loamz-server = { workspace = true }
 loamz-core = { workspace = true }
+loamz-identity = { workspace = true }
 loamz-data = { workspace = true }
 loamz = { workspace = true }
 

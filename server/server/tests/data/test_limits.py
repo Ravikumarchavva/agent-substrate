@@ -68,11 +68,12 @@ def test_the_daily_budget_is_shared_through_the_catalog(make_store):
 def test_the_api_enforces_them(stack, tmp_path):
     import polars as pl
 
-    from loamz.data import DataClient, DataError
+    from loamz.core.exceptions import HttpResponseError
+    from loamz.data import DataClient
     from tests.data.conftest import ADMIN
 
     # No client-side retries: this test is about the server's 429s themselves.
-    admin = DataClient(stack.api, token=lambda: stack.token("alice", *ADMIN), retry=None)
+    admin = DataClient(stack.api, credential=lambda: stack.token("alice", *ADMIN), retry=None)
     admin.create_schema("main", "lim")
     path = tmp_path / "t.parquet"
     pl.DataFrame({"k": range(100)}).write_parquet(path)
@@ -82,7 +83,7 @@ def test_the_api_enforces_them(stack, tmp_path):
     try:
         cfg.daily_scan_bytes_per_principal = 1
         admin.sql("SELECT count(*) FROM main.lim.t")  # first statement plans some bytes
-        with pytest.raises(DataError) as over:
+        with pytest.raises(HttpResponseError) as over:
             admin.sql("SELECT count(*) FROM main.lim.t")
         assert over.value.status == 429 and over.value.code == "rate-limited"
         cfg.daily_scan_bytes_per_principal = 0
@@ -92,7 +93,7 @@ def test_the_api_enforces_them(stack, tmp_path):
             try:
                 admin.request("GET", "/catalogs")
                 codes.append(200)
-            except DataError as exc:
+            except HttpResponseError as exc:
                 codes.append(exc.status)
         assert 429 in codes and codes[0] == 200
     finally:

@@ -1,48 +1,38 @@
-"""Typed Python client for the Loamz Data API (sync and async).
+"""Client for Loamz Data: catalog, SQL, files, documents, memory and managed databases (sync and async).
+
+    from loamz.data import DataClient
+    from loamz.identity import DefaultLoamzCredential
+
+    client = DataClient("https://data.example.com", DefaultLoamzCredential())
+    df = client.sql("SELECT zone, count(*) AS trips FROM main.nyc.yellow GROUP BY 1")
+
+    from loamz.data.aio import DataClient          # the same client for asyncio
 
 Module-level helpers connect lazily and discover their connection, so agent code is one line:
 
     import loamz.data as ld
-    df = ld.sql("SELECT zone, count(*) AS trips FROM main.nyc.yellow GROUP BY 1")
+    df = ld.sql("SELECT ...")
 
 Inside a Loamz code-interpreter sandbox the connection is a Unix socket and a per-run token file mounted at
-`/run/loamz-data`. Elsewhere set `LOAMZ_DATA_URL` and `LOAMZ_DATA_TOKEN`, or build a `DataClient` /
-`AsyncDataClient` yourself.
+`/run/loamz-data`. Elsewhere set `LOAMZ_ENDPOINT` and a credential (`LOAMZ_TOKEN`, or `LOAMZ_CLIENT_ID`,
+`LOAMZ_CLIENT_SECRET` and `LOAMZ_ISSUER`; see `loamz.identity`), or keep them in a `~/.loamz/config` profile.
 
-The core depends only on httpx (and `loamz-identity` for the tenancy rules). `ld.sql`, `ld.arrow` and `ld.stream`
-need the Arrow extra (`pip install 'loamz-data[arrow]'`) and say so when it is missing; `ld.rows` returns
-plain JSON rows without it.
+The core depends only on httpx. `ld.sql`, `ld.arrow` and `ld.stream` need the Arrow extra
+(`pip install 'loamz-data[arrow]'`) and say so when it is missing; `ld.rows` returns plain JSON rows without it.
 """
 
 from __future__ import annotations
 
-import os
 import threading
 from pathlib import Path
 from typing import Any
 
 import httpx
 
-from loamz.data._http import RetryPolicy, trace_context
-from loamz.data.auth import ClientCredentials
+from loamz.core.credentials import TokenSource
 from loamz.data.client import DEFAULT_MAX_BYTES, AsyncDataClient, DataClient
-from loamz.data.errors import (
-    ConflictError,
-    DataError,
-    ForbiddenError,
-    InsufficientScopeError,
-    InvalidRequestError,
-    NotFoundError,
-    PreconditionFailedError,
-    QuotaExceededError,
-    RateLimitedError,
-    ResultTooLargeError,
-    ScopeViolationError,
-    ServiceUnavailableError,
-    UnauthenticatedError,
-)
-from loamz.data.files import locate
 from loamz.data.models import FileInfo, FileVersion, Listing, QueryResult, Usage
+from loamz.identity import DefaultLoamzCredential, default_endpoint
 
 SANDBOX_DIR = Path("/run/loamz-data")
 SANDBOX_HOST = "http://loamz-data"
@@ -55,41 +45,41 @@ def _sandbox() -> tuple[Path, Path] | None:
     return (socket, token_file) if socket.exists() else None
 
 
-def _from_environment(url: str | None, token: Any) -> tuple[str, Any]:
-    url = url or os.environ.get("LOAMZ_DATA_URL")
-    if not url:
+def _from_environment(endpoint: str | None, credential: TokenSource) -> tuple[str, TokenSource]:
+    endpoint = endpoint or default_endpoint()
+    if not endpoint:
         raise RuntimeError(
-            "No Loamz Data connection: not in a sandbox, and LOAMZ_DATA_URL is not set."
+            "No Loamz Data connection: not in a sandbox, and LOAMZ_ENDPOINT (or a ~/.loamz/config profile) is not set."
         )
-    return url, token or os.environ.get("LOAMZ_DATA_TOKEN")
+    return endpoint, credential or DefaultLoamzCredential()
 
 
-def connect(url: str | None = None, token: str | None = None) -> DataClient:
-    """A client for this environment: the sandbox socket if present, else URL/token or environment variables."""
-    sandbox = _sandbox() if url is None else None
+def connect(endpoint: str | None = None, credential: TokenSource = None) -> DataClient:
+    """A client for this environment: the sandbox socket if present, else the endpoint and credential given or found."""
+    sandbox = _sandbox() if endpoint is None else None
     if sandbox:
         socket, token_file = sandbox
         # The run's token is a file the platform mounts; read it each time so a refreshed file is honoured and
         # nothing keeps it in a variable agent code might print.
         return DataClient(
             SANDBOX_HOST,
-            token=lambda: token_file.read_text().strip(),
+            lambda: token_file.read_text().strip(),
             transport=httpx.HTTPTransport(uds=str(socket)),
         )
-    return DataClient(*_from_environment(url, token))
+    return DataClient(*_from_environment(endpoint, credential))
 
 
-def aconnect(url: str | None = None, token: Any = None) -> AsyncDataClient:
+def aconnect(endpoint: str | None = None, credential: TokenSource = None) -> AsyncDataClient:
     """`connect()` for asyncio code (same discovery)."""
-    sandbox = _sandbox() if url is None else None
+    sandbox = _sandbox() if endpoint is None else None
     if sandbox:
         socket, token_file = sandbox
         return AsyncDataClient(
             SANDBOX_HOST,
-            token=lambda: token_file.read_text().strip(),
+            lambda: token_file.read_text().strip(),
             transport=httpx.AsyncHTTPTransport(uds=str(socket)),
         )
-    return AsyncDataClient(*_from_environment(url, token))
+    return AsyncDataClient(*_from_environment(endpoint, credential))
 
 
 def _client() -> DataClient:
@@ -136,36 +126,19 @@ def tables(catalog: str = "main", schema: str = "default") -> list[dict[str, Any
 __all__ = [
     "DEFAULT_MAX_BYTES",
     "AsyncDataClient",
-    "ClientCredentials",
-    "ConflictError",
     "DataClient",
-    "DataError",
     "FileInfo",
     "FileVersion",
-    "ForbiddenError",
-    "InsufficientScopeError",
-    "InvalidRequestError",
     "Listing",
-    "NotFoundError",
-    "PreconditionFailedError",
     "QueryResult",
-    "QuotaExceededError",
-    "RateLimitedError",
-    "ResultTooLargeError",
-    "RetryPolicy",
-    "ScopeViolationError",
-    "ServiceUnavailableError",
-    "UnauthenticatedError",
     "Usage",
     "aconnect",
     "arrow",
     "connect",
     "describe",
-    "locate",
     "rows",
     "search",
     "sql",
     "stream",
     "tables",
-    "trace_context",
 ]

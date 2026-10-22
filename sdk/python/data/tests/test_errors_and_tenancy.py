@@ -1,9 +1,8 @@
-"""The client's errors are keyed by the same problem codes the server emits, and its tenancy comes from loamz.server.identity."""
+"""The client's errors are keyed by the same problem codes the server emits."""
 
 import pytest
 
-from loamz.core.tenancy import TenancyError
-from loamz.data import errors, locate
+from loamz.core import exceptions as errors
 
 
 @pytest.mark.parametrize(
@@ -30,13 +29,4 @@ def test_a_problem_maps_to_the_class_of_its_code(code, status, cls):
 
 def test_an_unknown_code_falls_back_to_the_status():
     assert type(errors.error_for(404, {"type": "x/whatever"})) is errors.NotFoundError
-    assert type(errors.error_for(418, {})) is errors.DataError
-
-
-def test_a_key_locates_in_the_tenants_workspace_volume():
-    assert locate("tenants/Acme-Corp/users/u1/a.txt") == (
-        "tenant_acme_corp.workspace.files",
-        "users/u1/a.txt",
-    )
-    with pytest.raises(TenancyError):
-        locate("tenants/t/../other/a.txt")
+    assert type(errors.error_for(418, {})) is errors.HttpResponseError

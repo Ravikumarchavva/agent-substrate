@@ -1,17 +1,18 @@
 """`DataClient` (sync) and `AsyncDataClient` (asyncio): one pooled connection set per client.
 
-    from loamz.data import DataClient, ClientCredentials
-    client = DataClient("https://data.example.com", token=ClientCredentials(issuer, id, secret))
+    from loamz.data import DataClient
+    from loamz.identity import ClientSecretCredential
+    client = DataClient("https://data.example.com", credential=ClientSecretCredential(issuer, id, secret))
     client.catalog.search("taxi")
     client.sql.rows("SELECT borough, count(*) FROM main.nyc.yellow GROUP BY 1")      # JSON, no extras
     client.sql("SELECT ...")                                                         # Polars ([arrow])
     client.files.upload("main.ws.files", "reports/q3.csv", "q3.csv")
 
-    async with AsyncDataClient(url, token=my_async_token_function) as client:
+    async with AsyncDataClient(endpoint, credential=my_async_token_function) as client:
         await client.files.upload(...)
 
 The core needs only httpx. Idempotent requests are retried on 429/502/503/504 (honouring
-`Retry-After`); every request carries a W3C `traceparent`; errors are `DataError` subclasses.
+`Retry-After`); every request carries a W3C `traceparent`; errors are `HttpResponseError` subclasses.
 """
 
 from __future__ import annotations
@@ -24,18 +25,18 @@ from typing import Any, Self
 
 import httpx
 
-from loamz.data._http import STORAGE_RETRY, AsyncCore, RetryPolicy, SyncCore
-from loamz.data.auth import TokenSource
+from loamz.core.credentials import TokenSource
+from loamz.core.exceptions import HttpResponseError, NotFoundError
+from loamz.core.transport import STORAGE_RETRY, AsyncTransport, RetryPolicy, SyncTransport
 from loamz.data.catalog import AsyncCatalog, AsyncTenants, Catalog, Tenants
 from loamz.data.documents import AsyncDocuments, Documents
-from loamz.data.errors import DataError, NotFoundError
 from loamz.data.files import AsyncFiles, Files, _part_etag, _storage_failure
 from loamz.data.memory import AsyncMemory, Memory
 from loamz.data.privacy import AsyncErasure, AsyncExports, Erasure, Exports
 from loamz.data.sql import DEFAULT_MAX_BYTES, AsyncSql, Sql
 
 API_VERSION = "v1"
-DEFAULT_URL = "http://127.0.0.1:8020"
+DEFAULT_ENDPOINT = "http://127.0.0.1:8020"
 STORAGE_TIMEOUT = httpx.Timeout(30, read=600)
 
 __all__ = ["API_VERSION", "DEFAULT_MAX_BYTES", "AsyncDataClient", "DataClient"]
@@ -56,8 +57,8 @@ class DataClient:
 
     def __init__(
         self,
-        url: str = DEFAULT_URL,
-        token: TokenSource | Any = None,
+        endpoint: str = DEFAULT_ENDPOINT,
+        credential: TokenSource = None,
         *,
         timeout: float = 600,
         transport: httpx.BaseTransport | None = None,
@@ -67,10 +68,10 @@ class DataClient:
         traceparent: str | None = None,
         sleep: Callable[[float], None] = time.sleep,
     ):
-        self.token = token
-        self._core = SyncCore(
-            base_url=url.rstrip("/") + f"/api/{API_VERSION}",
-            token=token,
+        self.credential = credential
+        self._core = SyncTransport(
+            base_url=endpoint.rstrip("/") + f"/api/{API_VERSION}",
+            credential=credential,
             timeout=timeout,
             transport=transport,
             retry=retry,
@@ -79,7 +80,7 @@ class DataClient:
             sleep=sleep,
         )
         # Presigned URLs: another host, no bearer token, no API trace headers.
-        self._storage = SyncCore(
+        self._storage = SyncTransport(
             api=False,
             timeout=STORAGE_TIMEOUT,
             transport=storage_transport,
@@ -214,7 +215,7 @@ class DataClient:
             time.sleep(poll_seconds)
             record = self.request("GET", f"/imports/{record['id']}")
         if record["status"] == "failed":
-            raise DataError(409, {"type": "import-failed", "detail": record.get("error")})
+            raise HttpResponseError(409, {"type": "import-failed", "detail": record.get("error")})
         return record
 
     def _put(self, url: str, path: Path, offset: int, length: int) -> str:
@@ -233,8 +234,8 @@ class AsyncDataClient:
 
     def __init__(
         self,
-        url: str = DEFAULT_URL,
-        token: TokenSource | Any = None,
+        endpoint: str = DEFAULT_ENDPOINT,
+        credential: TokenSource = None,
         *,
         timeout: float = 600,
         transport: httpx.AsyncBaseTransport | None = None,
@@ -247,10 +248,10 @@ class AsyncDataClient:
         import asyncio
 
         sleep = sleep or asyncio.sleep
-        self.token = token
-        self._core = AsyncCore(
-            base_url=url.rstrip("/") + f"/api/{API_VERSION}",
-            token=token,
+        self.credential = credential
+        self._core = AsyncTransport(
+            base_url=endpoint.rstrip("/") + f"/api/{API_VERSION}",
+            credential=credential,
             timeout=timeout,
             transport=transport,
             retry=retry,
@@ -258,7 +259,7 @@ class AsyncDataClient:
             traceparent=traceparent,
             sleep=sleep,
         )
-        self._storage = AsyncCore(
+        self._storage = AsyncTransport(
             api=False,
             timeout=STORAGE_TIMEOUT,
             transport=storage_transport,

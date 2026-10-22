@@ -9,7 +9,7 @@ from uuid import uuid4
 import polars as pl
 import pytest
 
-from loamz.data import DataError
+from loamz.core.exceptions import HttpResponseError
 from loamz.engine.errors import LoamzError, http_status
 from loamz.server.data.features.compute import batch
 from loamz.server.data.features.tables.iceberg import table_service
@@ -341,7 +341,7 @@ def test_readers_need_select_on_the_view_only_and_cannot_write_to_it(stack, admi
         )
     reader = stack.client("rita", "readers")
     assert len(reader.sql("SELECT * FROM main.m3.secret_totals")) == 4
-    with pytest.raises(DataError) as hidden:
+    with pytest.raises(HttpResponseError) as hidden:
         reader.sql("SELECT * FROM main.m3.secret")
     assert hidden.value.status == 404  # the source table stays invisible
 
@@ -352,7 +352,7 @@ def test_readers_need_select_on_the_view_only_and_cannot_write_to_it(stack, admi
         assert http.post(
             "/catalogs/main/schemas/m3/tables/secret_totals/maintenance-runs"
         ).status_code in {404, 405}
-    with pytest.raises(DataError) as blocked:
+    with pytest.raises(HttpResponseError) as blocked:
         admin.upload("main.m3.secret_totals", [scattered(tmp_path, "x", rows=3)], mode="append")
     assert blocked.value.status == 409
 
@@ -398,7 +398,7 @@ def test_a_definition_the_creator_cannot_read_is_refused_up_front(stack, admin, 
             json={"name": "peek", "sql": "SELECT * FROM main.m3.locked"},
         )
         assert reply.status_code in {403, 404}
-    with pytest.raises(DataError):
+    with pytest.raises(HttpResponseError):
         admin.table("main.m3.peek")
 
 
@@ -455,7 +455,7 @@ def test_the_cache_never_answers_for_someone_who_may_not_ask(stack, admin, tmp_p
     sql = "SELECT count(*) AS n FROM main.m3.private WHERE amount >= 0"
     assert cached(admin, sql) == "miss" and cached(admin, sql) == "hit"
     outsider = stack.client("mallory", "nobody")
-    with pytest.raises(DataError) as denied:
+    with pytest.raises(HttpResponseError) as denied:
         outsider.sql(sql)  # same SQL, same files, warm cache: still refused by the planner
     assert denied.value.status == 404
 
@@ -895,7 +895,7 @@ def test_definitions_that_cannot_be_refreshed_incrementally_are_refused_at_creat
     ):
         reply = mv_post(stack, {"name": "never", "sql": sql, "incremental": True}, expect=400)
         assert "Incremental refresh" in str(reply)
-    with pytest.raises(DataError):
+    with pytest.raises(HttpResponseError):
         admin.table("main.m3.never")  # nothing was created
 
 

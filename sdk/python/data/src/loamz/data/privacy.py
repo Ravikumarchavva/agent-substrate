@@ -11,7 +11,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from loamz.data._http import AsyncCore, SyncCore
+from loamz.core.transport import AsyncTransport, SyncTransport
 
 
 def _target(subject: str | None, tenant_id: str | None, everything: bool) -> dict[str, Any]:
@@ -56,7 +56,7 @@ class _ExportCalls(_PrivacyCalls):
 
 
 class Erasure(_ErasureCalls):
-    def __init__(self, core: SyncCore):
+    def __init__(self, core: SyncTransport):
         self._core = core
 
     def _do(self, method, path, post=None, **kwargs):
@@ -64,7 +64,7 @@ class Erasure(_ErasureCalls):
 
 
 class AsyncErasure(_ErasureCalls):
-    def __init__(self, core: AsyncCore):
+    def __init__(self, core: AsyncTransport):
         self._core = core
 
     async def _do(self, method, path, post=None, **kwargs):
@@ -72,7 +72,7 @@ class AsyncErasure(_ErasureCalls):
 
 
 class Exports(_ExportCalls):
-    def __init__(self, core: SyncCore):
+    def __init__(self, core: SyncTransport):
         self._core = core
 
     def _do(self, method, path, post=None, **kwargs):
@@ -80,7 +80,7 @@ class Exports(_ExportCalls):
 
 
 class AsyncExports(_ExportCalls):
-    def __init__(self, core: AsyncCore):
+    def __init__(self, core: AsyncTransport):
         self._core = core
 
     async def _do(self, method, path, post=None, **kwargs):

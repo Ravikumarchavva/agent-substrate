@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from loamz.data.errors import NotFoundError as ClientNotFoundError
+from loamz.core.exceptions import NotFoundError as ClientNotFoundError
 from loamz.engine.agents.data._connection import DataServiceConnection, TokenProvider, mint
 from loamz.engine.memory import (
     MemoryMatch,

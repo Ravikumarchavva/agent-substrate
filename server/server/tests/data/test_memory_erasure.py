@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from loamz.data import (
+from loamz.core.exceptions import (
     ForbiddenError,
     InsufficientScopeError,
     NotFoundError,
@@ -155,7 +155,7 @@ def test_erasure_authority(docs, populated):
     from loamz.data import DataClient
 
     # an ordinary user (no delegation) may erase only themselves
-    with DataClient(docs.url, token=lambda: docs.identity.token("erin", ())) as own:
+    with DataClient(docs.url, credential=lambda: docs.identity.token("erin", ())) as own:
         with pytest.raises(ForbiddenError):
             own.erasure.request("frank", tenant_id=A)
 

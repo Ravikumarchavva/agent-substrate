@@ -9,7 +9,7 @@ from collections.abc import Callable
 from typing import Any
 
 from loamz.core import tenancy
-from loamz.data._http import AsyncCore, SyncCore
+from loamz.core.transport import AsyncTransport, SyncTransport
 
 
 def _key(name: str) -> Callable[[Any], Any]:
@@ -101,7 +101,7 @@ class _CatalogCalls:
 
 
 class Catalog(_CatalogCalls):
-    def __init__(self, core: SyncCore):
+    def __init__(self, core: SyncTransport):
         self._core = core
 
     def _do(self, method, path, post=None, **kwargs):
@@ -110,7 +110,7 @@ class Catalog(_CatalogCalls):
 
 
 class AsyncCatalog(_CatalogCalls):
-    def __init__(self, core: AsyncCore):
+    def __init__(self, core: AsyncTransport):
         self._core = core
 
     async def _do(self, method, path, post=None, **kwargs):
@@ -130,7 +130,7 @@ class _TenantCalls:
 
 
 class Tenants(_TenantCalls):
-    def __init__(self, core: SyncCore):
+    def __init__(self, core: SyncTransport):
         self._core = core
 
     def _do(self, method, path, post=None, **kwargs):
@@ -138,7 +138,7 @@ class Tenants(_TenantCalls):
 
 
 class AsyncTenants(_TenantCalls):
-    def __init__(self, core: AsyncCore):
+    def __init__(self, core: AsyncTransport):
         self._core = core
 
     async def _do(self, method, path, post=None, **kwargs):

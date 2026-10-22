@@ -5,7 +5,7 @@ description = "Client for Loamz Data: catalog, SQL, files, documents, memory and
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.12"
-dependencies = ["httpx>=0.28,<1", "loamz-core"]
+dependencies = ["httpx>=0.28,<1", "loamz-core", "loamz-identity"]
 
 [project.optional-dependencies]
 # Arrow/Polars results (`ld.sql`, `ld.arrow`, `ld.stream`); the code-interpreter sandbox image installs this extra.

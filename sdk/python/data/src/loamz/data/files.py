@@ -8,9 +8,6 @@
     info = files.info("main.ws.files", "doc.txt")
     files.upload("main.ws.files", "doc.txt", b"v2", if_match=info)        # compare-and-swap
 
-An agent's file keys (`tenants/<tenant>/<path>`) live in the tenant's workspace volume: `locate(key)` gives the
-volume and the path (`loamz.core.tenancy`), so an adapter never guesses the volume name.
-
 The API only returns presigned URLs; this module sends and fetches the bytes itself (large files in
 parallel parts) and then tells the API to commit. The low-level calls (`initiate_upload`,
 `complete_upload`, `sign`, `download_url`) are public for adapters that move bytes some other way.
@@ -29,22 +26,14 @@ from urllib.parse import quote
 
 import httpx
 
-from loamz.core import tenancy
-from loamz.data._http import AsyncCore, SyncCore
+from loamz.core.exceptions import HttpResponseError, NotFoundError, error_for
+from loamz.core.transport import AsyncTransport, SyncTransport
 from loamz.data._sources import Source, UploadSource, open_source
-from loamz.data.errors import DataError, NotFoundError, error_for
 from loamz.data.models import FileInfo, FileVersion, Listing, Usage
 
 MAX_SIGN_ITEMS = 200
 DEFAULT_CONTENT_TYPE = "application/octet-stream"
 DOWNLOAD_CHUNK = 1024 * 1024
-
-
-def locate(key: str) -> tuple[str, str]:
-    """`tenants/acme/users/u/a.txt` -> (`tenant_acme.workspace.files`, `users/u/a.txt`). `TenancyError` (a
-    `ValueError`) for a key that is not a tenant key or climbs out of it."""
-    tenant, path = tenancy.split_key(key)
-    return tenancy.files_volume(tenant), path
 
 
 # ------------------------------------------------------------------ shared helpers
@@ -71,7 +60,7 @@ def _content_type(path: str, given: str | None) -> str:
     return given or mimetypes.guess_type(path)[0] or DEFAULT_CONTENT_TYPE
 
 
-def _storage_failure(response: httpx.Response) -> DataError:
+def _storage_failure(response: httpx.Response) -> HttpResponseError:
     """Object storage answers in XML: keep its code and message as a problem."""
     text = response.text[:2000]
     code = re.search(r"<Code>([^<]+)</Code>", text)
@@ -118,7 +107,7 @@ class _Base:
 
 # ------------------------------------------------------------------ synchronous
 class Files(_Base):
-    def __init__(self, core: SyncCore, storage: SyncCore):
+    def __init__(self, core: SyncTransport, storage: SyncTransport):
         self._core, self._storage = core, storage
 
     # -------------------------------------------------------------- low level: the API
@@ -445,10 +434,10 @@ class Files(_Base):
         *,
         content_type: str | None = None,
         parallelism: int = 16,
-    ) -> dict[str, FileInfo | DataError]:
+    ) -> dict[str, FileInfo | HttpResponseError]:
         """Write many small files (each up to 64 MiB): one signing call per 200, parallel transfers.
         Each path maps to its `FileInfo`, or to the error that stopped it (nothing is raised)."""
-        outcome: dict[str, FileInfo | DataError] = {}
+        outcome: dict[str, FileInfo | HttpResponseError] = {}
         items = [
             {
                 "path": p,
@@ -460,14 +449,14 @@ class Files(_Base):
         ]
         signed = self.sign(volume, items)
 
-        def one(entry: dict[str, Any]) -> tuple[str, FileInfo | DataError]:
+        def one(entry: dict[str, Any]) -> tuple[str, FileInfo | HttpResponseError]:
             path = entry["path"]
             if "error" in entry:
                 return path, error_for(entry["error"]["status"], entry["error"])
             try:
                 self.put_to_url(entry["url"], files[path], entry.get("headers"))
                 return path, self.complete_upload(volume, entry["upload_id"])
-            except DataError as exc:
+            except HttpResponseError as exc:
                 return path, exc
 
         with ThreadPoolExecutor(max_workers=max(1, parallelism)) as pool:
@@ -476,11 +465,11 @@ class Files(_Base):
 
     def get_many(
         self, volume: str, paths: list[str], *, parallelism: int = 16
-    ) -> dict[str, bytes | DataError]:
+    ) -> dict[str, bytes | HttpResponseError]:
         """Read many small files: batch URL signing, then parallel direct downloads."""
         signed = self.sign(volume, [{"path": p, "action": "get"} for p in paths])
 
-        def one(entry: dict[str, Any]) -> tuple[str, bytes | DataError]:
+        def one(entry: dict[str, Any]) -> tuple[str, bytes | HttpResponseError]:
             if "error" in entry:
                 return entry["path"], error_for(entry["error"]["status"], entry["error"])
             response = self._storage.send("GET", entry["url"])
@@ -494,7 +483,7 @@ class Files(_Base):
 
 # ------------------------------------------------------------------ asynchronous
 class AsyncFiles(_Base):
-    def __init__(self, core: AsyncCore, storage: AsyncCore):
+    def __init__(self, core: AsyncTransport, storage: AsyncTransport):
         self._core, self._storage = core, storage
 
     async def initiate_upload(
@@ -809,7 +798,7 @@ class AsyncFiles(_Base):
         *,
         content_type: str | None = None,
         parallelism: int = 16,
-    ) -> dict[str, FileInfo | DataError]:
+    ) -> dict[str, FileInfo | HttpResponseError]:
         items = [
             {
                 "path": p,
@@ -822,7 +811,7 @@ class AsyncFiles(_Base):
         signed = await self.sign(volume, items)
         gate = asyncio.Semaphore(max(1, parallelism))
 
-        async def one(entry: dict[str, Any]) -> tuple[str, FileInfo | DataError]:
+        async def one(entry: dict[str, Any]) -> tuple[str, FileInfo | HttpResponseError]:
             path = entry["path"]
             if "error" in entry:
                 return path, error_for(entry["error"]["status"], entry["error"])
@@ -830,18 +819,18 @@ class AsyncFiles(_Base):
                 try:
                     await self.put_to_url(entry["url"], files[path], entry.get("headers"))
                     return path, await self.complete_upload(volume, entry["upload_id"])
-                except DataError as exc:
+                except HttpResponseError as exc:
                     return path, exc
 
         return dict(await asyncio.gather(*(one(e) for e in signed)))
 
     async def get_many(
         self, volume: str, paths: list[str], *, parallelism: int = 16
-    ) -> dict[str, bytes | DataError]:
+    ) -> dict[str, bytes | HttpResponseError]:
         signed = await self.sign(volume, [{"path": p, "action": "get"} for p in paths])
         gate = asyncio.Semaphore(max(1, parallelism))
 
-        async def one(entry: dict[str, Any]) -> tuple[str, bytes | DataError]:
+        async def one(entry: dict[str, Any]) -> tuple[str, bytes | HttpResponseError]:
             if "error" in entry:
                 return entry["path"], error_for(entry["error"]["status"], entry["error"])
             async with gate:

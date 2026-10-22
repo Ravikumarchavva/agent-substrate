@@ -6,7 +6,7 @@ import boto3
 import pytest
 from botocore.client import Config
 
-from loamz.data import ForbiddenError, NotFoundError
+from loamz.core.exceptions import ForbiddenError, NotFoundError
 from loamz.engine.testing.conformance.document_library import prose
 from loamz.server.data.features.documents.api import documents
 from tests.data.conftest import VOLUMES_BUCKET, serve_documents

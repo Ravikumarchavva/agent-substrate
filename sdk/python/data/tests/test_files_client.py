@@ -14,14 +14,13 @@ from urllib.parse import unquote
 import httpx
 import pytest
 
-from loamz.data import (
-    AsyncDataClient,
-    DataClient,
+from loamz.core.exceptions import (
     ForbiddenError,
     NotFoundError,
     PreconditionFailedError,
     QuotaExceededError,
 )
+from loamz.data import AsyncDataClient, DataClient
 
 V = "main.ws.files"
 PART = 1024  # the stand-in splits anything over 1 KiB into 1 KiB parts
@@ -291,7 +290,7 @@ def make(service=None, **options):
     service = service or FakeService()
     api = DataClient(
         "http://data.test",
-        token="t",
+        credential="t",
         transport=httpx.MockTransport(service.handler),
         storage_transport=httpx.MockTransport(service.handler),
         sleep=lambda _s: None,
@@ -494,7 +493,7 @@ def test_the_async_files_client_matches_the_sync_one():
     async def run():
         async with AsyncDataClient(
             "http://data.test",
-            token="t",
+            credential="t",
             transport=httpx.MockTransport(fake.handler),
             storage_transport=httpx.MockTransport(fake.handler),
         ) as api:

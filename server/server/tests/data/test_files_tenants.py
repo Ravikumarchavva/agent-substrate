@@ -8,10 +8,10 @@ from __future__ import annotations
 
 import pytest
 
-from loamz.data import (
+from loamz.core.exceptions import (
     ConflictError,
-    DataError,
     ForbiddenError,
+    HttpResponseError,
     InsufficientScopeError,
     NotFoundError,
 )
@@ -75,7 +75,7 @@ def test_a_catalog_name_cannot_be_taken_over_by_another_tenant(admin):
         {"tenant_id": "../x"},
         {"tenant_id": "t", "alias": "chosen"},  # the alias is derived, never chosen
     ):
-        with pytest.raises(DataError) as invalid:
+        with pytest.raises(HttpResponseError) as invalid:
             admin.request("POST", "/tenants", json=body)
         assert invalid.value.status == 422
 
@@ -129,9 +129,9 @@ def test_the_platforms_service_account_provisions_with_its_realm_role(stack):
     from loamz.data import DataClient
 
     role = {"resource_access": {"loamz-data": {"roles": ["provision-tenant"]}}}
-    platform = DataClient(stack.api, token=lambda: stack.identity.token("cell-admin", **role))
+    platform = DataClient(stack.api, credential=lambda: stack.identity.token("cell-admin", **role))
     assert platform.tenants.ensure("t-role")["created"] is True
     other = {"resource_access": {"some-other-client": {"roles": ["provision-tenant"]}}}
-    elsewhere = DataClient(stack.api, token=lambda: stack.identity.token("x", **other))
+    elsewhere = DataClient(stack.api, credential=lambda: stack.identity.token("x", **other))
     with pytest.raises(ForbiddenError):
         elsewhere.tenants.ensure("t-other")

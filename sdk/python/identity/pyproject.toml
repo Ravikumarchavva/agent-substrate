@@ -1,0 +1,26 @@
+[project]
+name = "loamz-identity"
+version = "0.1.0"
+description = "Credentials for the Loamz client libraries: service accounts and the default credential chain."
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.12"
+dependencies = ["loamz-core", "httpx>=0.28,<1"]
+
+[dependency-groups]
+dev = ["pytest>=9", "pytest-asyncio>=1.4", "pytest-xdist>=3.6", "pytest-timeout>=2.3"]
+
+[build-system]
+requires = ["uv_build>=0.11.16,<0.12"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "loamz.identity"
+
+[tool.ruff]
+extend = "../../../pyproject.toml"
+target-version = "py312"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"

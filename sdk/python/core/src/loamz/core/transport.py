@@ -1,4 +1,4 @@
-"""Transport shared by the sync and async clients: auth, trace context, retries and problem decoding."""
+"""Transport shared by every sync and async Loamz client: credentials, trace context, retries and problem decoding."""
 
 from __future__ import annotations
 
@@ -16,13 +16,13 @@ from typing import Any
 
 import httpx
 
-from loamz.data.auth import current_token, current_token_async
-from loamz.data.errors import DataError, ServiceUnavailableError, error_for
+from loamz.core.credentials import TokenSource, as_credential
+from loamz.core.exceptions import HttpResponseError, ServiceUnavailableError, error_for
 
 IDEMPOTENT_METHODS = frozenset({"GET", "HEAD", "PUT", "DELETE", "OPTIONS"})
 TRACEPARENT = re.compile(r"^00-([0-9a-f]{32})-([0-9a-f]{16})-([0-9a-f]{2})$")
 _traceparent: contextvars.ContextVar[str | None] = contextvars.ContextVar(
-    "loamz_data_traceparent", default=None
+    "loamz_traceparent", default=None
 )
 
 
@@ -112,7 +112,7 @@ def problem_from(response: httpx.Response) -> dict[str, Any]:
     return {"detail": response.text[:500]}
 
 
-def failure(response: httpx.Response) -> DataError:
+def failure(response: httpx.Response) -> HttpResponseError:
     """The exception for an error response. The body must already be read."""
     problem = problem_from(response)
     problem.setdefault("status", response.status_code)
@@ -134,14 +134,14 @@ def retryable(method: str, idempotent: bool | None) -> bool:
 
 
 # ------------------------------------------------------------------ cores
-class SyncCore:
+class SyncTransport:
     """A pooled `httpx.Client` plus the request loop. One per client; thread-safe."""
 
     def __init__(
         self,
         *,
         base_url: str = "",
-        token: Any = None,
+        credential: TokenSource = None,
         timeout: httpx.Timeout | float = 600,
         transport: httpx.BaseTransport | None = None,
         retry: RetryPolicy | None = RetryPolicy(),
@@ -150,7 +150,12 @@ class SyncCore:
         sleep: Callable[[float], None] = time.sleep,
         api: bool = True,
     ):
-        self.token, self.retry, self.sleep, self.api = token, retry, sleep, api
+        self.credential, self.retry, self.sleep, self.api = (
+            as_credential(credential),
+            retry,
+            sleep,
+            api,
+        )
         self.traceparent = traceparent
         if isinstance(timeout, int | float):
             timeout = httpx.Timeout(30, read=timeout)
@@ -177,7 +182,7 @@ class SyncCore:
     def headers(self, extra: dict[str, str] | None) -> dict[str, str]:
         headers = dict(extra or {})
         if self.api:
-            bearer = current_token(self.token)
+            bearer = self.credential.get_token() if self.credential else None
             if bearer:
                 headers["Authorization"] = "Bearer " + bearer
             headers["traceparent"] = new_traceparent(self.traceparent)
@@ -231,14 +236,14 @@ class SyncCore:
         return response.json() if response.content else None
 
 
-class AsyncCore:
-    """The async twin of `SyncCore`: one pooled `httpx.AsyncClient`, safe to share across tasks."""
+class AsyncTransport:
+    """The async twin of `SyncTransport`: one pooled `httpx.AsyncClient`, safe to share across tasks."""
 
     def __init__(
         self,
         *,
         base_url: str = "",
-        token: Any = None,
+        credential: TokenSource = None,
         timeout: httpx.Timeout | float = 600,
         transport: httpx.AsyncBaseTransport | None = None,
         retry: RetryPolicy | None = RetryPolicy(),
@@ -247,7 +252,12 @@ class AsyncCore:
         sleep: Callable[[float], Any] = asyncio.sleep,
         api: bool = True,
     ):
-        self.token, self.retry, self.sleep, self.api = token, retry, sleep, api
+        self.credential, self.retry, self.sleep, self.api = (
+            as_credential(credential),
+            retry,
+            sleep,
+            api,
+        )
         self.traceparent = traceparent
         if isinstance(timeout, int | float):
             timeout = httpx.Timeout(30, read=timeout)
@@ -273,7 +283,7 @@ class AsyncCore:
     async def headers(self, extra: dict[str, str] | None) -> dict[str, str]:
         headers = dict(extra or {})
         if self.api:
-            bearer = await current_token_async(self.token)
+            bearer = await self.credential.aget_token() if self.credential else None
             if bearer:
                 headers["Authorization"] = "Bearer " + bearer
             headers["traceparent"] = new_traceparent(self.traceparent)

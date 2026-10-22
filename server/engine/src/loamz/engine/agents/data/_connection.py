@@ -38,7 +38,7 @@ class DataServiceConnection:
         timeout: float = 120,
     ) -> None:
         self.client = AsyncDataClient(
-            url, token=self._current, timeout=timeout, transport=transport
+            url, credential=self._current, timeout=timeout, transport=transport
         )
 
     @staticmethod

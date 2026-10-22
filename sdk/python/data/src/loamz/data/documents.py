@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from typing import Any
 from urllib.parse import quote
 
-from loamz.data._http import AsyncCore, SyncCore
+from loamz.core.transport import AsyncTransport, SyncTransport
 
 
 @dataclass(frozen=True)
@@ -282,7 +282,7 @@ class _DocumentCalls:
 
 
 class Documents(_DocumentCalls):
-    def __init__(self, core: SyncCore):
+    def __init__(self, core: SyncTransport):
         self._core = core
 
     def _do(self, method, path, post=None, raw=False, **kwargs):
@@ -294,7 +294,7 @@ class Documents(_DocumentCalls):
 
 
 class AsyncDocuments(_DocumentCalls):
-    def __init__(self, core: AsyncCore):
+    def __init__(self, core: AsyncTransport):
         self._core = core
 
     async def _do(self, method, path, post=None, raw=False, **kwargs):

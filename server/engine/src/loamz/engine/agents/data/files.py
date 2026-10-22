@@ -9,13 +9,19 @@ from __future__ import annotations
 from datetime import datetime
 
 from loamz.core import tenancy
-from loamz.data.errors import NotFoundError as ClientNotFoundError
-from loamz.data.files import locate
+from loamz.core.exceptions import NotFoundError as ClientNotFoundError
 from loamz.engine.agents.data._connection import DataServiceConnection, TokenProvider, mint
 from loamz.engine.agents.kernel.ports.files import FileStore
 from loamz.engine.errors import NotFoundError
 
 DEFAULT_CONTENT_TYPE = "application/octet-stream"
+
+
+def locate(key: str) -> tuple[str, str]:
+    """`tenants/acme/users/u/a.txt` -> (`tenant_acme.workspace.files`, `users/u/a.txt`). `TenancyError` (a
+    `ValueError`) for a key that is not a tenant key or climbs out of it."""
+    tenant, path = tenancy.split_key(key)
+    return tenancy.files_volume(tenant), path
 
 
 def _epoch(value: datetime | str | None) -> float:

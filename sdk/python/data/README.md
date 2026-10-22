@@ -1,7 +1,7 @@
 # loamz-data
 
 Typed Python client for the Loamz Data API: governed SQL, catalog, files, documents, memory and privacy, sync and
-asyncio. **The core depends only on `httpx` and `loamz-identity`** (for the tenancy rules).
+asyncio. **The core depends only on `httpx`, `loamz-core` and `loamz-identity`.** Clients follow the Azure SDK shape: `DataClient(endpoint, credential)`.
 
 ```bash
 pip install loamz-data            # core
@@ -23,13 +23,17 @@ ld.describe("main.nyc.yellow")
 ```
 
 Inside a Loamz code-interpreter sandbox the connection is discovered (`/run/loamz-data`). Elsewhere set
-`LOAMZ_DATA_URL` and `LOAMZ_DATA_TOKEN`, or build a client:
+`LOAMZ_ENDPOINT` and a credential (`LOAMZ_TOKEN`, or `LOAMZ_CLIENT_ID`, `LOAMZ_CLIENT_SECRET`, `LOAMZ_ISSUER`; or a
+`~/.loamz/config` profile), or build a client:
 
 ```python
-from loamz.data import AsyncDataClient, ClientCredentials, DataClient
+from loamz.data import DataClient
+from loamz.data.aio import DataClient as AsyncDataClient
+from loamz.identity import ClientSecretCredential, DefaultLoamzCredential
 
-client = DataClient("https://data.example.com", token=ClientCredentials(ISSUER, ID, SECRET))
-async with AsyncDataClient(url, token=my_async_token_function) as client:
+client = DataClient("https://data.example.com", ClientSecretCredential(ISSUER, ID, SECRET))
+client = DataClient("https://data.example.com", DefaultLoamzCredential())
+async with AsyncDataClient(endpoint, credential) as client:
     await client.files.upload("tenant_acme.workspace.files", "a.txt", b"hello")
 ```
 
@@ -40,7 +44,7 @@ Idempotent requests are retried with jittered backoff on 429, 502, 503, 504 and 
 
 RFC 9457 problems, one class per problem `code`, named like the server's typed errors (`NotFoundError`,
 `ForbiddenError`, `InsufficientScopeError`, `ConflictError`, `PreconditionFailedError`, `QuotaExceededError`,
-`RateLimitedError`, `ServiceUnavailableError`, …), all `DataError`, each with `status`, `code`, `detail` and
+`RateLimitedError`, `ServiceUnavailableError`, …), all `HttpResponseError` (`loamz.core.exceptions`, with Azure-style aliases such as `ResourceNotFoundError`), each with `status`, `code`, `detail` and
 `request_id`.
 
 ## Namespaces
@@ -54,9 +58,6 @@ RFC 9457 problems, one class per problem `code`, named like the server's typed e
 | `client.memory` | memory records: save, get, query, touch, delete, erase |
 | `client.erasure`, `client.exports` | one person's (or tenant's) data, removed or handed over |
 | `client.tenants` | `ensure(tenant_id)`: idempotent provisioning (the `provision-tenant` role) |
-
-An agent's file keys (`tenants/<tenant>/<path>`) live in the tenant's workspace volume; `locate(key)` returns
-`(volume, path)` from `loamz.core.tenancy`, so an adapter never guesses a volume name.
 
 ## Develop
 

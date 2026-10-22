@@ -8,8 +8,8 @@ import json
 import httpx
 import pytest
 
-import loamz.data as sd
-from loamz.data import AsyncDataClient, DataClient, NotFoundError
+from loamz.core.exceptions import NotFoundError, ResultTooLargeError
+from loamz.data import AsyncDataClient, DataClient
 
 pa = pytest.importorskip("pyarrow")
 pytest.importorskip("polars")
@@ -29,7 +29,7 @@ def arrow_response(rows: int = 5) -> httpx.Response:
 
 
 def sync_client(handler) -> DataClient:
-    return DataClient("http://data.test", token="t", transport=httpx.MockTransport(handler))
+    return DataClient("http://data.test", credential="t", transport=httpx.MockTransport(handler))
 
 
 def test_arrow_and_polars_results_stream_from_the_statements_route():
@@ -51,7 +51,7 @@ def test_arrow_and_polars_results_stream_from_the_statements_route():
     }
     assert [b.num_rows for b in api.sql.stream("SELECT 1")] == [2, 2, 1]
     assert api.arrow("SELECT 1").num_rows == 5
-    with pytest.raises(sd.ResultTooLargeError):
+    with pytest.raises(ResultTooLargeError):
         api.sql.arrow("SELECT 1", max_bytes=10)
 
 

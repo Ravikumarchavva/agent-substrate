@@ -57,6 +57,12 @@ def create_app(
     async def health() -> dict[str, str]:
         return {"status": "ok"}
 
+    @app.get("/.well-known/data-token-jwks.json", include_in_schema=False)
+    async def data_token_keys() -> dict[str, object]:
+        """The public key Loamz Data fetches to verify the tokens this server signs (no secrets)."""
+        minter = container.data_tokens
+        return minter.jwks() if minter is not None else {"keys": []}
+
     for feature in features:
         if "all" in wanted or feature.roles & wanted:
             app.include_router(feature.router())

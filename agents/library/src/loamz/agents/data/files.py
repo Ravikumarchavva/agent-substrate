@@ -6,6 +6,8 @@ on URLs the data service signs; the data service owns paths, versions, quotas, o
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from loamz.agents.data._connection import DataServiceConnection, TokenProvider, mint
 from loamz.agents.kernel.ports.files import FileStore
 from loamz.data.client.errors import NotFoundError as ClientNotFoundError
@@ -14,6 +16,15 @@ from loamz.data.storage.errors import NotFoundError
 from loamz.identity import tenancy
 
 DEFAULT_CONTENT_TYPE = "application/octet-stream"
+
+
+def _epoch(value: datetime | str | None) -> float:
+    """The data service reports times as ISO-8601 text; the FileStore contract wants epoch seconds."""
+    if value is None:
+        return 0.0
+    if isinstance(value, str):
+        value = datetime.fromisoformat(value)
+    return value.timestamp()
 
 
 class DataFileStore(FileStore):
@@ -90,7 +101,7 @@ class DataFileStore(FileStore):
         with self._connection.bearer(token):
             async for file_info in self._connection.client.files.list(volume, remainder):
                 full_key = f"tenants/{tenant}/{file_info.path}"
-                mtime = file_info.updated_at.timestamp() if file_info.updated_at else 0.0
+                mtime = _epoch(file_info.updated_at)
                 items.append((full_key, file_info.size, mtime))
         return items
 

@@ -30,3 +30,6 @@ data/workspace/public/monaco/
 .substrate/
 .loamz/
 *.db
+
+# local Rust experiments
+loamz-rs/target/

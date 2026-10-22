@@ -10,6 +10,7 @@ import base64
 import hashlib
 import os
 import time
+import uuid
 from pathlib import Path
 
 import jwt
@@ -68,11 +69,13 @@ class DataTokenMinter:
         self,
         key_path: Path,
         issuer: str = "loamz-agents",
+        audience: str = "loamz-data",
         allowed_scopes: frozenset[str] = DATA_SCOPES,
     ) -> None:
         self.key = load_or_create_key(key_path)
         self.kid = _kid(self.key)
         self.issuer = issuer
+        self.audience = audience
         self.allowed_scopes = allowed_scopes
 
     def mint(
@@ -92,11 +95,14 @@ class DataTokenMinter:
         granted = sorted(self.allowed_scopes if scopes is None else (scopes & self.allowed_scopes))
         payload: dict[str, object] = {
             "iss": self.issuer,
+            "aud": self.audience,
             "sub": user_id or f"tenant:{tenant_id}",
             "tenant_id": tenant_id,
             "scope": " ".join(granted),
             "iat": now,
+            "nbf": now,
             "exp": now + ttl,
+            "jti": uuid.uuid4().hex,
         }
         if user_id:
             payload["user_id"] = user_id

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from functools import cached_property
+from typing import TYPE_CHECKING
 
 from loamz.agents.bootstrap.settings import Settings
 from loamz.agents.kernel.events import EventBus, InMemoryEventBus
@@ -19,6 +20,9 @@ from loamz.agents.kernel.runtime import Runtime
 from loamz.agents.kernel.telemetry import set_capture_content
 from loamz.agents.stores import AgentStore
 from loamz.data.storage.sql import Database, postgres, sqlite
+
+if TYPE_CHECKING:
+    from loamz.agents.data import DataServiceConnection, DataTokenMinter
 
 type Provider[T] = Callable[["Container"], T]
 
@@ -54,11 +58,42 @@ class Container:
         return database
 
     @cached_property
-    def file_store(self) -> FileStore:
-        """File bytes: a local folder (`files.path`) unless a data service is configured.
+    def data_tokens(self) -> DataTokenMinter | None:
+        """Signs the short-lived tokens this server presents to Loamz Data; None without a data service."""
+        data = self.settings.data
+        if not data.url:
+            return None
+        from pathlib import Path
 
-        TODO(integration): the [data] extra swaps in `loamz.agents.data.DataFileStore` (governed, versioned).
-        """
+        from loamz.agents.data import DataTokenMinter
+
+        return DataTokenMinter(
+            Path(data.token_key_file), issuer=data.files_issuer, audience=data.audience
+        )
+
+    @cached_property
+    def data_connection(self) -> DataServiceConnection | None:
+        """The pooled connection to Loamz Data; None when files are kept locally."""
+        data = self.settings.data
+        if not data.url:
+            return None
+        from loamz.agents.data import DataServiceConnection
+
+        connection = DataServiceConnection(data.url)
+        self.on_close(connection.aclose)
+        return connection
+
+    @cached_property
+    def file_store(self) -> FileStore:
+        """File bytes: Loamz Data's governed Files domain when `data.url` is set, otherwise a local folder."""
+        minter, connection = self.data_tokens, self.data_connection
+        if minter is not None and connection is not None:
+            from loamz.agents.data import DataFileStore
+
+            def token(tenant: str, user: str | None) -> str:
+                return minter.mint(tenant, user, scopes={"files:read", "files:write"})
+
+            return DataFileStore(connection, token)
         from loamz.agents.providers.files import LocalFileStore
 
         return LocalFileStore(self.settings.files.path)

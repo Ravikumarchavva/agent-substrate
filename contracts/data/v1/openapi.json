@@ -1905,6 +1905,17 @@
         "additionalProperties": false,
         "description": "The tenant (a Keycloak organization id). Its alias and every name are derived from it (`tenancy`).",
         "properties": {
+          "alias": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alias"
+          },
           "tenant_id": {
             "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
             "title": "Tenant Id",

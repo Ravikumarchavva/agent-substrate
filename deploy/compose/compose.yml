@@ -69,31 +69,9 @@ x-agent-env: &agent-env
   LOAMZ_AGENTS_LLM__ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
   LOAMZ_AGENTS_LLM__GEMINI_API_KEY: ${GEMINI_API_KEY:-}
   LOAMZ_AGENTS_LLM__OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
-  # Legacy env var compatibility
-  DATABASE_URL: postgresql://${POSTGRES_USER:-substrate}:${POSTGRES_PASSWORD}@postgres:5432/agentdb?sslmode=require
-  ASYNC_DATABASE_URL: postgresql://${POSTGRES_USER:-substrate}:${POSTGRES_PASSWORD}@postgres:5432/agentdb?sslmode=require
-  REDIS_URL: redis://:${REDIS_PASSWORD:?}@redis:6379/0
-  STORE_BACKEND: postgres
-  # Files, documents and memory live in loamz-data; the agent server holds no object-store credentials.
-  DATA_SERVICE_URL: http://data-api:8020
-  DATA_SERVICE_INSECURE_HOSTS: '["data-api"]'
-  # Who may ask for a data token for a user: the agent server confirms organization membership in Keycloak first.
-  OIDC_ADMIN_CLIENT_ID: agent-membership
-  OIDC_ADMIN_CLIENT_SECRET: ${AGENT_MEMBERSHIP_CLIENT_SECRET:?run ./gen-env.sh}
-  # Keycloak resource-server settings (the verifier in the agent server reads these).
-  OIDC_ISSUER: ${KEYCLOAK_PUBLIC_URL:-http://keycloak.localhost:${PORT_KEYCLOAK:-8081}}/realms/loamz
-  OIDC_AUDIENCE: loamz-agents
-  # Keycloak is on the cell's private network over plain http (TLS terminates at the proxy in front, if any).
-  OIDC_INSECURE_HTTP: "true"
-  # No collector in the self-host bundle; point OTEL_EXPORTER_OTLP_ENDPOINT at one and unset this to export traces.
+  # Files live in Loamz Data: this server holds no object-store credentials and signs short-lived tokens per request.
+  LOAMZ_AGENTS_DATA__URL: http://data-api:8020
   OTEL_SDK_DISABLED: "true"
-  FRONTEND_URL: ${AGENTS_CONSOLE_URL:-${SUBSTRATE_UI_URL:-http://localhost:3000}}
-  SANDBOX_RUNTIME: ${SANDBOX_RUNTIME:-nsjail}
-  CHAT_MODEL: ${CHAT_MODEL:-google/gemini-3.1-flash-lite}
-  OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-  GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-  OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
 
 # Capabilities the nsjail code-interpreter runtime needs. Remove them (and set SANDBOX_RUNTIME) if you provide
 # sandboxing another way; without them the server refuses to start with nsjail selected.

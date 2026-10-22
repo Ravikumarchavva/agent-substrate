@@ -43,8 +43,10 @@ def test_data_token_minter_roundtrip(tmp_path):
         minter.key.public_key(),
         algorithms=["EdDSA"],
         issuer="test-issuer",
+        audience="loamz-data",
     )
     assert decoded["sub"] == "u1"
+    assert decoded["jti"] and decoded["nbf"] == decoded["iat"]
     assert decoded["tenant_id"] == "acme"
     assert "memory:write" in decoded["scope"].split()
     assert decoded["act"]["sub"] == "agent:scout"

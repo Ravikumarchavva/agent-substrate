@@ -307,12 +307,12 @@ or be marked deleted with a reason. Tick as ported: `[x]`, deleted: `[-] reason`
 
 ## End-to-end flows (deploy/compose/e2e.py)
 
-- [ ] create organization
-- [ ] create user
-- [ ] add member
-- [ ] cell-admin token
-- [ ] provision tenant
-- [ ] agent: list threads
-- [ ] chat: start a run
-- [ ] chat: the answer streams back
-- [ ] chat: it read the file
+- [x] create organization
+- [x] create user
+- [x] add member
+- [x] cell-admin token
+- [x] provision tenant
+- [x] agent: list threads
+- [x] chat: start a run
+- [x] chat: the answer streams back
+- [x] chat: it read the file

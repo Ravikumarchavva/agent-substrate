@@ -9,7 +9,7 @@ from pathlib import Path
 
 import httpx
 
-from loamz.identity.tenancy import tenant_alias
+from loamz.identity.tenancy import files_volume, tenant_alias
 
 ENV = dict(
     line.split("=", 1)
@@ -162,6 +162,15 @@ step(
     str(r.status_code) + r.text[:300],
 )
 file_id = r.json().get("file_id") or r.json().get("id")
+# the bytes must be in the tenant's governed volume (Loamz Data), not on the agent server's own disk
+listing = http.get(
+    f"{DATA}/volumes/{files_volume(org_id)}/files", headers=user, params={"prefix": "users/"}
+)
+step(
+    "data: the uploaded file is in the tenant's Loamz Data volume",
+    listing.status_code == 200 and "notes.txt" in listing.text,
+    str(listing.status_code) + listing.text[:300],
+)
 r = http.get(f"{AGENT}/files/{file_id}/download", headers=user)
 step(
     "agent: download it back",

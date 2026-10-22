@@ -247,6 +247,24 @@ class SafetySettings(BaseModel):
     image_nsfl_threshold: float = 0.3
 
 
+class DataSettings(BaseModel):
+    """Loamz Data: where files (and later documents, memory and the runtime database) are kept."""
+
+    url: str = Field(
+        default="",
+        description="Loamz Data API address. Empty: files live in a local folder (`files.path`).",
+    )
+    token_key_file: str = Field(
+        default="./.loamz/keys/data-token.pem",
+        description="Ed25519 key this server signs per-request data tokens with (created on first use).",
+    )
+    files_issuer: str = Field(
+        default="loamz-agents-files",
+        description="Issuer name the data service trusts to change files; its JWKS is served at /.well-known/data-token-jwks.json.",
+    )
+    audience: str = "loamz-data"
+
+
 class SandboxSettings(BaseModel):
     runtime: str = Field(default="nsjail", description="nsjail | k8s | inprocess (tests only)")
     network_policy: str = "deny"
@@ -288,6 +306,7 @@ class Settings(BaseSettings):
     rate_limit: RateLimitSettings = Field(default_factory=RateLimitSettings)
     safety: SafetySettings = Field(default_factory=SafetySettings)
     sandbox: SandboxSettings = Field(default_factory=SandboxSettings)
+    data: DataSettings = Field(default_factory=DataSettings)
     telemetry: TelemetrySettings = Field(default_factory=TelemetrySettings)
     roles: list[str] = Field(
         default_factory=lambda: ["all"],

@@ -27,6 +27,11 @@
       "package-name": "loamz-core",
       "component": "loamz-core"
     },
+    "sdk/python/identity": {
+      "release-type": "python",
+      "package-name": "loamz-identity",
+      "component": "loamz-identity"
+    },
     "sdk/python/data": {
       "release-type": "python",
       "package-name": "loamz-data",

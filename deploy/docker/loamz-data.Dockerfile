@@ -18,6 +18,7 @@ COPY pyproject.toml uv.lock ./
 COPY server/engine/pyproject.toml server/engine/
 COPY server/server/pyproject.toml server/server/
 COPY sdk/python/core/pyproject.toml sdk/python/core/
+COPY sdk/python/identity/pyproject.toml sdk/python/identity/
 COPY sdk/python/data/pyproject.toml sdk/python/data/
 COPY meta/loamz/pyproject.toml meta/loamz/
 
@@ -27,6 +28,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 COPY server/engine server/engine
 COPY server/server server/server
 COPY sdk/python/core sdk/python/core
+COPY sdk/python/identity sdk/python/identity
 COPY sdk/python/data sdk/python/data
 
 RUN --mount=type=cache,target=/root/.cache/uv \

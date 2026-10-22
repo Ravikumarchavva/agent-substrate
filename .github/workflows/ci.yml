@@ -121,6 +121,7 @@ jobs:
       matrix:
         include:
           - { name: loamz-core, dir: sdk/python/core }
+          - { name: loamz-identity, dir: sdk/python/identity }
           - { name: loamz-data, dir: sdk/python/data }
           - { name: loamz-engine, dir: server/engine }
           - { name: loamz-server, dir: server/server }

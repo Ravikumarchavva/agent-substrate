@@ -34,7 +34,9 @@ def test_the_async_pager_matches_the_sync_one():
         return PAGES[token]
 
     async def run():
-        return [x async for x in AsyncItemPaged(get)], [p async for p in AsyncItemPaged(get).by_page("b")]
+        return [x async for x in AsyncItemPaged(get)], [
+            p async for p in AsyncItemPaged(get).by_page("b")
+        ]
 
     assert asyncio.run(run()) == ([1, 2, 3, 4, 5], [[4, 5]])
 

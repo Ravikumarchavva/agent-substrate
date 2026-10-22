@@ -31,6 +31,7 @@ imports:
 
 test-sdk:
 	cd sdk/python/core && uv run --package loamz-core pytest $(PYTEST)
+	cd sdk/python/identity && uv run --package loamz-identity pytest $(PYTEST)
 	cd sdk/python/data && uv run --package loamz-data pytest $(PYTEST)
 
 test-engine:

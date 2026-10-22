@@ -4,8 +4,9 @@ name: Release
 # (`<component>-v<version>`) and creates GitHub releases; this workflow then publishes the released Python
 # distributions to PyPI (trusted publishing, no tokens) in dependency order:
 #   tier 1  loamz-core, loamz-engine
-#   tier 2  loamz-data (needs core), loamz-server (needs engine, core)
-#   tier 3  loamz (the meta package)
+#   tier 2  loamz-identity (needs core)
+#   tier 3  loamz-data (needs core, identity), loamz-server (needs engine, core)
+#   tier 4  loamz (the meta package)
 # loamz-reader and the container images are published by release-images.yml.
 on:
   push:
@@ -55,9 +56,22 @@ jobs:
       id-token: write
 
   publish-tier-2:
-    name: PyPI / ${{ matrix.name }}
+    name: PyPI / loamz-identity
     needs: [release-please, publish-tier-1]
     if: always() && needs.release-please.outputs.tags == 'true' && needs.publish-tier-1.result != 'failure'
+    uses: ./.github/workflows/_publish.yml
+    with:
+      name: loamz-identity
+      dir: sdk/python/identity
+      released: ${{ needs.release-please.outputs.released }}
+    permissions:
+      contents: read
+      id-token: write
+
+  publish-tier-3:
+    name: PyPI / ${{ matrix.name }}
+    needs: [release-please, publish-tier-2]
+    if: always() && needs.release-please.outputs.tags == 'true' && needs.publish-tier-2.result != 'failure'
     strategy:
       fail-fast: false
       matrix:
@@ -73,10 +87,10 @@ jobs:
       contents: read
       id-token: write
 
-  publish-tier-3:
+  publish-tier-4:
     name: PyPI / loamz
-    needs: [release-please, publish-tier-2]
-    if: always() && needs.release-please.outputs.tags == 'true' && needs.publish-tier-2.result != 'failure'
+    needs: [release-please, publish-tier-3]
+    if: always() && needs.release-please.outputs.tags == 'true' && needs.publish-tier-3.result != 'failure'
     uses: ./.github/workflows/_publish.yml
     with:
       name: loamz

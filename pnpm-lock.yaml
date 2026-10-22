@@ -11,7 +11,7 @@ importers:
 
   .: {}
 
-  agents/console:
+  apps/agents-console:
     dependencies:
       '@betteroffice/docx-react':
         specifier: ^0.1.0
@@ -30,7 +30,7 @@ importers:
         version: 0.1.0(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       '@loamz/oidc-bff':
         specifier: workspace:*
-        version: link:../../identity/oidc-bff
+        version: link:../../sdk/js/oidc-bff
       '@monaco-editor/react':
         specifier: ^4.7.0
         version: 4.7.0(monaco-editor@0.57.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -156,11 +156,11 @@ importers:
         specifier: ^4.1.8
         version: 4.1.12(@opentelemetry/api@1.9.1)(@types/node@20.19.43)(vite@8.3.4(@types/node@20.19.43)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2))
 
-  data/workspace:
+  apps/data-workspace:
     dependencies:
       '@loamz/oidc-bff':
         specifier: workspace:*
-        version: link:../../identity/oidc-bff
+        version: link:../../sdk/js/oidc-bff
       '@monaco-editor/react':
         specifier: ^4.7.0
         version: 4.7.0(monaco-editor@0.57.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -247,7 +247,7 @@ importers:
         specifier: ^4.0.0
         version: 4.1.12(@opentelemetry/api@1.9.1)(@types/node@22.20.5)(vite@8.3.4(@types/node@22.20.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2))
 
-  identity/oidc-bff:
+  sdk/js/oidc-bff:
     devDependencies:
       '@types/node':
         specifier: ^22
@@ -957,6 +957,7 @@ packages:
   '@opentelemetry/sdk-trace-base@2.12.0':
     resolution: {integrity: sha512-JOERgZCxRM06FEJ5kEWxlSRChah6MmXDx3KwCruqEv/iEyLkTokCSemf2y1w8oIHtfrr8EVTpzebq/31vn2Cpg==}
     engines: {node: ^18.19.0 || >=20.6.0}
+    deprecated: Use @opentelemetry/sdk-trace package
     peerDependencies:
       '@opentelemetry/api': '>=1.3.0 <1.10.0'
 

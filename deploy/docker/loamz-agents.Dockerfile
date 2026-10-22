@@ -18,23 +18,22 @@ ENV UV_LINK_MODE=copy UV_COMPILE_BYTECODE=1 UV_PYTHON_DOWNLOADS=never
 WORKDIR /app
 
 COPY pyproject.toml uv.lock ./
-COPY data/storage/pyproject.toml data/storage/
-COPY data/client/pyproject.toml data/client/
-COPY data/server/pyproject.toml data/server/
-COPY identity/python/pyproject.toml identity/python/
-COPY agents/library/pyproject.toml agents/library/
+COPY server/engine/pyproject.toml server/engine/
+COPY server/server/pyproject.toml server/server/
+COPY sdk/python/core/pyproject.toml sdk/python/core/
+COPY sdk/python/data/pyproject.toml sdk/python/data/
 COPY meta/loamz/pyproject.toml meta/loamz/
 
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev --no-install-workspace --package loamz-agents --extra server --extra postgres --extra redis --extra data --extra openai --extra anthropic --extra gemini
+    uv sync --frozen --no-dev --no-install-workspace --package loamz-server --extra agents
 
-COPY data/storage data/storage
-COPY data/client data/client
-COPY identity/python identity/python
-COPY agents/library agents/library
+COPY server/engine server/engine
+COPY server/server server/server
+COPY sdk/python/core sdk/python/core
+COPY sdk/python/data sdk/python/data
 
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev --no-editable --package loamz-agents --extra server --extra postgres --extra redis --extra data --extra openai --extra anthropic --extra gemini
+    uv sync --frozen --no-dev --no-editable --package loamz-server --extra agents
 
 FROM python:3.14-slim-bookworm AS runtime
 RUN apt-get update && apt-get install -y --no-install-recommends libprotobuf32 libnl-route-3-200 \

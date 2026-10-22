@@ -7,30 +7,30 @@
   "bump-minor-pre-major": true,
   "bump-patch-for-minor-pre-major": true,
   "packages": {
-    "data/storage": {
+    "server/engine": {
       "release-type": "python",
-      "package-name": "loamz-data-storage",
-      "component": "loamz-data-storage"
+      "package-name": "loamz-engine",
+      "component": "loamz-engine"
     },
-    "identity/python": {
+    "server/server": {
       "release-type": "python",
-      "package-name": "loamz-identity",
-      "component": "loamz-identity"
+      "package-name": "loamz-server",
+      "component": "loamz-server"
     },
-    "data/client": {
+    "server/reader": {
       "release-type": "python",
-      "package-name": "loamz-data-client",
-      "component": "loamz-data-client"
+      "package-name": "loamz-reader",
+      "component": "loamz-reader"
     },
-    "data/server": {
+    "sdk/python/core": {
       "release-type": "python",
-      "package-name": "loamz-data-server",
-      "component": "loamz-data-server"
+      "package-name": "loamz-core",
+      "component": "loamz-core"
     },
-    "agents/library": {
+    "sdk/python/data": {
       "release-type": "python",
-      "package-name": "loamz-agents",
-      "component": "loamz-agents"
+      "package-name": "loamz-data",
+      "component": "loamz-data"
     },
     "meta/loamz": {
       "release-type": "python",

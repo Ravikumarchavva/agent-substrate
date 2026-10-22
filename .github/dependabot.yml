@@ -16,7 +16,7 @@ updates:
 
   # reader is outside the uv workspace (Python 3.13, own project).
   - package-ecosystem: uv
-    directory: /data/reader
+    directory: /server/reader
     schedule:
       interval: monthly
     open-pull-requests-limit: 2
@@ -27,7 +27,7 @@ updates:
       python-minor-patch:
         update-types: [minor, patch]
 
-  # pnpm workspace at the root (covers agents/console, data/workspace and identity/oidc-bff).
+  # pnpm workspace at the root (covers apps/agents-console, apps/data-workspace and sdk/js/oidc-bff).
   - package-ecosystem: npm
     directory: /
     schedule:

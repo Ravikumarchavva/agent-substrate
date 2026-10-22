@@ -1,9 +1,12 @@
 name: Release
 
-# release-please opens one release PR per component. Merging a release PR
-# creates the tag `<component>-v<version>` and a GitHub release; this workflow then publishes artifacts
-# for that component from the tag in exact dependency order:
-# storage -> identity -> client -> server / agents -> meta.
+# release-please keeps one release PR for the monorepo. Merging it tags every released component
+# (`<component>-v<version>`) and creates GitHub releases; this workflow then publishes the released Python
+# distributions to PyPI (trusted publishing, no tokens) in dependency order:
+#   tier 1  loamz-core, loamz-engine
+#   tier 2  loamz-data (needs core), loamz-server (needs engine, core)
+#   tier 3  loamz (the meta package)
+# loamz-reader and the container images are published by release-images.yml.
 on:
   push:
     branches: [main]
@@ -23,20 +26,8 @@ jobs:
       contents: write
       pull-requests: write
     outputs:
-      data-storage-released: ${{ steps.rp.outputs['data/storage--release_created'] }}
-      data-storage-tag: ${{ steps.rp.outputs['data/storage--tag_name'] }}
-      identity-released: ${{ steps.rp.outputs['identity/python--release_created'] }}
-      identity-tag: ${{ steps.rp.outputs['identity/python--tag_name'] }}
-      data-client-released: ${{ steps.rp.outputs['data/client--release_created'] }}
-      data-client-tag: ${{ steps.rp.outputs['data/client--tag_name'] }}
-      data-server-released: ${{ steps.rp.outputs['data/server--release_created'] }}
-      data-server-tag: ${{ steps.rp.outputs['data/server--tag_name'] }}
-      data-server-version: ${{ steps.rp.outputs['data/server--version'] }}
-      agents-released: ${{ steps.rp.outputs['agents/library--release_created'] }}
-      agents-tag: ${{ steps.rp.outputs['agents/library--tag_name'] }}
-      agents-version: ${{ steps.rp.outputs['agents/library--version'] }}
-      meta-released: ${{ steps.rp.outputs['meta/loamz--release_created'] }}
-      meta-tag: ${{ steps.rp.outputs['meta/loamz--tag_name'] }}
+      released: ${{ steps.rp.outputs.paths_released }}
+      tags: ${{ steps.rp.outputs.releases_created }}
     steps:
       - uses: googleapis/release-please-action@v4
         id: rp
@@ -44,144 +35,53 @@ jobs:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
-  # ── 1. Storage ─────────────────────────────────────────────────────────────
-  publish-loamz-data-storage:
-    name: PyPI / loamz-data-storage
+  publish-tier-1:
+    name: PyPI / ${{ matrix.name }}
     needs: release-please
-    if: needs.release-please.outputs.data-storage-released == 'true'
-    runs-on: ubuntu-latest
-    environment: pypi-loamz-data-storage
+    if: needs.release-please.outputs.tags == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: loamz-core, dir: sdk/python/core }
+          - { name: loamz-engine, dir: server/engine }
+    uses: ./.github/workflows/_publish.yml
+    with:
+      name: ${{ matrix.name }}
+      dir: ${{ matrix.dir }}
+      released: ${{ needs.release-please.outputs.released }}
     permissions:
       contents: read
       id-token: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.release-please.outputs.data-storage-tag }}
-      - uses: astral-sh/setup-uv@v6
-      - run: uv build --package loamz-data-storage
-      - run: uv publish
 
-  # ── 2. Identity ────────────────────────────────────────────────────────────
-  publish-loamz-identity:
-    name: PyPI / loamz-identity
-    needs: [release-please, publish-loamz-data-storage]
-    if: always() && needs.release-please.outputs.identity-released == 'true' && (needs.publish-loamz-data-storage.result == 'success' || needs.publish-loamz-data-storage.result == 'skipped')
-    runs-on: ubuntu-latest
-    environment: pypi-loamz-identity
+  publish-tier-2:
+    name: PyPI / ${{ matrix.name }}
+    needs: [release-please, publish-tier-1]
+    if: always() && needs.release-please.outputs.tags == 'true' && needs.publish-tier-1.result != 'failure'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: loamz-data, dir: sdk/python/data }
+          - { name: loamz-server, dir: server/server }
+    uses: ./.github/workflows/_publish.yml
+    with:
+      name: ${{ matrix.name }}
+      dir: ${{ matrix.dir }}
+      released: ${{ needs.release-please.outputs.released }}
     permissions:
       contents: read
       id-token: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.release-please.outputs.identity-tag }}
-      - uses: astral-sh/setup-uv@v6
-      - run: uv build --package loamz-identity
-      - run: uv publish
 
-  # ── 3. Client ──────────────────────────────────────────────────────────────
-  publish-loamz-data-client:
-    name: PyPI / loamz-data-client
-    needs: [release-please, publish-loamz-identity]
-    if: always() && needs.release-please.outputs.data-client-released == 'true' && (needs.publish-loamz-identity.result == 'success' || needs.publish-loamz-identity.result == 'skipped')
-    runs-on: ubuntu-latest
-    environment: pypi-loamz-data-client
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.release-please.outputs.data-client-tag }}
-      - uses: astral-sh/setup-uv@v6
-      - run: uv build --package loamz-data-client
-      - run: uv publish
-
-  # ── 4. Server & Agents ─────────────────────────────────────────────────────
-  publish-loamz-data-server:
-    name: PyPI / loamz-data-server
-    needs: [release-please, publish-loamz-data-client]
-    if: always() && needs.release-please.outputs.data-server-released == 'true' && (needs.publish-loamz-data-client.result == 'success' || needs.publish-loamz-data-client.result == 'skipped')
-    runs-on: ubuntu-latest
-    environment: pypi-loamz-data-server
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.release-please.outputs.data-server-tag }}
-      - uses: astral-sh/setup-uv@v6
-      - run: uv build --package loamz-data-server
-      - run: uv publish
-
-  publish-loamz-agents:
-    name: PyPI / loamz-agents
-    needs: [release-please, publish-loamz-data-client]
-    if: always() && needs.release-please.outputs.agents-released == 'true' && (needs.publish-loamz-data-client.result == 'success' || needs.publish-loamz-data-client.result == 'skipped')
-    runs-on: ubuntu-latest
-    environment: pypi-loamz-agents
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.release-please.outputs.agents-tag }}
-      - uses: astral-sh/setup-uv@v6
-      - run: uv build --package loamz-agents
-      - run: uv publish
-
-  # ── 5. Meta package ────────────────────────────────────────────────────────
-  publish-loamz:
+  publish-tier-3:
     name: PyPI / loamz
-    needs: [release-please, publish-loamz-data-server, publish-loamz-agents]
-    if: always() && needs.release-please.outputs.meta-released == 'true' && (needs.publish-loamz-data-server.result == 'success' || needs.publish-loamz-data-server.result == 'skipped') && (needs.publish-loamz-agents.result == 'success' || needs.publish-loamz-agents.result == 'skipped')
-    runs-on: ubuntu-latest
-    environment: pypi-loamz
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.release-please.outputs.meta-tag }}
-      - uses: astral-sh/setup-uv@v6
-      - run: uv build --package loamz
-      - run: uv publish
-
-  # ── Container images (GHCR) ────────────────────────────────────────────────
-  image-loamz-data:
-    name: Image / loamz-data
-    needs: release-please
-    if: needs.release-please.outputs.data-server-released == 'true'
-    permissions:
-      contents: read
-      packages: write
-      id-token: write
-      attestations: write
-    uses: ./.github/workflows/_image.yml
+    needs: [release-please, publish-tier-2]
+    if: always() && needs.release-please.outputs.tags == 'true' && needs.publish-tier-2.result != 'failure'
+    uses: ./.github/workflows/_publish.yml
     with:
-      image: loamz-data
-      ref: ${{ needs.release-please.outputs.data-server-tag }}
-      version: ${{ needs.release-please.outputs.data-server-version }}
-      context: .
-      file: deploy/docker/loamz-data.Dockerfile
-
-  image-loamz-agents:
-    name: Image / loamz-agents
-    needs: release-please
-    if: needs.release-please.outputs.agents-released == 'true'
+      name: loamz
+      dir: meta/loamz
+      released: ${{ needs.release-please.outputs.released }}
     permissions:
       contents: read
-      packages: write
       id-token: write
-      attestations: write
-    uses: ./.github/workflows/_image.yml
-    with:
-      image: loamz-agents
-      ref: ${{ needs.release-please.outputs.agents-tag }}
-      version: ${{ needs.release-please.outputs.agents-version }}
-      context: .
-      file: deploy/docker/loamz-agents.Dockerfile

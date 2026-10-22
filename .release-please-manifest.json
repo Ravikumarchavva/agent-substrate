@@ -1,8 +1,8 @@
 {
-  "data/storage": "0.1.0",
-  "identity/python": "0.1.0",
-  "data/client": "0.1.0",
-  "data/server": "0.1.0",
-  "agents/library": "0.1.0",
+  "server/engine": "0.1.0",
+  "server/server": "0.1.0",
+  "server/reader": "0.1.0",
+  "sdk/python/core": "0.1.0",
+  "sdk/python/data": "0.1.0",
   "meta/loamz": "0.1.0"
 }

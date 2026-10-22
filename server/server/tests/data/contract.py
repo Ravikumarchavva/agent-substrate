@@ -2,7 +2,7 @@
 
 Regenerate the committed contract after a deliberate API change, then review the diff:
 
-    uv run --package loamz-data-server python data/server/tests/contract.py
+    uv run --package loamz-server python server/server/tests/data/contract.py
 """
 
 from __future__ import annotations

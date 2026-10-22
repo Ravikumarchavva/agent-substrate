@@ -1,7 +1,7 @@
 packages:
-  - agents/console
-  - data/workspace
-  - identity/oidc-bff
+  - apps/agents-console
+  - apps/data-workspace
+  - sdk/js/oidc-bff
 
 allowBuilds:
   '@prisma/client': true

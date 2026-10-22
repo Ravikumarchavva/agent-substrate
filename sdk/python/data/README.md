@@ -1,12 +1,12 @@
-# loamz-data-client
+# loamz-data
 
 Typed Python client for the Loamz Data API: governed SQL, catalog, files, documents, memory and privacy, sync and
 asyncio. **The core depends only on `httpx` and `loamz-identity`** (for the tenancy rules).
 
 ```bash
-pip install loamz-data-client            # core
-pip install 'loamz-data-client[arrow]'   # + Polars/Arrow results (the code-interpreter sandbox image uses this)
-pip install 'loamz-data-client[http2]'   # + HTTP/2 multiplexing for the async client
+pip install loamz-data            # core
+pip install 'loamz-data[arrow]'   # + Polars/Arrow results (the code-interpreter sandbox image uses this)
+pip install 'loamz-data[http2]'   # + HTTP/2 multiplexing for the async client
 ```
 
 ```python
@@ -61,5 +61,5 @@ An agent's file keys (`tenants/<tenant>/<path>`) live in the tenant's workspace 
 ## Develop
 
 ```bash
-uv run --package loamz-data-client pytest data/client/tests -n 4
+uv run --package loamz-data pytest sdk/python/data/tests -n 4
 ```

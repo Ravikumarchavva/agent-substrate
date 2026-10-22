@@ -61,7 +61,7 @@ Anyone, on one machine, with the compose bundle; or on any Kubernetes with the c
 ```sh
 cd deploy/compose
 ./gen-env.sh                                   # random secrets into .env (never committed)
-docker compose --profile monolith up -d --build      # or: --profile microservices ; add --profile ml for retrieval models
+docker compose --profile agents up -d --build      # or: --profile microservices ; add --profile ml for retrieval models
 ```
 
 Then open http://localhost:3000 (console) and http://localhost:3011 (data workspace). Add at least one model provider key to `.env`.

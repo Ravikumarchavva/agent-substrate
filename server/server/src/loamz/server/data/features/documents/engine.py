@@ -2,7 +2,7 @@
 
 The OKF bundle in the tenant's volume is the source of truth; the catalog (full-text) and the chunk vectors live in the
 retrieval database (PostgreSQL with pgvector in production, a SQLite file in development) and are rebuilt by `reindex`.
-Parsing is not done here: uploads are read by the document reader (`loamz-data-reader`) or arrive already extracted.
+Parsing is not done here: uploads are read by the document reader (`loamz-reader`) or arrive already extracted.
 """
 
 from __future__ import annotations

@@ -9,13 +9,13 @@ WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@11.1.1 --activate
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY agents/console/package.json ./agents/console/
-COPY agents/console/prisma ./agents/console/prisma/
-COPY identity/oidc-bff/package.json ./identity/oidc-bff/
-COPY data/workspace/package.json ./data/workspace/
-COPY data/workspace/scripts ./data/workspace/scripts/
+COPY apps/agents-console/package.json ./apps/agents-console/
+COPY apps/agents-console/prisma ./apps/agents-console/prisma/
+COPY sdk/js/oidc-bff/package.json ./sdk/js/oidc-bff/
+COPY apps/data-workspace/package.json ./apps/data-workspace/
+COPY apps/data-workspace/scripts ./apps/data-workspace/scripts/
 
-RUN pnpm install --frozen-lockfile --filter ./agents/console...
+RUN pnpm install --frozen-lockfile --filter ./apps/agents-console...
 
 FROM base AS builder
 WORKDIR /app
@@ -23,11 +23,11 @@ WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@11.1.1 --activate
 
 COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/agents/console/node_modules ./agents/console/node_modules
+COPY --from=deps /app/apps/agents-console/node_modules ./apps/agents-console/node_modules
 COPY package.json pnpm-workspace.yaml ./
-COPY identity/oidc-bff ./identity/oidc-bff
-COPY agents/console ./agents/console
-WORKDIR /app/agents/console
+COPY sdk/js/oidc-bff ./sdk/js/oidc-bff
+COPY apps/agents-console ./apps/agents-console
+WORKDIR /app/apps/agents-console
 
 ENV NEXT_TELEMETRY_DISABLED=1
 ARG NEXT_PUBLIC_API_URL=http://localhost:8000
@@ -44,10 +44,10 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
-COPY --from=builder /app/agents/console/.next/standalone ./
-COPY --from=builder /app/agents/console/public ./agents/console/public
-COPY --from=builder /app/agents/console/.next/static ./agents/console/.next/static
-COPY --from=builder /app/agents/console/prisma ./agents/console/prisma
+COPY --from=builder /app/apps/agents-console/.next/standalone ./
+COPY --from=builder /app/apps/agents-console/public ./apps/agents-console/public
+COPY --from=builder /app/apps/agents-console/.next/static ./apps/agents-console/.next/static
+COPY --from=builder /app/apps/agents-console/prisma ./apps/agents-console/prisma
 COPY --from=builder /app/node_modules ./node_modules
 
 USER nextjs
@@ -60,5 +60,5 @@ ENV HOSTNAME="0.0.0.0"
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
     CMD wget -q -O /dev/null http://127.0.0.1:3000/chat || exit 1
 
-CMD ["node", "agents/console/server.js"]
+CMD ["node", "apps/agents-console/server.js"]
 

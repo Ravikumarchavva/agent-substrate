@@ -213,7 +213,7 @@ def _image(
     """A picture of text: its words through OCR, or one page that says it needs OCR."""
     if ocr is None or strategy == "fast":
         page = ExtractedPage(page_number=1, text="", markdown="", method="text", needs_ocr=True)
-        warning = "this is an image and no OCR engine is installed (apt install tesseract-ocr, or pip install 'loamz-data-storage[ocr]')"
+        warning = "this is an image and no OCR engine is installed (apt install tesseract-ocr, or pip install 'loamz-engine[ocr]')"
         if strategy == "fast":
             warning = "strategy='fast' does not run OCR: the image is listed in needs_ocr"
         return ExtractionResult(

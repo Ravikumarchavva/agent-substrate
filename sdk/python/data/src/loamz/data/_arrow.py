@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-HINT = "install the Arrow extra: pip install 'loamz-data-client[arrow]'"
+HINT = "install the Arrow extra: pip install 'loamz-data[arrow]'"
 
 
 def pyarrow() -> Any:

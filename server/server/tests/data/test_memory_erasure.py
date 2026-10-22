@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-from tests.data.test_documents import extraction
 
 from loamz.data import (
     ForbiddenError,
@@ -12,6 +11,7 @@ from loamz.data import (
     ScopeViolationError,
 )
 from loamz.engine.testing.conformance.document_library import prose
+from tests.data.test_documents import extraction
 
 A, B = "acme", "globex"
 

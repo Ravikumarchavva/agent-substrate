@@ -5,12 +5,12 @@ from __future__ import annotations
 import boto3
 import pytest
 from botocore.client import Config
-from tests.data.test_documents import extraction
 
 from loamz.data import ForbiddenError, NotFoundError
 from loamz.engine.testing.conformance.document_library import prose
 from loamz.server.data.features.documents.api import documents
 from tests.data.conftest import VOLUMES_BUCKET, serve_documents
+from tests.data.test_documents import extraction
 
 pytestmark = pytest.mark.integration
 VOLUME = "tenant_vt.workspace.files"

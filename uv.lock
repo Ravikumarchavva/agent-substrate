@@ -2096,6 +2096,9 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+agents = [
+    { name = "loamz-engine", extra = ["anthropic", "data", "gemini", "mcp", "openai", "redis", "tools"] },
+]
 console = [
     { name = "prompt-toolkit" },
     { name = "rich" },
@@ -2129,6 +2132,7 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.28,<1" },
     { name = "loamz-core", editable = "sdk/python/core" },
     { name = "loamz-engine", extras = ["logging"], editable = "server/engine" },
+    { name = "loamz-engine", extras = ["openai", "anthropic", "gemini", "redis", "mcp", "tools", "data"], marker = "extra == 'agents'", editable = "server/engine" },
     { name = "loamz-engine", extras = ["postgres", "pdf"], editable = "server/engine" },
     { name = "nvidia-ml-py", marker = "extra == 'gpu'", specifier = ">=12.0" },
     { name = "opentelemetry-sdk", specifier = ">=1.20.0" },
@@ -2147,7 +2151,7 @@ requires-dist = [
     { name = "sqlglot", specifier = ">=27,<29" },
     { name = "uvicorn", specifier = ">=0.34,<1" },
 ]
-provides-extras = ["inference", "gpu", "console"]
+provides-extras = ["inference", "gpu", "agents", "console"]
 
 [package.metadata.requires-dev]
 dev = [

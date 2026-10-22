@@ -1,7 +1,7 @@
 # Substrate cell: the self-host bundle (ADR 0006). One identical stack for every hosting model's smallest form.
 #
 #   ./gen-env.sh                                   # secrets
-#   docker compose --profile monolith up -d --build        # agent server as one process (default choice)
+#   docker compose --profile agents up -d --build        # agent server as one process (default choice)
 #   docker compose --profile microservices up -d --build   # agent server as ten services behind a gateway
 #   add --profile ml for embedding-reranker and its llama.cpp sidecars (large model downloads)
 #

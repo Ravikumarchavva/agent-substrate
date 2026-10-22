@@ -9,5 +9,5 @@ if [ -n "${LOAMZ_ROLES:-}" ]; then
   ROLES_ARG="--roles ${LOAMZ_ROLES}"
 fi
 
-exec loamz-agents serve ${ROLES_ARG} --host 0.0.0.0 --port "${PORT:-8000}"
+exec loamz-server agents serve ${ROLES_ARG} --host 0.0.0.0 --port "${PORT:-8000}"
 

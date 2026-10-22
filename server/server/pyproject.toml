@@ -33,6 +33,8 @@ dependencies = [
 inference = ["pillow>=12.0.0"]
 # GPU detection for the inference role reads NVML; without it the pool falls back to nvidia-smi, then to CPU.
 gpu = ["nvidia-ml-py>=12.0"]
+# agent hosting: the model vendors, Redis, MCP, skills and the Loamz Data adapters (the agents image installs this)
+agents = ["loamz-engine[openai,anthropic,gemini,redis,mcp,tools,data]"]
 # the interactive console (`loamz-server agents chat`)
 console = ["rich>=14.3.2", "prompt-toolkit>=3.0.0"]
 

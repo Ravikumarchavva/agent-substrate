@@ -6,18 +6,18 @@ WORKDIR /app
 
 FROM base AS build
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY agents/console/package.json ./agents/console/
-COPY agents/console/prisma ./agents/console/prisma/
-COPY data/workspace/package.json ./data/workspace/
-COPY data/workspace/scripts ./data/workspace/scripts/
-COPY identity/oidc-bff/package.json ./identity/oidc-bff/
-RUN pnpm install --frozen-lockfile --filter ./data/workspace...
-COPY identity/oidc-bff ./identity/oidc-bff
-COPY data/workspace ./data/workspace
+COPY apps/agents-console/package.json ./apps/agents-console/
+COPY apps/agents-console/prisma ./apps/agents-console/prisma/
+COPY apps/data-workspace/package.json ./apps/data-workspace/
+COPY apps/data-workspace/scripts ./apps/data-workspace/scripts/
+COPY sdk/js/oidc-bff/package.json ./sdk/js/oidc-bff/
+RUN pnpm install --frozen-lockfile --filter ./apps/data-workspace...
+COPY sdk/js/oidc-bff ./sdk/js/oidc-bff
+COPY apps/data-workspace ./apps/data-workspace
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN pnpm --filter ./data/workspace build \
-    && pnpm --filter ./data/workspace --prod deploy --legacy /out
-RUN cp -r data/workspace/.next /out/.next
+RUN pnpm --filter ./apps/data-workspace build \
+    && pnpm --filter ./apps/data-workspace --prod deploy --legacy /out
+RUN cp -r apps/data-workspace/.next /out/.next
 
 FROM node:22-alpine AS runtime
 WORKDIR /app

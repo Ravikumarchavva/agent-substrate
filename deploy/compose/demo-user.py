@@ -2,7 +2,7 @@
 
 For a laptop cell only; never run it against a cell other people can reach.
 
-    uv run --package loamz-agents python deploy/compose/demo-user.py deploy/compose/.env
+    uv run --package loamz-core python deploy/compose/demo-user.py deploy/compose/.env
 """
 
 import sys

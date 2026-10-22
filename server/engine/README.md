@@ -1,4 +1,4 @@
-# loamz-data-storage
+# loamz-engine
 
 Loamz Data's embeddable engine, pure Python (pydantic only): SQL written once for SQLite and PostgreSQL, files,
 vectors, full-text search, memory and documents. Python 3.13 and 3.14.
@@ -20,5 +20,5 @@ holds the embedder and reranker ports, clients for ones reached by URL, and a po
 library, extractor, OCR, embedder, reranker).
 
 ```bash
-uv run --package loamz-data-storage pytest data/storage/tests -n 8   # PostgreSQL via LOAMZ_TEST_POSTGRES_URL
+uv run --package loamz-engine pytest server/engine/tests -n 8   # PostgreSQL via LOAMZ_TEST_POSTGRES_URL
 ```

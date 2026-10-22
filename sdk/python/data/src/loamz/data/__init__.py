@@ -10,7 +10,7 @@ Inside a Loamz code-interpreter sandbox the connection is a Unix socket and a pe
 `AsyncDataClient` yourself.
 
 The core depends only on httpx (and `loamz-identity` for the tenancy rules). `ld.sql`, `ld.arrow` and `ld.stream`
-need the Arrow extra (`pip install 'loamz-data-client[arrow]'`) and say so when it is missing; `ld.rows` returns
+need the Arrow extra (`pip install 'loamz-data[arrow]'`) and say so when it is missing; `ld.rows` returns
 plain JSON rows without it.
 """
 

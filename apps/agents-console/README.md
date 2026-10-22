@@ -110,7 +110,7 @@ Copy `.env.local.example` → `.env.local`:
 | `NEXT_PUBLIC_BRAND_LOGO_URL` | Optional: your own logo (an image URL) in place of the default two-square mark. Replace `public/favicon.svg` for the browser tab. |
 
 > **Identity note:** sign-in is the shared backend-for-frontend library
-> ([`@substrate/oidc-bff`](../../identity/oidc-bff)): authorization code + PKCE, tokens in an encrypted httpOnly cookie, never in the browser.
+> ([`@substrate/oidc-bff`](../../sdk/js/oidc-bff)): authorization code + PKCE, tokens in an encrypted httpOnly cookie, never in the browser.
 > `/api/chat` and the `/api/backend/*` proxy call the Agent API (`/api/v1`) with the user's own access token, so agent-written files and
 > browser reads share one identity. The tenant is the Keycloak organization in that token, and administrators are users with the
 > `tenant_admin` realm role. There is no anonymous mode: no session means 401.

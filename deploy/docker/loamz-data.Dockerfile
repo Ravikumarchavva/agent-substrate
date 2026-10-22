@@ -15,23 +15,22 @@ ENV UV_LINK_MODE=copy UV_COMPILE_BYTECODE=1 UV_PYTHON_DOWNLOADS=never
 WORKDIR /app
 
 COPY pyproject.toml uv.lock ./
-COPY data/storage/pyproject.toml data/storage/
-COPY data/client/pyproject.toml data/client/
-COPY data/server/pyproject.toml data/server/
-COPY identity/python/pyproject.toml identity/python/
-COPY agents/library/pyproject.toml agents/library/
+COPY server/engine/pyproject.toml server/engine/
+COPY server/server/pyproject.toml server/server/
+COPY sdk/python/core/pyproject.toml sdk/python/core/
+COPY sdk/python/data/pyproject.toml sdk/python/data/
 COPY meta/loamz/pyproject.toml meta/loamz/
 
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev --no-install-workspace --package loamz-data-server
+    uv sync --frozen --no-dev --no-install-workspace --package loamz-server
 
-COPY data/storage data/storage
-COPY data/client data/client
-COPY data/server data/server
-COPY identity/python identity/python
+COPY server/engine server/engine
+COPY server/server server/server
+COPY sdk/python/core sdk/python/core
+COPY sdk/python/data sdk/python/data
 
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev --no-editable --package loamz-data-server
+    uv sync --frozen --no-dev --no-editable --package loamz-server
 
 ENV HOME=/opt/loamz/home
 RUN mkdir -p $HOME && /app/.venv/bin/python -c "import duckdb; duckdb.connect().execute('INSTALL httpfs')"
@@ -53,6 +52,6 @@ EXPOSE 8020 8014 8011
 HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=3 \
     CMD ["python", "-c", "import os, urllib.request as u; u.urlopen('http://127.0.0.1:%s/readyz' % os.environ.get('PORT', '8020'), timeout=4)"]
 
-ENTRYPOINT ["loamz-data"]
+ENTRYPOINT ["loamz-server", "data"]
 CMD ["serve", "--host", "0.0.0.0"]
 

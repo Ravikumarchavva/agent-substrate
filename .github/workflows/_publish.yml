@@ -1,0 +1,45 @@
+name: Publish a Python distribution (reusable)
+
+# Publishes `dir` to PyPI when release-please released it. Trusted publishing: PyPI must list this repository,
+# the workflow release.yml and the environment `pypi-<name>` for the project.
+on:
+  workflow_call:
+    inputs:
+      name: { type: string, required: true }
+      dir: { type: string, required: true }
+      released: { type: string, required: true, description: "JSON list of released paths from release-please" }
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Publish ${{ inputs.name }}
+    runs-on: ubuntu-latest
+    environment: pypi-${{ inputs.name }}
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Was this distribution released?
+        id: gate
+        env:
+          RELEASED: ${{ inputs.released }}
+          DIR: ${{ inputs.dir }}
+        run: |
+          if echo "$RELEASED" | jq -e --arg d "$DIR" 'index($d) != null' > /dev/null; then
+            echo "go=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "go=false" >> "$GITHUB_OUTPUT"
+            echo "$DIR was not released; nothing to publish."
+          fi
+      - uses: actions/checkout@v4
+        if: steps.gate.outputs.go == 'true'
+      - uses: astral-sh/setup-uv@v6
+        if: steps.gate.outputs.go == 'true'
+      - name: Build
+        if: steps.gate.outputs.go == 'true'
+        run: uv build --package ${{ inputs.name }} --out-dir dist
+      - name: Publish (trusted publishing)
+        if: steps.gate.outputs.go == 'true'
+        run: uv publish --trusted-publishing always dist/*

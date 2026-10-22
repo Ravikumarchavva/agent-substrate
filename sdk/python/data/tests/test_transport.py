@@ -401,7 +401,7 @@ def test_arrow_helpers_explain_the_missing_extra(monkeypatch):
         lambda: list(api.sql.stream("SELECT 1")),
         lambda: api.arrow("SELECT 1"),
     ):
-        with pytest.raises(ImportError, match=r"loamz-data-client\[arrow\]"):
+        with pytest.raises(ImportError, match=r"loamz-data\[arrow\]"):
             call()
     assert recorder.requests == []  # nothing was sent for a result that could not be read
     result = api.sql.rows("SELECT n FROM t")  # JSON works with the core alone

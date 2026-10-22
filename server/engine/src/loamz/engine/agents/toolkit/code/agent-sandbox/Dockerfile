@@ -40,8 +40,8 @@ RUN pip install --no-cache-dir \
 RUN mkdir -p /app/workspace /tmp/matplotlib
 
 # Build with the repository root as context so this path resolves correctly:
-# docker build -f agents/library/src/loamz/agents/toolkit/code/agent-sandbox/Dockerfile -t code-interpreter:latest .
-COPY agents/library/src/loamz/agents/toolkit/code/sandbox_runtime.py /app/sandbox_runtime.py
+# docker build -f server/engine/src/loamz/engine/agents/toolkit/code/agent-sandbox/Dockerfile -t code-interpreter:latest .
+COPY server/engine/src/loamz/engine/agents/toolkit/code/sandbox_runtime.py /app/sandbox_runtime.py
 
 EXPOSE 8888
 

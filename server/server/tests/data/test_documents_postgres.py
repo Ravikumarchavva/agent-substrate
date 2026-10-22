@@ -5,10 +5,10 @@ from __future__ import annotations
 import subprocess
 
 import pytest
-from tests.data.test_documents import extraction
 
 from loamz.engine.testing.conformance.document_library import prose
 from tests.data.conftest import WordEmbedder, WordReranker, serve_documents, start_postgres
+from tests.data.test_documents import extraction
 
 pytestmark = pytest.mark.slow
 

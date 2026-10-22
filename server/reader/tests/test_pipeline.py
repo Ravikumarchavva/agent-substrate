@@ -1,6 +1,6 @@
 """ExtractionPipeline — bbox-matching helpers (pure Python, no paddleocr
 import needed) plus a real end-to-end chart-detection test guarded by
-``importorskip`` (paddleocr/paddlepaddle are the optional `loamz-data-reader`
+``importorskip`` (paddleocr/paddlepaddle are the optional `loamz-reader`
 extra, not part of the default install — see pyproject.toml)."""
 
 from __future__ import annotations

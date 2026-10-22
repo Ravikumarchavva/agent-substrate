@@ -18,7 +18,7 @@ env:
   NODE_VERSION: "22"
 
 jobs:
-  # ── Path filter: which packages changed, including their dependents ───────
+  # ── Path filter: what changed, including what depends on it ───────────────
   changes:
     name: Detect changes
     runs-on: ubuntu-latest
@@ -27,10 +27,10 @@ jobs:
       pull-requests: read
     outputs:
       python: ${{ steps.plan.outputs.python }}
+      reader: ${{ steps.plan.outputs.reader }}
       js: ${{ steps.plan.outputs.js }}
-      document-intelligence: ${{ steps.plan.outputs.document-intelligence }}
-      substrate-data: ${{ steps.plan.outputs.substrate-data }}
       deploy: ${{ steps.plan.outputs.deploy }}
+      server: ${{ steps.plan.outputs.server }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -39,79 +39,33 @@ jobs:
         with:
           list-files: none
           filters: |
-            # Anything in `shared` affects every package.
-            shared: &shared
-              - 'contracts/**'
-              - 'identity/**'
+            # Anything in `shared` affects every Python package.
+            python:
+              - 'sdk/python/**'
+              - 'server/engine/**'
+              - 'server/server/**'
+              - 'meta/**'
+              - 'specs/**'
               - 'pyproject.toml'
               - 'uv.lock'
+              - '.importlinter'
+              - 'Makefile'
               - '.github/workflows/ci.yml'
-              - '.editorconfig'
-            # Anything in `js-shared` affects every JS package.
-            js-shared: &js-shared
+            reader:
+              - 'server/reader/**'
+              - 'server/engine/**'
+              - '.github/workflows/ci.yml'
+            server:
+              - 'server/**'
+              - 'sdk/python/**'
+              - 'specs/**'
+            js:
+              - 'apps/**'
+              - 'sdk/js/**'
               - 'package.json'
               - 'pnpm-workspace.yaml'
               - 'pnpm-lock.yaml'
-              - '.npmrc'
-            # Dependents of agent-substrate: substrate-cloud, embedding-reranker,
-            # inference-pool, document-intelligence, substrate-data.
-            agent-substrate:
-              - *shared
-              - 'agents/agent-substrate/**'
-              - 'data/substrate-data-client/**' # the [data] adapter tests
-            # substrate-data-client -> substrate-data and agent-substrate's [data] adapter tests.
-            substrate-data-client:
-              - *shared
-              - 'agents/agent-substrate/**'
-              - 'data/substrate-data-client/**'
-            inference-pool:
-              - *shared
-              - 'agents/agent-substrate/**'
-              - 'data/inference-pool/**'
-            embedding-reranker:
-              - *shared
-              - 'agents/agent-substrate/**'
-              - 'data/inference-pool/**'
-              - 'data/embedding-reranker/**'
-            substrate-cloud:
-              - *shared
-              - 'agents/agent-substrate/**'
-              - 'agents/substrate-cloud/**'
-            substrate-data:
-              - *shared
-              - 'agents/agent-substrate/**'
-              - 'data/substrate-data-client/**'
-              - 'data/substrate-data/**'
-            document-intelligence:
-              - *shared
-              - 'agents/agent-substrate/**'
-              - 'data/inference-pool/**'
-              - 'data/document-intelligence/**'
-            loamz-data-storage:
-              - *shared
-              - 'data/storage/**'
-            loamz-identity:
-              - *shared
-              - 'identity/python/**'
-            loamz-data-client:
-              - *shared
-              - 'data/client/**'
-              - 'identity/python/**'
-            loamz-data-server:
-              - *shared
-              - 'data/server/**'
-              - 'data/storage/**'
-              - 'data/client/**'
-              - 'identity/python/**'
-            loamz-agents:
-              - *shared
-              - 'agents/library/**'
-              - 'data/storage/**'
-              - 'data/client/**'
-              - 'identity/python/**'
-            loamz:
-              - *shared
-              - 'meta/loamz/**'
+              - '.github/workflows/ci.yml'
             deploy:
               - 'deploy/**'
               - '.dockerignore'
@@ -122,37 +76,60 @@ jobs:
         id: plan
         env:
           EVENT: ${{ github.event_name }}
-          FILTERED: ${{ steps.filter.outputs.changes }}
+          PYTHON: ${{ steps.filter.outputs.python }}
+          READER: ${{ steps.filter.outputs.reader }}
+          SERVER: ${{ steps.filter.outputs.server }}
+          JS: ${{ steps.filter.outputs.js }}
+          DEPLOY: ${{ steps.filter.outputs.deploy }}
         run: |
-          ALL='["loamz-data-storage","loamz-identity","loamz-data-client","loamz-data-server","loamz-agents","loamz"]'
-          CHANGED="${FILTERED:-[]}"
-          if [ "$EVENT" != "pull_request" ]; then CHANGED="$ALL"; fi
-          PY='["loamz-data-storage","loamz-identity","loamz-data-client","loamz-data-server","loamz-agents","loamz"]'
-          JS='[]'
-          echo "python=$(jq -c --argjson s "$PY" '[.[] | select(. as $x | $s | index($x))]' <<<"$CHANGED")" >> "$GITHUB_OUTPUT"
-          echo "js=$(jq -c --argjson s "$JS" '[.[] | select(. as $x | $s | index($x))]' <<<"$CHANGED")" >> "$GITHUB_OUTPUT"
-          echo "document-intelligence=false" >> "$GITHUB_OUTPUT"
-          echo "substrate-data=false" >> "$GITHUB_OUTPUT"
-          echo "deploy=$(jq -r 'index("deploy") != null' <<<"$CHANGED")" >> "$GITHUB_OUTPUT"
+          flag() { if [ "$EVENT" != "pull_request" ]; then echo true; else echo "${1:-false}"; fi; }
+          echo "python=$(flag "$PYTHON")" >> "$GITHUB_OUTPUT"
+          echo "reader=$(flag "$READER")" >> "$GITHUB_OUTPUT"
+          echo "server=$(flag "$SERVER")" >> "$GITHUB_OUTPUT"
+          echo "js=$(flag "$JS")" >> "$GITHUB_OUTPUT"
+          echo "deploy=$(flag "$DEPLOY")" >> "$GITHUB_OUTPUT"
 
-  # ── Python packages in the uv workspace (one lock, Python 3.14) ───────────
-  python:
-    name: Python / ${{ matrix.package }}
+  # ── Style and architecture: ruff, and the import contracts in .importlinter ─
+  lint:
+    name: Lint and import contracts
     needs: changes
-    if: needs.changes.outputs.python != '[]'
+    if: needs.changes.outputs.python == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - run: uv sync --frozen --all-packages --all-extras --all-groups
+      # ruff comes from uv.lock, so the version used here is the locked one.
+      - run: uv run --frozen ruff check .
+      - run: uv run --frozen ruff format --check .
+      - name: Import contracts
+        run: uv run --frozen lint-imports --config .importlinter
+
+  # ── Python distributions in the uv workspace (one lock, Python 3.14) ──────
+  python:
+    name: Python / ${{ matrix.name }}
+    needs: changes
+    if: needs.changes.outputs.python == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        package: ${{ fromJSON(needs.changes.outputs.python) }}
+        include:
+          - { name: loamz-core, dir: sdk/python/core }
+          - { name: loamz-data, dir: sdk/python/data }
+          - { name: loamz-engine, dir: server/engine }
+          - { name: loamz-server, dir: server/server }
     services:
       postgres:
         image: pgvector/pgvector:pg16
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: agentdb
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -170,75 +147,32 @@ jobs:
         ports:
           - 6379:6379
     env:
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/agentdb
-      REDIS_URL: redis://localhost:6379/0
-      OPENAI_API_KEY: sk-test-placeholder
+      LOAMZ_TEST_POSTGRES_URL: postgresql://postgres:postgres@localhost:5432/postgres
+      LOAMZ_TEST_REDIS_URL: redis://localhost:6379/0
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
           cache-dependency-glob: uv.lock
-      - name: Resolve package directory
-        run: |
-          case "${{ matrix.package }}" in
-            loamz-data-storage) d="data/storage" ;;
-            loamz-identity) d="identity/python" ;;
-            loamz-data-client) d="data/client" ;;
-            loamz-data-server) d="data/server" ;;
-            loamz-agents) d="agents/library" ;;
-            loamz) d="meta/loamz" ;;
-            agent-substrate|substrate-cloud) d="agents/${{ matrix.package }}" ;;
-            *) d="data/${{ matrix.package }}" ;;
-          esac
-          echo "PKG_DIR=$d" >> "$GITHUB_ENV"
-      - name: Install (frozen lock, all workspace packages)
-        run: uv sync --frozen --all-packages
-      # ruff comes from uv.lock, so the version used here is the locked one.
-      - name: Ruff check
-        working-directory: ${{ env.PKG_DIR }}
-        run: uv run --frozen ruff check .
-      - name: Ruff format
-        working-directory: ${{ env.PKG_DIR }}
-        run: uv run --frozen ruff format --check .
-      - name: Import boundaries (import-linter)
-        if: matrix.package == 'loamz-agents'
-        run: uv run --frozen --package loamz-agents lint-imports --config .importlinter
-      - name: Pyright (non-blocking, as before)
-        if: matrix.package == 'agent-substrate'
-        continue-on-error: true
-        working-directory: ${{ env.PKG_DIR }}
-        run: uv run --frozen --with pyright pyright src/
-      - name: Dependency audit (non-blocking, as before)
-        if: matrix.package == 'agent-substrate'
-        continue-on-error: true
-        working-directory: ${{ env.PKG_DIR }}
-        run: uv run --frozen --with pip-audit pip-audit --skip-editable
+      - run: uv sync --frozen --all-packages --all-extras --all-groups
       - name: Tests
-        working-directory: ${{ env.PKG_DIR }}
-        env:
-          # Docker-backed integration tests run in the separate `integration` job.
-          SUBSTRATE_DATA_SKIP_INTEGRATION: "1"
-        run: |
-          if [ -d tests ]; then
-            uv run --frozen pytest --tb=short -q --junitxml=test-results.xml
-          else
-            echo "no tests directory in $PKG_DIR"
-          fi
+        working-directory: ${{ matrix.dir }}
+        run: uv run --frozen --package ${{ matrix.name }} pytest -q -n 4 --timeout=120 --junitxml=test-results.xml
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: test-results-${{ matrix.package }}
-          path: ${{ env.PKG_DIR }}/test-results.xml
+          name: test-results-${{ matrix.name }}
+          path: ${{ matrix.dir }}/test-results.xml
           if-no-files-found: ignore
 
-  # ── substrate-data tests that need Docker (SeaweedFS, Iceberg catalog, ...) ─
+  # ── Tests that need Docker (SeaweedFS, Iceberg catalog, pgvector, models) ──
   integration:
-    name: substrate-data integration
+    name: Server integration
     needs: changes
     if: >-
-      needs.changes.outputs.substrate-data == 'true' &&
+      needs.changes.outputs.server == 'true' &&
       (github.event_name == 'merge_group' ||
        contains(github.event.pull_request.labels.*.name, 'run-integration'))
     runs-on: ubuntu-latest
@@ -249,48 +183,43 @@ jobs:
         with:
           enable-cache: true
           cache-dependency-glob: uv.lock
-      - run: uv sync --frozen --all-packages
+      - run: uv sync --frozen --all-packages --all-extras --all-groups
       - name: Integration tests
-        working-directory: data/substrate-data
-        run: uv run --frozen pytest -q tests
+        run: make test-slow
 
-  # ── document-intelligence: Python 3.13, its own project, not in the workspace ─
-  document-intelligence:
-    name: Python / document-intelligence
+  # ── loamz-reader: Python 3.13, its own project and lock, not in the workspace ─
+  reader:
+    name: Python / loamz-reader
     needs: changes
-    if: needs.changes.outputs.document-intelligence == 'true'
+    if: needs.changes.outputs.reader == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     defaults:
       run:
-        working-directory: data/document-intelligence
+        working-directory: server/reader
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
-          cache-dependency-glob: data/document-intelligence/uv.lock
+          cache-dependency-glob: server/reader/uv.lock
           python-version: "3.13"
-      - name: Install
-        run: uv sync --frozen --extra test
-      - name: Ruff check
-        run: uvx ruff@0.15.15 check .
-      - name: Ruff format
-        run: uvx ruff@0.15.15 format --check .
-      - name: Tests
-        run: uv run pytest --tb=short -q
+      - run: uv sync --frozen --extra test
+      - run: uvx ruff@0.15.15 check .
+      - run: uvx ruff@0.15.15 format --check .
+      - run: uv run --frozen python -m pytest --tb=short -q
 
-  # ── JavaScript apps (pnpm workspace) ───────────────────────────────────────
+  # ── JavaScript packages (pnpm workspace) ──────────────────────────────────
   js:
-    name: JS / ${{ matrix.package }}
+    name: JS / ${{ matrix.dir }}
     needs: changes
-    if: needs.changes.outputs.js != '[]'
+    if: needs.changes.outputs.js == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        package: ${{ fromJSON(needs.changes.outputs.js) }}
+        dir: [apps/agents-console, apps/data-workspace, sdk/js/oidc-bff]
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4 # pnpm version comes from "packageManager" in the root package.json
@@ -298,29 +227,23 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
-      - name: Resolve package directory
-        run: |
-          case "${{ matrix.package }}" in
-            substrate-ui) d="./agents/substrate-ui" ;;
-            *) d="./data/substrate-data-web" ;;
-          esac
-          echo "PKG=$d" >> "$GITHUB_ENV"
       - run: pnpm install --frozen-lockfile
       - name: Lint
-        run: pnpm --filter "$PKG" lint
+        run: pnpm --filter "./${{ matrix.dir }}" --if-present lint
       - name: Typecheck
-        run: pnpm --filter "$PKG" typecheck
+        run: pnpm --filter "./${{ matrix.dir }}" --if-present typecheck
       - name: Design-system ratchet
-        if: matrix.package == 'substrate-ui'
-        run: pnpm --filter "$PKG" check:design
+        if: matrix.dir == 'apps/agents-console'
+        run: pnpm --filter "./${{ matrix.dir }}" check:design
       - name: Unit tests (vitest)
-        run: pnpm --filter "$PKG" test
+        run: pnpm --filter "./${{ matrix.dir }}" --if-present test
       - name: Build
+        if: startsWith(matrix.dir, 'apps/')
         env:
           NEXT_PUBLIC_API_URL: ""
-        run: pnpm --filter "$PKG" build
+        run: pnpm --filter "./${{ matrix.dir }}" build
 
-  # ── Deployment artifacts: Dockerfiles, compose, Helm chart, Terraform ───────
+  # ── Deployment artifacts: Dockerfiles, compose, Helm chart, Terraform ──────
   deploy:
     name: Deploy / ${{ matrix.check }}
     needs: changes
@@ -345,19 +268,21 @@ jobs:
         working-directory: deploy/compose
         run: |
           ./gen-env.sh
-          docker compose --profile monolith config -q
+          docker compose config -q
+          docker compose --profile agents config -q
           docker compose --profile microservices config -q
-          docker compose --profile monolith --profile ml config -q
+          docker compose --profile agents --profile ml config -q
       - uses: azure/setup-helm@v4
         if: matrix.check == 'helm'
       - name: helm lint and template
         if: matrix.check == 'helm'
         run: |
           for mode in monolith microservices; do
-            helm lint deploy/helm/substrate-cell --set mode=$mode
-            helm template cell deploy/helm/substrate-cell --set mode=$mode > /tmp/$mode.yaml
+            helm lint deploy/helm/loamz-cell --set mode=$mode
+            helm template cell deploy/helm/loamz-cell --set mode=$mode > /tmp/$mode.yaml
           done
-          helm template cell deploy/helm/substrate-cell \
+          helm template cell deploy/helm/loamz-cell --set agents.enabled=false > /tmp/data-only.yaml
+          helm template cell deploy/helm/loamz-cell \
             --set postgres.bundled.enabled=false,postgres.external.host=db.example.com \
             --set s3.bundled.enabled=false,s3.external.endpoint=https://s3.example.com,s3.external.icebergCatalogUrl=https://iceberg.example.com \
             --set secrets.existingSecret=mine,data.ticketKeys.existingSecret=tk > /tmp/external.yaml
@@ -365,7 +290,7 @@ jobs:
         if: matrix.check == 'helm'
         run: |
           curl -sSL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz | tar xz
-          ./kubeconform -strict -summary /tmp/monolith.yaml /tmp/microservices.yaml /tmp/external.yaml
+          ./kubeconform -strict -summary /tmp/monolith.yaml /tmp/microservices.yaml /tmp/data-only.yaml /tmp/external.yaml
       - uses: hashicorp/setup-terraform@v3
         if: matrix.check == 'terraform'
         with:
@@ -380,13 +305,13 @@ jobs:
           done
       - name: the chart's realm copy equals deploy/keycloak
         if: matrix.check == 'realm-drift'
-        run: diff deploy/keycloak/realm-substrate.json deploy/helm/substrate-cell/files/realm-substrate.json
+        run: diff deploy/keycloak/realm-loamz.json deploy/helm/loamz-cell/files/realm-loamz.json
 
   # ── The only required status check ─────────────────────────────────────────
   ci-ok:
     name: ci-ok
     if: always()
-    needs: [changes, python, integration, document-intelligence, js, deploy]
+    needs: [changes, lint, python, integration, reader, js, deploy]
     runs-on: ubuntu-latest
     steps:
       - name: Fail if any needed job failed or was cancelled (skipped is fine)

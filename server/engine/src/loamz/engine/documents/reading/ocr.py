@@ -190,7 +190,7 @@ def resolve_ocr(spec: str | Ocr | None = "auto") -> Ocr | None:
     if spec == "rapidocr":
         if not RapidOcr.available():
             raise RuntimeError(
-                "ocr='rapidocr' but it is not installed (pip install 'loamz-data-storage[ocr]')"
+                "ocr='rapidocr' but it is not installed (pip install 'loamz-engine[ocr]')"
             )
         return RapidOcr()
     raise ValueError(

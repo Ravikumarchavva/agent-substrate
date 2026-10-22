@@ -222,7 +222,7 @@ class Settings(BaseSettings):
     retrieval_url: SecretStr = SecretStr("")
     retrieval_schema: str = Field(default="retrieval", pattern=r"^[A-Za-z_][A-Za-z0-9_]*$")
     retrieval_dir: Path = Path(".workspace/retrieval")
-    # The control plane never parses an upload: it asks this document server (loamz-data-reader), a worker
+    # The control plane never parses an upload: it asks this document server (loamz-reader), a worker
     # role. `documents_parse_inline` reads with the built-in reader in this process instead (development and tests).
     document_reader_url: str = ""
     document_reader_token: SecretStr = SecretStr("")

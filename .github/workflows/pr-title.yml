@@ -30,16 +30,15 @@ jobs:
             revert
           scopes: |
             loamz
-            loamz-agents
-            loamz-data-storage
-            loamz-data-client
-            loamz-data-server
-            loamz-data-reader
-            loamz-identity
+            loamz-core
+            loamz-data
+            loamz-engine
+            loamz-server
+            loamz-reader
             agents-console
             data-workspace
             oidc-bff
-            contracts
+            specs
             deploy
             docs
             adr

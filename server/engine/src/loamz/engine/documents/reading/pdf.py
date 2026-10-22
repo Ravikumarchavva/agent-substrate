@@ -541,7 +541,7 @@ def _read(
                 )
             elif ocr is None:
                 warnings.append(
-                    "some pages are scans with no text layer and no OCR engine is installed (apt install tesseract-ocr, or pip install 'loamz-data-storage[ocr]')"
+                    "some pages are scans with no text layer and no OCR engine is installed (apt install tesseract-ocr, or pip install 'loamz-engine[ocr]')"
                 )
         try:
             metadata_title = (doc.get_metadata_value("Title") or "").strip()

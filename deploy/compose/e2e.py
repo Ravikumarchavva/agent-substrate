@@ -1,6 +1,6 @@
 """End-to-end check of a local compose cell: Keycloak org + user, tenant provisioning, agent API, data API.
 
-Run after `docker compose --profile monolith up -d`:  uv run --package loamz-agents python deploy/compose/e2e.py deploy/compose/.env
+Run after `docker compose --profile agents up -d`:  uv run --package loamz-core python deploy/compose/e2e.py deploy/compose/.env
 """
 
 import sys

@@ -10,20 +10,17 @@
 /agents/                        @Ravikumarchavva
 /data/                          @Ravikumarchavva
 /identity/                      @Ravikumarchavva
-/contracts/                     @Ravikumarchavva
+/specs/                     @Ravikumarchavva
 /deploy/                        @Ravikumarchavva
 /docs/adr/                      @Ravikumarchavva
 
 # Packages
-/agents/library/                @Ravikumarchavva
-/agents/console/                @Ravikumarchavva
-/data/storage/                  @Ravikumarchavva
-/data/client/                   @Ravikumarchavva
-/data/server/                   @Ravikumarchavva
-/data/reader/                   @Ravikumarchavva
-/data/workspace/                @Ravikumarchavva
-/identity/python/               @Ravikumarchavva
-/identity/oidc-bff/             @Ravikumarchavva
+/server/engine/                 @Ravikumarchavva
+/server/server/                 @Ravikumarchavva
+/server/reader/                 @Ravikumarchavva
+/sdk/python/                    @Ravikumarchavva
+/sdk/js/                        @Ravikumarchavva
+/apps/                          @Ravikumarchavva
 /meta/loamz/                    @Ravikumarchavva
 
 # Repo governance, CI and release machinery

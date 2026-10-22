@@ -11,7 +11,7 @@
 - name: SESSION_SECRET
   valueFrom: { %s }
 - { name: PUBLIC_URL, value: %s }` (include "cell.secretRef" (dict "root" . "key" "postgres-password")) (include "cell.pgUser" .) (include "cell.pgHost" .) (include "cell.pgPort" .) .Values.postgres.databases.ui (include "cell.pgSslmode" .) ($agentUpstream | quote) (include "cell.issuer" . | quote) (include "cell.secretRef" (dict "root" . "key" "ui-client-secret")) (include "cell.secretRef" (dict "root" . "key" "ui-session-secret")) (.Values.publicUrls.ui | quote) }}
-{{- include "cell.workload" (dict "root" . "component" "ui" "repo" "loamz-agents-console" "override" .Values.console.image "port" 3000 "probePath" "/chat" "cfg" .Values.console "env" $uiEnv "writable" (list (dict "name" "next-cache" "path" "/app/agents/console/.next/cache"))) }}
+{{- include "cell.workload" (dict "root" . "component" "ui" "repo" "loamz-agents-console" "override" .Values.console.image "port" 3000 "probePath" "/chat" "cfg" .Values.console "env" $uiEnv "writable" (list (dict "name" "next-cache" "path" "/app/apps/agents-console/.next/cache"))) }}
 {{- end }}
 {{- if .Values.dataWorkspace.enabled }}
 {{- $webEnv := printf `- { name: DATA_API_URL, value: "http://%s-data-api:8020" }

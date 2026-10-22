@@ -9,7 +9,7 @@ from pathlib import Path
 
 import httpx
 
-from loamz.identity.tenancy import files_volume, tenant_alias
+from loamz.core.tenancy import files_volume, tenant_alias
 
 ENV = dict(
     line.split("=", 1)

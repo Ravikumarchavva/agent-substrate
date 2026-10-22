@@ -10,11 +10,10 @@ resolution-markers = [
 [manifest]
 members = [
     "loamz",
-    "loamz-agents",
-    "loamz-data-client",
-    "loamz-data-server",
-    "loamz-data-storage",
-    "loamz-identity",
+    "loamz-core",
+    "loamz-data",
+    "loamz-engine",
+    "loamz-server",
 ]
 
 [manifest.dependency-groups]
@@ -1784,36 +1783,109 @@ wheels = [
 name = "loamz"
 version = "0.1.0"
 source = { editable = "meta/loamz" }
+dependencies = [
+    { name = "loamz-core" },
+    { name = "loamz-data" },
+]
 
 [package.optional-dependencies]
-agents = [
-    { name = "loamz-agents" },
-]
-data = [
-    { name = "loamz-data-client" },
+engine = [
+    { name = "loamz-engine" },
 ]
 server = [
-    { name = "loamz-agents", extra = ["data", "server"] },
-    { name = "loamz-data-server" },
+    { name = "loamz-server" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "loamz-agents", marker = "extra == 'agents'", editable = "agents/library" },
-    { name = "loamz-agents", extras = ["server", "data"], marker = "extra == 'server'", editable = "agents/library" },
-    { name = "loamz-data-client", marker = "extra == 'data'", editable = "data/client" },
-    { name = "loamz-data-server", marker = "extra == 'server'", editable = "data/server" },
+    { name = "loamz-core", editable = "sdk/python/core" },
+    { name = "loamz-data", editable = "sdk/python/data" },
+    { name = "loamz-engine", marker = "extra == 'engine'", editable = "server/engine" },
+    { name = "loamz-server", marker = "extra == 'server'", editable = "server/server" },
 ]
-provides-extras = ["agents", "data", "server"]
+provides-extras = ["engine", "server"]
 
 [[package]]
-name = "loamz-agents"
+name = "loamz-core"
 version = "0.1.0"
-source = { editable = "agents/library" }
+source = { editable = "sdk/python/core" }
+dependencies = [
+    { name = "httpx" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-timeout" },
+    { name = "pytest-xdist" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "httpx", specifier = ">=0.28,<1" }]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=9" },
+    { name = "pytest-asyncio", specifier = ">=1.4" },
+    { name = "pytest-timeout", specifier = ">=2.3" },
+    { name = "pytest-xdist", specifier = ">=3.6" },
+]
+
+[[package]]
+name = "loamz-data"
+version = "0.1.0"
+source = { editable = "sdk/python/data" }
+dependencies = [
+    { name = "httpx" },
+    { name = "loamz-core" },
+]
+
+[package.optional-dependencies]
+arrow = [
+    { name = "polars" },
+    { name = "pyarrow" },
+]
+http2 = [
+    { name = "httpx", extra = ["http2"] },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "polars" },
+    { name = "pyarrow" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-timeout" },
+    { name = "pytest-xdist" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "httpx", specifier = ">=0.28,<1" },
+    { name = "httpx", extras = ["http2"], marker = "extra == 'http2'", specifier = ">=0.28,<1" },
+    { name = "loamz-core", editable = "sdk/python/core" },
+    { name = "polars", marker = "extra == 'arrow'", specifier = ">=1.44.2,<2" },
+    { name = "pyarrow", marker = "extra == 'arrow'", specifier = ">=22,<27" },
+]
+provides-extras = ["arrow", "http2"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "polars", specifier = ">=1.44.2,<2" },
+    { name = "pyarrow", specifier = ">=22,<27" },
+    { name = "pytest", specifier = ">=9" },
+    { name = "pytest-asyncio", specifier = ">=1.4" },
+    { name = "pytest-timeout", specifier = ">=2.3" },
+    { name = "pytest-xdist", specifier = ">=3.6" },
+]
+
+[[package]]
+name = "loamz-engine"
+version = "0.1.0"
+source = { editable = "server/engine" }
 dependencies = [
     { name = "confusable-homoglyphs" },
-    { name = "loamz-data-storage" },
-    { name = "loamz-identity" },
     { name = "opentelemetry-api" },
     { name = "pydantic" },
 ]
@@ -1832,24 +1904,22 @@ communication = [
     { name = "aiosmtplib" },
     { name = "httpx" },
 ]
-console = [
-    { name = "prompt-toolkit" },
-    { name = "pydantic-settings" },
-    { name = "rich" },
-]
 data = [
-    { name = "loamz-data-client" },
+    { name = "loamz-data" },
 ]
 gemini = [
     { name = "google-genai" },
     { name = "pillow" },
 ]
 logging = [
-    { name = "msgspec" },
     { name = "python-json-logger" },
 ]
 mcp = [
     { name = "mcp" },
+]
+ocr = [
+    { name = "onnxruntime" },
+    { name = "rapidocr" },
 ]
 openai = [
     { name = "httpx" },
@@ -1857,8 +1927,11 @@ openai = [
     { name = "pillow" },
     { name = "tiktoken" },
 ]
+pdf = [
+    { name = "pypdfium2" },
+]
 postgres = [
-    { name = "loamz-data-storage", extra = ["postgres"] },
+    { name = "asyncpg" },
 ]
 redis = [
     { name = "redis", extra = ["hiredis"] },
@@ -1885,17 +1958,6 @@ sandbox = [
 sentence-transformers = [
     { name = "sentence-transformers" },
 ]
-server = [
-    { name = "fastapi" },
-    { name = "loamz-identity", extra = ["fastapi"] },
-    { name = "msgspec" },
-    { name = "opentelemetry-sdk" },
-    { name = "pillow" },
-    { name = "pydantic-settings" },
-    { name = "python-json-logger" },
-    { name = "python-multipart" },
-    { name = "uvicorn" },
-]
 testing = [
     { name = "httpx" },
     { name = "pytest" },
@@ -1921,10 +1983,12 @@ web = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "asyncpg" },
     { name = "httpx" },
     { name = "hypothesis" },
     { name = "import-linter" },
     { name = "opentelemetry-sdk" },
+    { name = "pypdfium2" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-timeout" },
@@ -1936,12 +2000,12 @@ dev = [
 requires-dist = [
     { name = "aiosmtplib", marker = "extra == 'communication'", specifier = ">=3.0.0" },
     { name = "anthropic", marker = "extra == 'anthropic'", specifier = ">=0.95.0" },
+    { name = "asyncpg", marker = "extra == 'postgres'", specifier = ">=0.31.0" },
     { name = "confusable-homoglyphs", specifier = ">=3.3.1" },
     { name = "crawl4ai", marker = "extra == 'web'", specifier = ">=0.8.7" },
     { name = "ddgs", marker = "extra == 'web'", specifier = ">=9.14.4" },
     { name = "exa-py", marker = "extra == 'web'", specifier = ">=2.14.0" },
     { name = "fastapi", marker = "extra == 'code'", specifier = ">=0.128.0" },
-    { name = "fastapi", marker = "extra == 'server'", specifier = ">=0.128" },
     { name = "google-genai", marker = "extra == 'gemini'", specifier = ">=1.73.0" },
     { name = "httpx", marker = "extra == 'code'", specifier = ">=0.27.0" },
     { name = "httpx", marker = "extra == 'communication'", specifier = ">=0.27.0" },
@@ -1952,45 +2016,35 @@ requires-dist = [
     { name = "huggingface-hub", marker = "extra == 'safety'", specifier = ">=0.25.0" },
     { name = "k8s-agent-sandbox", marker = "extra == 'code'", specifier = ">=0.4.6" },
     { name = "kokoro", marker = "extra == 'tts'", specifier = ">=0.9.4" },
-    { name = "loamz-agents", extras = ["logging"], marker = "extra == 'server'", editable = "agents/library" },
-    { name = "loamz-data-client", marker = "extra == 'data'", editable = "data/client" },
-    { name = "loamz-data-storage", editable = "data/storage" },
-    { name = "loamz-data-storage", extras = ["postgres"], marker = "extra == 'postgres'", editable = "data/storage" },
-    { name = "loamz-identity", editable = "identity/python" },
-    { name = "loamz-identity", extras = ["fastapi"], marker = "extra == 'server'", editable = "identity/python" },
+    { name = "loamz-data", marker = "extra == 'data'", editable = "sdk/python/data" },
     { name = "matplotlib", marker = "extra == 'sandbox'", specifier = ">=3.9.0" },
     { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.0.0" },
-    { name = "msgspec", marker = "extra == 'logging'", specifier = ">=0.21.1" },
+    { name = "onnxruntime", marker = "extra == 'ocr'", specifier = ">=1.23.0" },
     { name = "onnxruntime", marker = "extra == 'safety'", specifier = ">=1.23.0" },
     { name = "openai", marker = "extra == 'openai'", specifier = ">=2.15.0" },
     { name = "openpyxl", marker = "extra == 'sandbox'", specifier = ">=3.1.0" },
     { name = "openpyxl", marker = "extra == 'tools'", specifier = ">=3.1.0" },
     { name = "opentelemetry-api", specifier = ">=1.20.0" },
-    { name = "opentelemetry-sdk", marker = "extra == 'server'", specifier = ">=1.20.0" },
     { name = "pandas", marker = "extra == 'sandbox'", specifier = ">=2.2.0" },
     { name = "pdfplumber", marker = "extra == 'sandbox'", specifier = ">=0.11.0" },
     { name = "pillow", marker = "extra == 'anthropic'", specifier = ">=12.0.0" },
     { name = "pillow", marker = "extra == 'gemini'", specifier = ">=12.0.0" },
     { name = "pillow", marker = "extra == 'openai'", specifier = ">=12.0.0" },
     { name = "pillow", marker = "extra == 'safety'", specifier = ">=12.0.0" },
-    { name = "pillow", marker = "extra == 'server'", specifier = ">=12.0.0" },
     { name = "playwright", marker = "extra == 'web'", specifier = ">=1.60.0" },
     { name = "plotly", marker = "extra == 'sandbox'", specifier = ">=5.24.0" },
     { name = "polars", marker = "extra == 'sandbox'", specifier = ">=1.0.0" },
-    { name = "prompt-toolkit", marker = "extra == 'console'", specifier = ">=3.0.0" },
     { name = "pydantic", specifier = ">=2.12.5" },
-    { name = "pydantic-settings", marker = "extra == 'console'", specifier = ">=2.12" },
-    { name = "pydantic-settings", marker = "extra == 'server'", specifier = ">=2.12" },
+    { name = "pypdfium2", marker = "extra == 'pdf'", specifier = ">=5.0.0" },
     { name = "pytest", marker = "extra == 'testing'", specifier = ">=9.0.3" },
     { name = "pytest-asyncio", marker = "extra == 'testing'", specifier = ">=1.4.0" },
     { name = "python-docx", marker = "extra == 'sandbox'", specifier = ">=1.1.0" },
     { name = "python-json-logger", marker = "extra == 'logging'", specifier = ">=2.0.7" },
-    { name = "python-multipart", marker = "extra == 'server'", specifier = ">=0.0.20" },
     { name = "python-pptx", marker = "extra == 'sandbox'", specifier = ">=1.0.0" },
     { name = "pyyaml", marker = "extra == 'tools'", specifier = ">=6.0.3" },
+    { name = "rapidocr", marker = "extra == 'ocr'", specifier = ">=3.0.0" },
     { name = "redis", extras = ["hiredis"], marker = "extra == 'redis'", specifier = ">=5.0.0" },
     { name = "reportlab", marker = "extra == 'sandbox'", specifier = ">=4.2.0" },
-    { name = "rich", marker = "extra == 'console'", specifier = ">=14.3.2" },
     { name = "scikit-learn", marker = "extra == 'sandbox'", specifier = ">=1.5.0" },
     { name = "seaborn", marker = "extra == 'sandbox'", specifier = ">=0.13.0" },
     { name = "sentence-transformers", marker = "extra == 'sentence-transformers'", specifier = ">=3.0.0" },
@@ -1998,16 +2052,17 @@ requires-dist = [
     { name = "tavily-python", marker = "extra == 'web'", specifier = ">=0.7.26" },
     { name = "tiktoken", marker = "extra == 'openai'", specifier = ">=0.12.0" },
     { name = "tokenizers", marker = "extra == 'safety'", specifier = ">=0.20.0" },
-    { name = "uvicorn", marker = "extra == 'server'", specifier = ">=0.34" },
 ]
-provides-extras = ["openai", "anthropic", "gemini", "sentence-transformers", "postgres", "redis", "mcp", "tts", "tools", "web", "communication", "code", "sandbox", "safety", "logging", "console", "server", "data", "testing"]
+provides-extras = ["postgres", "pdf", "ocr", "openai", "anthropic", "gemini", "sentence-transformers", "redis", "mcp", "tts", "tools", "web", "communication", "code", "sandbox", "safety", "logging", "data", "testing"]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "httpx", specifier = ">=0.27.0" },
+    { name = "asyncpg", specifier = ">=0.31.0" },
+    { name = "httpx", specifier = ">=0.28,<1" },
     { name = "hypothesis", specifier = ">=6.168.3" },
     { name = "import-linter", specifier = ">=2.11" },
     { name = "opentelemetry-sdk", specifier = ">=1.20.0" },
+    { name = "pypdfium2", specifier = ">=5.0.0" },
     { name = "pytest", specifier = ">=9" },
     { name = "pytest-asyncio", specifier = ">=1.4" },
     { name = "pytest-timeout", specifier = ">=2.3" },
@@ -2016,65 +2071,19 @@ dev = [
 ]
 
 [[package]]
-name = "loamz-data-client"
+name = "loamz-server"
 version = "0.1.0"
-source = { editable = "data/client" }
-dependencies = [
-    { name = "httpx" },
-    { name = "loamz-identity" },
-]
-
-[package.optional-dependencies]
-arrow = [
-    { name = "polars" },
-    { name = "pyarrow" },
-]
-http2 = [
-    { name = "httpx", extra = ["http2"] },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "polars" },
-    { name = "pyarrow" },
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "pytest-timeout" },
-    { name = "pytest-xdist" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "httpx", specifier = ">=0.28,<1" },
-    { name = "httpx", extras = ["http2"], marker = "extra == 'http2'", specifier = ">=0.28,<1" },
-    { name = "loamz-identity", editable = "identity/python" },
-    { name = "polars", marker = "extra == 'arrow'", specifier = ">=1.44.2,<2" },
-    { name = "pyarrow", marker = "extra == 'arrow'", specifier = ">=22,<27" },
-]
-provides-extras = ["arrow", "http2"]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "polars", specifier = ">=1.44.2,<2" },
-    { name = "pyarrow", specifier = ">=22,<27" },
-    { name = "pytest", specifier = ">=9" },
-    { name = "pytest-asyncio", specifier = ">=1.4" },
-    { name = "pytest-timeout", specifier = ">=2.3" },
-    { name = "pytest-xdist", specifier = ">=3.6" },
-]
-
-[[package]]
-name = "loamz-data-server"
-version = "0.1.0"
-source = { editable = "data/server" }
+source = { editable = "server/server" }
 dependencies = [
     { name = "boto3" },
     { name = "duckdb" },
     { name = "fastapi" },
     { name = "httpx" },
-    { name = "loamz-data-storage", extra = ["pdf", "postgres"] },
-    { name = "loamz-identity", extra = ["fastapi"] },
+    { name = "loamz-core" },
+    { name = "loamz-engine", extra = ["logging", "pdf", "postgres"] },
+    { name = "opentelemetry-sdk" },
     { name = "orjson" },
+    { name = "pillow" },
     { name = "polars" },
     { name = "psycopg", extra = ["binary", "pool"] },
     { name = "pyarrow" },
@@ -2087,6 +2096,10 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+console = [
+    { name = "prompt-toolkit" },
+    { name = "rich" },
+]
 gpu = [
     { name = "nvidia-ml-py" },
 ]
@@ -2096,135 +2109,58 @@ inference = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "loamz-data-client", extra = ["arrow"] },
+    { name = "hypothesis" },
+    { name = "loamz-data", extra = ["arrow"] },
+    { name = "loamz-engine", extra = ["openai", "redis", "tools"] },
+    { name = "prompt-toolkit" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-timeout" },
     { name = "pytest-xdist" },
+    { name = "pyyaml" },
+    { name = "rich" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "boto3", specifier = ">=1.40" },
     { name = "duckdb", specifier = ">=1.4,<2" },
-    { name = "fastapi", specifier = ">=0.115,<1" },
+    { name = "fastapi", specifier = ">=0.128" },
     { name = "httpx", specifier = ">=0.28,<1" },
-    { name = "loamz-data-storage", extras = ["postgres", "pdf"], editable = "data/storage" },
-    { name = "loamz-identity", extras = ["fastapi"], editable = "identity/python" },
+    { name = "loamz-core", editable = "sdk/python/core" },
+    { name = "loamz-engine", extras = ["logging"], editable = "server/engine" },
+    { name = "loamz-engine", extras = ["postgres", "pdf"], editable = "server/engine" },
     { name = "nvidia-ml-py", marker = "extra == 'gpu'", specifier = ">=12.0" },
+    { name = "opentelemetry-sdk", specifier = ">=1.20.0" },
     { name = "orjson", specifier = ">=3.10" },
+    { name = "pillow", specifier = ">=12.0.0" },
     { name = "pillow", marker = "extra == 'inference'", specifier = ">=12.0.0" },
     { name = "polars", specifier = ">=1.44.2,<2" },
+    { name = "prompt-toolkit", marker = "extra == 'console'", specifier = ">=3.0.0" },
     { name = "psycopg", extras = ["binary", "pool"], specifier = ">=3.2,<4" },
     { name = "pyarrow", specifier = ">=22,<27" },
-    { name = "pydantic-settings", specifier = ">=2.8,<3" },
+    { name = "pydantic-settings", specifier = ">=2.12,<3" },
     { name = "pyiceberg", extras = ["pyarrow"], specifier = ">=0.10,<0.13" },
     { name = "pyjwt", extras = ["crypto"], specifier = ">=2.10" },
     { name = "python-multipart", specifier = ">=0.0.20" },
+    { name = "rich", marker = "extra == 'console'", specifier = ">=14.3.2" },
     { name = "sqlglot", specifier = ">=27,<29" },
     { name = "uvicorn", specifier = ">=0.34,<1" },
 ]
-provides-extras = ["inference", "gpu"]
+provides-extras = ["inference", "gpu", "console"]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "loamz-data-client", extras = ["arrow"], editable = "data/client" },
+    { name = "hypothesis", specifier = ">=6.168.3" },
+    { name = "loamz-data", extras = ["arrow"], editable = "sdk/python/data" },
+    { name = "loamz-engine", extras = ["openai", "tools", "redis"], editable = "server/engine" },
+    { name = "prompt-toolkit", specifier = ">=3.0.0" },
     { name = "pytest", specifier = ">=9" },
     { name = "pytest-asyncio", specifier = ">=1.4" },
     { name = "pytest-timeout", specifier = ">=2.3" },
     { name = "pytest-xdist", specifier = ">=3.6" },
-]
-
-[[package]]
-name = "loamz-data-storage"
-version = "0.1.0"
-source = { editable = "data/storage" }
-dependencies = [
-    { name = "pydantic" },
-]
-
-[package.optional-dependencies]
-ocr = [
-    { name = "onnxruntime" },
-    { name = "rapidocr" },
-]
-pdf = [
-    { name = "pypdfium2" },
-]
-postgres = [
-    { name = "asyncpg" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "asyncpg" },
-    { name = "httpx" },
-    { name = "hypothesis" },
-    { name = "pypdfium2" },
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "pytest-timeout" },
-    { name = "pytest-xdist" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "asyncpg", marker = "extra == 'postgres'", specifier = ">=0.31.0" },
-    { name = "onnxruntime", marker = "extra == 'ocr'", specifier = ">=1.23.0" },
-    { name = "pydantic", specifier = ">=2.12" },
-    { name = "pypdfium2", marker = "extra == 'pdf'", specifier = ">=5.0.0" },
-    { name = "rapidocr", marker = "extra == 'ocr'", specifier = ">=3.0.0" },
-]
-provides-extras = ["postgres", "pdf", "ocr"]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "asyncpg", specifier = ">=0.31.0" },
-    { name = "httpx", specifier = ">=0.28,<1" },
-    { name = "hypothesis", specifier = ">=6.100" },
-    { name = "pypdfium2", specifier = ">=5.0.0" },
-    { name = "pytest", specifier = ">=9" },
-    { name = "pytest-asyncio", specifier = ">=1.4" },
-    { name = "pytest-timeout", specifier = ">=2.3" },
-    { name = "pytest-xdist", specifier = ">=3.6" },
-]
-
-[[package]]
-name = "loamz-identity"
-version = "0.1.0"
-source = { editable = "identity/python" }
-dependencies = [
-    { name = "httpx" },
-    { name = "pyjwt", extra = ["crypto"] },
-]
-
-[package.optional-dependencies]
-fastapi = [
-    { name = "fastapi" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "pytest-timeout" },
-    { name = "pytest-xdist" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "fastapi", marker = "extra == 'fastapi'", specifier = ">=0.115,<1" },
-    { name = "httpx", specifier = ">=0.28,<1" },
-    { name = "pyjwt", extras = ["crypto"], specifier = ">=2.10" },
-]
-provides-extras = ["fastapi"]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "pytest", specifier = ">=9" },
-    { name = "pytest-asyncio", specifier = ">=1.4" },
-    { name = "pytest-timeout", specifier = ">=2.3" },
-    { name = "pytest-xdist", specifier = ">=3.6" },
+    { name = "pyyaml", specifier = ">=6.0.3" },
+    { name = "rich", specifier = ">=14.3.2" },
 ]
 
 [[package]]
@@ -2542,30 +2478,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/e0/47/dd32fa426cc72114383ac549964eecb20ecfd886d1e5ccf5340b55b02f57/mpmath-1.3.0.tar.gz", hash = "sha256:7a28eb2a9774d00c7bc92411c19a89209d5da7c4c9a9e227be8330a23a25b91f", size = 508106, upload-time = "2023-03-07T16:47:11.061Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/43/e3/7d92a15f894aa0c9c4b49b8ee9ac9850d6e63b03c9c32c0367a13ae62209/mpmath-1.3.0-py3-none-any.whl", hash = "sha256:a0b2b9fe80bbcd81a6647ff13108738cfb482d481d826cc0e02f5b35e5c88d2c", size = 536198, upload-time = "2023-03-07T16:47:09.197Z" },
-]
-
-[[package]]
-name = "msgspec"
-version = "0.21.1"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/e3/60/f79b9b013a16fa3a58350c9295ddc6789f2e335f36ea61ed10a21b215364/msgspec-0.21.1.tar.gz", hash = "sha256:2313508e394b0d208f8f56892ca9b2799e2561329de9763b19619595a6c0f72c", size = 319193, upload-time = "2026-04-12T21:44:50.394Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/5a/ad/86954e987d1d6a5c579e2c2e7832b65e0fff194179fdac4f581536086024/msgspec-0.21.1-cp314-cp314-macosx_10_15_x86_64.whl", hash = "sha256:fab48eb45fdbfbdb2c0edfec00ffc53b6b6085beefc6b50b61e01659f9f8757f", size = 196261, upload-time = "2026-04-12T21:44:27.807Z" },
-    { url = "https://files.pythonhosted.org/packages/d1/a1/c5e46c3e42b866199365e35d11dddfd1fbd8bba4fdb3c52f965b1607ce94/msgspec-0.21.1-cp314-cp314-macosx_11_0_arm64.whl", hash = "sha256:3cb779ea0c35bc807ff941d415875c1f69ca0be91a2e907ab99a171811d86a9a", size = 188729, upload-time = "2026-04-12T21:44:28.99Z" },
-    { url = "https://files.pythonhosted.org/packages/85/7d/1e29a319d678d6cb962ae5bdf32a6858ebdf38f73bc654c0e9c742a0c2c8/msgspec-0.21.1-cp314-cp314-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:68604db36b3b4dd9bf160e436e12798a4738848144cea1aca1cb984011eb160f", size = 219866, upload-time = "2026-04-12T21:44:31.104Z" },
-    { url = "https://files.pythonhosted.org/packages/25/1f/cca084ca2572810fff12ea9dbdcbe39eac048f40daf4a9077b49fcbe8cee/msgspec-0.21.1-cp314-cp314-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:3d6b9dc50948eaf65df54d2fd0ff66e6d8c32f116037209ee861810eb9b676cb", size = 224993, upload-time = "2026-04-12T21:44:32.649Z" },
-    { url = "https://files.pythonhosted.org/packages/71/94/d2120fc9d419a89a3a7c13e5b7078798c4b392a96a02a6e2b3ce43a8766c/msgspec-0.21.1-cp314-cp314-musllinux_1_2_aarch64.whl", hash = "sha256:52c5e21930942302394429c5a582ce7e6b62c7f983b3760834c2ce107e0dd6df", size = 223535, upload-time = "2026-04-12T21:44:33.839Z" },
-    { url = "https://files.pythonhosted.org/packages/75/17/42418b66a3ad972a89bab73dd78b79cc6282bb488a25e73c853cee7443b9/msgspec-0.21.1-cp314-cp314-musllinux_1_2_x86_64.whl", hash = "sha256:abbb39d65681fa24ed394e01af3d59d869068324f900c61d06062b7fb9980f2f", size = 227222, upload-time = "2026-04-12T21:44:35.093Z" },
-    { url = "https://files.pythonhosted.org/packages/c4/33/265c894268cca88ff67b144ca2b4c522fc8b9a6f1966a3640c70516e78e1/msgspec-0.21.1-cp314-cp314-win_amd64.whl", hash = "sha256:5666b1b560b97b6ec2eb3fca8a502298ebac56e13bbca1f88523538ce83d01ea", size = 193810, upload-time = "2026-04-12T21:44:36.612Z" },
-    { url = "https://files.pythonhosted.org/packages/3b/8f/a6d35f25bf1fc63c492fdd88fdce01ba0875ead48c2b91f90f33653b4131/msgspec-0.21.1-cp314-cp314-win_arm64.whl", hash = "sha256:d8b8578e4c83b14ceea4cef0d0b747e31d9330fe4b03b2b2ad4063866a178f93", size = 179125, upload-time = "2026-04-12T21:44:38.198Z" },
-    { url = "https://files.pythonhosted.org/packages/c6/39/74839641e64b99d87da55af0fc472854d42b46e2183b9e2a67fe1bb2a512/msgspec-0.21.1-cp314-cp314t-macosx_10_15_x86_64.whl", hash = "sha256:15f523d51c00ebad412213bfe9f06f0a50ec2b93e0c19e824a2d267cabb48ea2", size = 200171, upload-time = "2026-04-12T21:44:39.414Z" },
-    { url = "https://files.pythonhosted.org/packages/70/9b/ce0cca6d2d87fcd4b6ff97600790494e64f26a2c55d61507cd2755c16193/msgspec-0.21.1-cp314-cp314t-macosx_11_0_arm64.whl", hash = "sha256:4e47390360583ba3d5c6cb44cf0a9f61b0a06a899d3c2c00627cedebb2e2884b", size = 192879, upload-time = "2026-04-12T21:44:40.882Z" },
-    { url = "https://files.pythonhosted.org/packages/a7/08/673a7bb05e5702dc787ddd3011195b509f9867927970da59052211929987/msgspec-0.21.1-cp314-cp314t-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:f60800e6299b798142dc40b0644da77ceac5ea0568be58228417eae14135c847", size = 226281, upload-time = "2026-04-12T21:44:42.181Z" },
-    { url = "https://files.pythonhosted.org/packages/7d/45/86508cf57283e9070b3c447e3ab25b792a7a0855a3ea4e0c6d111ac34c97/msgspec-0.21.1-cp314-cp314t-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:5f8e9dfcd98419cf7568808470c4317a3fb30bef0e3715b568730a2b272a20d7", size = 229863, upload-time = "2026-04-12T21:44:43.442Z" },
-    { url = "https://files.pythonhosted.org/packages/2c/62/e7c9367cd08d590559faacd711edbae36840342843e669440363f33c7d36/msgspec-0.21.1-cp314-cp314t-musllinux_1_2_aarch64.whl", hash = "sha256:92d89dfad13bd1ea640dc3e37e724ed380da1030b272bdf5ecafb983c3ad7c75", size = 230445, upload-time = "2026-04-12T21:44:44.806Z" },
-    { url = "https://files.pythonhosted.org/packages/42/b4/c0f54632103846b658a10930025f4de41c8724b5e4805a5f3b395586cb7e/msgspec-0.21.1-cp314-cp314t-musllinux_1_2_x86_64.whl", hash = "sha256:0d03867786e5d7ba25d666df4b11320c27170f4aeafcb8e3a8b0a50a4fb742ca", size = 231822, upload-time = "2026-04-12T21:44:46.343Z" },
-    { url = "https://files.pythonhosted.org/packages/ea/1d/0d85cc79d0ccf5508e9c846cc66552a6a16bf92abd1dbd8362617f7b35cd/msgspec-0.21.1-cp314-cp314t-win_amd64.whl", hash = "sha256:740fbf1c9d59992ca3537d6fbe9ebbf9eaf726a65fbf31448e0ecbc710697a63", size = 206650, upload-time = "2026-04-12T21:44:47.601Z" },
-    { url = "https://files.pythonhosted.org/packages/90/91/56c5d560f20e6c20e9e4f55bd0e458f7f162aa689ee350346c04c48eac0b/msgspec-0.21.1-cp314-cp314t-win_arm64.whl", hash = "sha256:0d2cc73df6058d811a126ac3a8ad63a4dfa210c82f9cf5a004802eaf4712de90", size = 183149, upload-time = "2026-04-12T21:44:48.833Z" },
 ]
 
 [[package]]

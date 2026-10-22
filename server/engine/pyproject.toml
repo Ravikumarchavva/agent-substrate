@@ -1,0 +1,112 @@
+[project]
+name = "loamz-engine"
+version = "0.1.0"
+description = "Loamz's embeddable engines: SQL on SQLite or PostgreSQL, files, vectors, memory, documents and the durable agent runtime."
+readme = "README.md"
+license = "Apache-2.0"
+# 3.13: the document reader (loamz-reader) runs on 3.13 until PaddlePaddle publishes 3.14 wheels.
+requires-python = ">=3.13"
+# The engine and its own state, nothing else: importing loamz.engine loads no vendor SDK, driver or web framework.
+# Everything that talks to a vendor, a server or the network is an extra named for what it enables.
+dependencies = [
+    "pydantic>=2.12.5",
+    "opentelemetry-api>=1.20.0",
+    # text normalisation for the guardrails (agents.kernel.safety): confusable characters folded before matching
+    "confusable-homoglyphs>=3.3.1",
+]
+
+[project.optional-dependencies]
+# the stores on PostgreSQL
+postgres = ["asyncpg>=0.31.0"]
+# read PDFs; and scanned pages with OCR
+pdf = ["pypdfium2>=5.0.0"]
+ocr = ["rapidocr>=3.0.0", "onnxruntime>=1.23.0"]
+# OpenAI and OpenAI-compatible chat/embedding clients (also vLLM, llama.cpp, Ollama, LM Studio)
+openai = ["openai>=2.15.0", "tiktoken>=0.12.0", "httpx>=0.27.0", "pillow>=12.0.0"]
+anthropic = ["anthropic>=0.95.0", "pillow>=12.0.0"]
+gemini = ["google-genai>=1.73.0", "pillow>=12.0.0"]
+# local embeddings (brings torch)
+sentence-transformers = ["sentence-transformers>=3.0.0"]
+# Redis: event bus, session-state cache
+redis = ["redis[hiredis]>=5.0.0"]
+# MCP tools
+mcp = ["mcp>=1.0.0"]
+# text-to-speech
+tts = ["kokoro>=0.9.4", "soundfile>=0.12.1"]
+# skills (YAML front matter) and the spreadsheet skill
+tools = ["pyyaml>=6.0.3", "openpyxl>=3.1.0"]
+# web search and browsing tools
+web = [
+    "httpx>=0.27.0",
+    "httpx2>=2.7.0",
+    "ddgs>=9.14.4",
+    "crawl4ai>=0.8.7",
+    "playwright>=1.60.0",
+    "exa-py>=2.14.0",
+    "tavily-python>=0.7.26",
+]
+# HTTP and e-mail tools, image generation
+communication = ["httpx>=0.27.0", "aiosmtplib>=3.0.0"]
+# code interpreter: the Kubernetes sandbox and the sandbox's own runtime service
+code = ["k8s-agent-sandbox>=0.4.6", "fastapi>=0.128.0", "httpx>=0.27.0"]
+# the data-science packages a code sandbox image installs
+sandbox = [
+    "pandas>=2.2.0",
+    "matplotlib>=3.9.0",
+    "openpyxl>=3.1.0",
+    "python-docx>=1.1.0",
+    "python-pptx>=1.0.0",
+    "reportlab>=4.2.0",
+    "polars>=1.0.0",
+    "seaborn>=0.13.0",
+    "plotly>=5.24.0",
+    "scikit-learn>=1.5.0",
+    "pdfplumber>=0.11.0",
+]
+# model-backed input-safety classifiers (ONNX models from the HF Hub); the guardrail fails open without them
+safety = ["pillow>=12.0.0", "onnxruntime>=1.23.0", "tokenizers>=0.20.0", "huggingface-hub>=0.25.0"]
+# structured JSON logs
+logging = ["python-json-logger>=2.0.7"]
+# Loamz Data adapters: files, documents, memory and databases through the data service
+data = ["loamz-data"]
+# the conformance suites and test helpers in loamz.engine.agents.testing and loamz.engine.testing
+testing = ["pytest>=9.0.3", "pytest-asyncio>=1.4.0", "httpx>=0.27.0"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9",
+    "pytest-asyncio>=1.4",
+    "pytest-xdist>=3.6",
+    "pytest-timeout>=2.3",
+    "hypothesis>=6.168.3",
+    "opentelemetry-sdk>=1.20.0",
+    "import-linter>=2.11",
+    "httpx>=0.28,<1",
+    "pyyaml>=6.0.3",
+    "asyncpg>=0.31.0",
+    "pypdfium2>=5.0.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.11.16,<0.12"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "loamz.engine"
+
+[tool.ruff]
+extend = "../../pyproject.toml"
+target-version = "py313"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+asyncio_mode = "auto"
+addopts = ["-m", "not slow and not integration and not heavy"]
+timeout = 120
+markers = [
+    "slow: needs Docker or minutes of runtime",
+    "integration: needs Docker services",
+    "heavy: loads a real model into memory (GBs, tens of seconds)",
+    "requires_redis: skipped when Redis is not reachable (LOAMZ_TEST_REDIS_URL)",
+]

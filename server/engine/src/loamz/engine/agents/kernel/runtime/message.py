@@ -1,0 +1,159 @@
+"""Message — the unit of agent-to-agent communication.
+
+Every send or publish wraps a payload in a ``Message``.  The runtime routes
+the message to its target and returns the recipient's reply.
+
+``payload`` accepts any ``PayloadBase`` subclass.  Built-in kinds:
+
+    ChatPayload         — a conversation turn (ChatMessage)
+    ToolCallRequest     — a request to execute a tool       (defined in tools.py)
+    ToolExecutionResult — the result of a tool execution    (defined in tools.py)
+    DataPayload         — arbitrary JSON-serializable structured data
+
+All message types are pydantic models so ``message.model_dump_json()``
+round-trips cleanly for any transport (Kafka, NATS, Redis Streams, etc.).
+"""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime
+from typing import Any, Literal
+
+from pydantic import BaseModel, Field, SerializeAsAny, field_validator
+
+from loamz.engine.agents.kernel.tools.protocols import (
+    PayloadBase,
+    ToolCallRequest,
+    ToolExecutionResult,
+)
+from loamz.engine.agents.kernel.types.content import ChatMessage, JsonObject
+from loamz.engine.agents.kernel.types.identity import Actor, Topic
+from loamz.engine.agents.kernel.types.ids import new_id
+
+# ---------------------------------------------------------------------------
+# Built-in payload types  (all inherit PayloadBase)
+# ---------------------------------------------------------------------------
+
+
+class ChatPayload(PayloadBase):
+    """A conversation turn."""
+
+    # Narrowing PayloadBase.kind (str) to a Literal per subclass is a known
+    # pyright/pydantic limitation: frozen-ness is a runtime (model_config)
+    # guarantee pyright can't see statically, so it flags the narrower
+    # override as unsound even though these models are genuinely immutable.
+    kind: Literal["chat"] = "chat"  # pyright: ignore[reportIncompatibleVariableOverride]
+    message: ChatMessage
+
+
+class DataPayload(PayloadBase):
+    """Arbitrary JSON-serializable structured data."""
+
+    kind: Literal["data"] = "data"  # pyright: ignore[reportIncompatibleVariableOverride]
+    data: JsonObject
+
+
+# ---------------------------------------------------------------------------
+# Payload type alias
+#
+# SerializeAsAny ensures subclass-specific fields survive model_dump / JSON
+# round-trips even though the annotation names only the base class.
+# ---------------------------------------------------------------------------
+
+Payload = SerializeAsAny[PayloadBase]
+
+# ---------------------------------------------------------------------------
+# Payload registry — maps kind string → concrete PayloadBase subclass
+# ---------------------------------------------------------------------------
+
+_PAYLOAD_REGISTRY: dict[str, type[PayloadBase]] = {
+    "chat": ChatPayload,
+    "tool_call": ToolCallRequest,
+    "tool_result": ToolExecutionResult,
+    "data": DataPayload,
+}
+
+
+# ---------------------------------------------------------------------------
+# Message
+# ---------------------------------------------------------------------------
+
+
+class Message(BaseModel):
+    """A routable unit of agent communication.
+
+    ``id`` is a time-sortable hex identifier (UUID4 for now; ULID in a
+    future pass).  It enables deduplication and idempotency at the transport
+    layer.
+
+    ``schema_version`` allows consumers to detect format changes when
+    messages are persisted across deployments.
+
+    ``target`` is always required — a ``Message`` with no destination cannot
+    be delivered.  ``sender`` is also required — all messages must have
+    explicit actor provenance (e.g. ``Actor.user()`` or ``Actor.system()``).
+
+    ``correlation_id`` ties every message in one logical conversation;
+    ``causation_id`` names the specific message that triggered this one.
+    """
+
+    id: str = Field(default_factory=lambda: new_id())
+    schema_version: int = 1
+    created_at: datetime = Field(default_factory=lambda: datetime.now(tz=UTC))
+    target: Actor | Topic
+    sender: Actor
+    payload: Payload
+    correlation_id: str = Field(default_factory=lambda: new_id())
+    causation_id: str | None = None
+    metadata: JsonObject = Field(default_factory=dict)
+    reply_to: str | None = None  # run_id of the asker; set by RunContext.ask()
+
+    model_config = {"arbitrary_types_allowed": True}
+
+    @field_validator("payload", mode="before")
+    @classmethod
+    def _parse_payload(cls, v: Any) -> Any:
+        """Dispatch dict payloads to the registry; validate instance payloads."""
+        if isinstance(v, PayloadBase):
+            if v.kind in _PAYLOAD_REGISTRY:
+                return v
+            raise ValueError(f"Unregistered payload type: {type(v).__name__!r}")
+        if isinstance(v, dict):
+            kind = v.get("kind")
+            model = _PAYLOAD_REGISTRY.get(kind) if isinstance(kind, str) else None
+            if model is None:
+                raise ValueError(f"Unknown payload kind: {kind!r}")
+            return model.model_validate(v)
+        raise TypeError(f"payload must be a PayloadBase subclass or dict, got {type(v).__name__!r}")
+
+    @property
+    def is_broadcast(self) -> bool:
+        """True when this message is addressed to a topic (pub/sub fan-out)."""
+        return isinstance(self.target, Topic)
+
+
+# ---------------------------------------------------------------------------
+# Subscription — record of an active topic subscription
+# ---------------------------------------------------------------------------
+
+
+class Subscription(BaseModel):
+    """Tracks a single active topic subscription."""
+
+    id: str = Field(default_factory=lambda: new_id())
+    topic: Topic
+    agent_id: Actor
+
+    model_config = {"arbitrary_types_allowed": True}
+
+
+__all__ = [
+    "PayloadBase",
+    "ChatPayload",
+    "DataPayload",
+    "Payload",
+    "ToolCallRequest",
+    "ToolExecutionResult",
+    "Message",
+    "Subscription",
+]

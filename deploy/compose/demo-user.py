@@ -10,7 +10,7 @@ from pathlib import Path
 
 import httpx
 
-from loamz.identity.tenancy import tenant_alias
+from loamz.core.tenancy import tenant_alias
 
 ENV = dict(
     line.split("=", 1)

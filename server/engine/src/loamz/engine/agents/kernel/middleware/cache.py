@@ -1,0 +1,51 @@
+from __future__ import annotations
+
+import hashlib
+import json
+import logging
+from collections.abc import Awaitable, Callable
+from typing import Any, ClassVar
+
+from loamz.engine.agents.kernel.middleware._contracts import MiddlewareContext
+from loamz.engine.agents.kernel.middleware.stage import MiddlewareStage
+
+logger = logging.getLogger(__name__)
+
+
+class CacheMiddleware:
+    """In-memory cache for tool results, keyed on (function_name, sorted_args)."""
+
+    stages: ClassVar[frozenset[MiddlewareStage]] = frozenset({MiddlewareStage.TOOL})
+
+    def __init__(self, *, max_entries: int = 256) -> None:
+        self.max_entries = max_entries
+        self._cache: dict[str, Any] = {}
+
+    def _make_key(self, ctx: MiddlewareContext) -> str:
+        raw = json.dumps(
+            {"function": ctx.function_name, "args": ctx.arguments},
+            sort_keys=True,
+            default=str,
+        )
+        return hashlib.sha256(raw.encode()).hexdigest()
+
+    async def process(
+        self, context: MiddlewareContext, call_next: Callable[[], Awaitable[None]]
+    ) -> None:
+        key = self._make_key(context)
+        if key in self._cache:
+            logger.debug("CacheMiddleware: hit for %s", context.function_name)
+            context.metadata["_cache_hit"] = True
+            context.tool_result = self._cache[key]
+            return  # Skip call_next() on cache hit
+
+        context.metadata["_cache_hit"] = False
+        await call_next()
+
+        if len(self._cache) >= self.max_entries:
+            oldest = next(iter(self._cache))
+            del self._cache[oldest]
+        self._cache[key] = context.tool_result
+
+    def clear(self) -> None:
+        self._cache.clear()

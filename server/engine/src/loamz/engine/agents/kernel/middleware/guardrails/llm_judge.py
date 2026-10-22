@@ -1,0 +1,98 @@
+from __future__ import annotations
+
+import json
+import logging
+import re
+from collections.abc import Awaitable, Callable
+from typing import TYPE_CHECKING, Any, ClassVar
+
+from loamz.engine.agents.kernel.errors import MiddlewareTermination
+from loamz.engine.agents.kernel.middleware._contracts import MiddlewareContext
+from loamz.engine.agents.kernel.middleware.stage import MiddlewareStage
+
+if TYPE_CHECKING:
+    from loamz.engine.agents.kernel.models.protocols import ChatModel
+
+logger = logging.getLogger(__name__)
+
+
+class LLMJudgeMiddleware:
+    """Use a secondary LLM to judge content safety of the primary LLM's output."""
+
+    stages: ClassVar[frozenset[MiddlewareStage]] = frozenset({MiddlewareStage.CHAT})
+
+    _DEFAULT_JUDGE_PROMPT = (
+        "You are a content safety classifier. Evaluate if the following content "
+        "is safe, appropriate, and free of harmful intent.\n\n"
+        'Respond ONLY with a JSON object: {"safe": true/false, "reason": "brief explanation"}\n\n'
+        "Content to evaluate:\n"
+    )
+
+    def __init__(
+        self,
+        *,
+        model_client: ChatModel,
+        judge_prompt: str | None = None,
+    ):
+        self._model_client: ChatModel = model_client
+        self._judge_prompt = judge_prompt or self._DEFAULT_JUDGE_PROMPT
+
+    async def process(
+        self, context: MiddlewareContext, call_next: Callable[[], Awaitable[None]]
+    ) -> None:
+        await call_next()
+
+        if not context.chat_result:
+            return
+
+        text = context.chat_result.text
+        if not text:
+            return
+
+        logger.debug("[LLMJudge] checking %r (agent=%s)", text[:80], context.agent_name)
+
+        try:
+            from loamz.engine.agents.kernel.types.content import ChatMessage, TextBlock
+
+            classify_request = f'Classify this message:\n"""\n{text}\n"""'
+            messages = [ChatMessage(role="user", content=[TextBlock(text=classify_request)])]
+            from loamz.engine.agents.kernel.models.protocols import GenerationOptions
+
+            resp = await self._model_client.generate(
+                messages,
+                options=GenerationOptions(system_instructions=self._judge_prompt),
+            )
+            judgment = self._parse_judgment(resp.text)
+            safe = judgment.get("safe", True)
+            reason = judgment.get("reason", "")
+
+            if not safe:
+                raise MiddlewareTermination(f"LLMJudge flagged as unsafe: {reason or 'no reason'}")
+
+        except MiddlewareTermination:
+            raise
+        except Exception as e:
+            logger.warning("[LLMJudge] error — failing open: %s", e)
+
+    @staticmethod
+    def _parse_judgment(text: str) -> dict[str, Any]:
+        try:
+            return json.loads(text.strip())
+        except (json.JSONDecodeError, ValueError):
+            pass
+        json_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
+        if json_match:
+            try:
+                return json.loads(json_match.group(1))
+            except (json.JSONDecodeError, ValueError):
+                pass
+        json_match = re.search(r"\{[^{}]*\"safe\"[^{}]*\}", text, re.DOTALL)
+        if json_match:
+            try:
+                return json.loads(json_match.group())
+            except (json.JSONDecodeError, ValueError):
+                pass
+        lower = text.lower()
+        if "unsafe" in lower or "not safe" in lower or '"safe": false' in lower:
+            return {"safe": False, "reason": text[:200]}
+        return {"safe": True, "reason": text[:200]}

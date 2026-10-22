@@ -1,0 +1,75 @@
+[project]
+name = "loamz-server"
+version = "0.1.0"
+description = "The open Loamz platform: the data platform (catalog, SQL, files, documents, memory, databases) and agent hosting."
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.14"
+dependencies = [
+    "loamz-engine[postgres,pdf]",
+    "loamz-core",
+    "httpx>=0.28,<1",
+    "fastapi>=0.128",
+    "uvicorn>=0.34,<1",
+    "polars>=1.44.2,<2",
+    "pyarrow>=22,<27",
+    "duckdb>=1.4,<2",
+    "pydantic-settings>=2.12,<3",
+    "python-multipart>=0.0.20",
+    "sqlglot>=27,<29",
+    "pyiceberg[pyarrow]>=0.10,<0.13",
+    "pyjwt[crypto]>=2.10",
+    "orjson>=3.10",
+    "boto3>=1.40",
+    "psycopg[binary,pool]>=3.2,<4",
+    "opentelemetry-sdk>=1.20.0",
+    "loamz-engine[logging]",
+    # agent and group pictures (re-drawn as a square PNG)
+    "pillow>=12.0.0",
+]
+
+[project.optional-dependencies]
+# The `inference` worker role: local embedding and reranking models (llama-server children) behind the OpenAI wire.
+inference = ["pillow>=12.0.0"]
+# GPU detection for the inference role reads NVML; without it the pool falls back to nvidia-smi, then to CPU.
+gpu = ["nvidia-ml-py>=12.0"]
+# the interactive console (`loamz-server agents chat`)
+console = ["rich>=14.3.2", "prompt-toolkit>=3.0.0"]
+
+[project.scripts]
+loamz-server = "loamz.server.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=9",
+    "pytest-asyncio>=1.4",
+    "pytest-xdist>=3.6",
+    "pytest-timeout>=2.3",
+    "hypothesis>=6.168.3",
+    "loamz-data[arrow]",
+    "loamz-engine[openai,tools,redis]",
+    "pyyaml>=6.0.3",
+    "rich>=14.3.2",
+    "prompt-toolkit>=3.0.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.11.16,<0.12"]
+build-backend = "uv_build"
+
+# `loamz` and `loamz.server` are namespaces shared with loamz-reader (loamz.server.reader): no __init__.py in either.
+[tool.uv.build-backend]
+module-name = "loamz.server"
+namespace = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+asyncio_mode = "auto"
+addopts = ["-m", "not slow and not integration"]
+timeout = 120
+markers = [
+    "slow: needs Docker or minutes of runtime (a model, a real PostgreSQL with pgvector in a container)",
+    "integration: needs Docker services (a throwaway SeaweedFS)",
+    "requires_redis: skipped when Redis is not reachable (LOAMZ_TEST_REDIS_URL)",
+]

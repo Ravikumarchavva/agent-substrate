@@ -1,0 +1,41 @@
+[project]
+name = "loamz-data"
+version = "0.1.0"
+description = "Client for Loamz Data: catalog, SQL, files, documents, memory and databases (sync and async)."
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.12"
+dependencies = ["httpx>=0.28,<1", "loamz-core"]
+
+[project.optional-dependencies]
+# Arrow/Polars results (`ld.sql`, `ld.arrow`, `ld.stream`); the code-interpreter sandbox image installs this extra.
+arrow = ["polars>=1.44.2,<2", "pyarrow>=22,<27"]
+# HTTP/2 multiplexing for the async client, used automatically when installed.
+http2 = ["httpx[http2]>=0.28,<1"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9",
+    "pytest-asyncio>=1.4",
+    "pytest-xdist>=3.6",
+    "pytest-timeout>=2.3",
+    "polars>=1.44.2,<2",
+    "pyarrow>=22,<27",
+]
+
+[build-system]
+requires = ["uv_build>=0.11.16,<0.12"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "loamz.data"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = ["-m", "not slow and not integration"]
+markers = ["slow: needs Docker or minutes of runtime", "integration: needs Docker services"]
+
+[tool.ruff]
+extend = "../../../pyproject.toml"
+target-version = "py312"

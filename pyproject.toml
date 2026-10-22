@@ -5,14 +5,14 @@
 # 3.13 with its own lock (data/document-intelligence/uv.lock) and image.
 [tool.uv.workspace]
 members = [
-    "data/storage",
-    "data/client",
-    "data/server",
-    "identity/python",
-    "agents/library",
+    "server/engine",
+    "server/server",
+    "sdk/python/core",
+    "sdk/python/data",
     "meta/loamz",
 ]
-exclude = ["data/reader"]
+# loamz-reader runs on Python 3.13 (PaddlePaddle has no 3.14 wheels yet) with its own lock.
+exclude = ["server/reader"]
 
 # Indexes are read from the workspace root only.
 [[tool.uv.index]]
@@ -22,11 +22,10 @@ explicit = true
 
 [tool.uv.sources]
 torch = { index = "pytorch-cpu" }
-loamz-data-storage = { workspace = true }
-loamz-data-client = { workspace = true }
-loamz-data-server = { workspace = true }
-loamz-identity = { workspace = true }
-loamz-agents = { workspace = true }
+loamz-engine = { workspace = true }
+loamz-server = { workspace = true }
+loamz-core = { workspace = true }
+loamz-data = { workspace = true }
 loamz = { workspace = true }
 
 [dependency-groups]

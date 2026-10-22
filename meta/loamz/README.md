@@ -1,3 +1,3 @@
 # loamz
 
-`pip install "loamz[agents,data]"` installs the Loamz packages you use: `loamz.agents`, `loamz.data.client`, `loamz.data.server`.
+`pip install "loamz[agents,data]"` installs the Loamz packages you use: `loamz.engine.agents`, `loamz.data`, `loamz.server.data`.

@@ -3,14 +3,15 @@ name = "loamz"
 version = "0.1.0"
 description = "Loamz: a governed data platform and durable agents built on it. Install the parts you use."
 readme = "README.md"
-license = "MIT"
-requires-python = ">=3.14"
-dependencies = []
+license = "Apache-2.0"
+requires-python = ">=3.12"
+dependencies = ["loamz-core", "loamz-data"]
 
 [project.optional-dependencies]
-agents = ["loamz-agents"]
-data = ["loamz-data-client"]
-server = ["loamz-data-server", "loamz-agents[server,data]"]
+# the embeddable engines (SQL, files, vectors, documents, the durable agent runtime)
+engine = ["loamz-engine"]
+# the open server: the data platform and agent hosting
+server = ["loamz-server"]
 
 [build-system]
 requires = ["uv_build>=0.11.16,<0.12"]

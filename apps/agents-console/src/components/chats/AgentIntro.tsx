@@ -9,7 +9,7 @@ export function AgentIntro({ agent, onOpenInfo }: { agent: Agent | null; onOpenI
   return (
     <div className="flex h-full items-center justify-center px-6">
       <div className="flex max-w-sm flex-col items-center gap-3 text-center">
-        <Avatar name={agent.name} src={agent.avatar} className="size-24 text-4xl" />
+        <Avatar name={agent.name} src={agent.avatar} className="size-24 text-4xl" isBot={true} badgeClassName="size-7 -bottom-1 -right-1 ring-4 ring-background" />
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">{agent.name}</h1>
         <p className="text-sm text-muted">{agent.role || "No role set yet."}</p>
         <p className="text-xs text-muted">This is your one conversation with {agent.name}. It remembers what you share, and keeps its files between chats.</p>

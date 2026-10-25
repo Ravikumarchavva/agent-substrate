@@ -889,7 +889,7 @@ export function MessageBubble({
         <div className="mx-auto max-w-chat">
           {/* Content column */}
           <div className={speaker ? "flex items-start gap-3" : undefined}>
-          {speaker && <Avatar name={speaker.name} src={speaker.avatar} className="size-8 text-xs shrink-0 mt-0.5" />}
+          {speaker && <Avatar name={speaker.name} src={speaker.avatar} className="size-8 text-xs shrink-0 mt-0.5" isBot={true} />}
           <div className={speaker ? "min-w-0 flex-1 max-w-[96%] space-y-2 rounded-2xl rounded-tl-sm bg-card px-4 py-3 shadow-sm @3xl:max-w-[92%]" : "space-y-3"}>
             {speaker && (
               <p className="text-xs font-semibold" style={{ color: `hsl(${hueOf(speaker.name)} 55% 45%)` }}>

@@ -137,8 +137,8 @@ export function ChatList({ items, selectedKey, onSelect, onTogglePin, onNew, onC
                 className={cn("h-auto! min-h-0 w-full justify-start gap-3 whitespace-normal rounded-lg px-3 py-3 text-left font-normal", open ? "bg-accent/12" : "hover:bg-card-hover")}
               >
                 <span className="relative shrink-0">
-                  <Avatar name={item.name} src={item.avatar} className="size-12 text-lg" />
-                  {typing && <span className="absolute bottom-0 right-0 size-3 animate-pulse rounded-full border-2 border-background bg-success" aria-hidden />}
+                  <Avatar name={item.name} src={item.avatar} className="size-12 text-lg" isBot={item.kind === "agent"} badgeClassName="size-[18px] -bottom-0.5 -right-0.5 ring-2 ring-card" />
+                  {typing && <span className="absolute -top-0.5 -right-0.5 size-3 animate-pulse rounded-full border-2 border-card bg-success" aria-hidden />}
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="flex items-baseline justify-between gap-2">

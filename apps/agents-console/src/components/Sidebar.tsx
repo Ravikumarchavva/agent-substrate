@@ -181,6 +181,7 @@ export function Sidebar({
           key: i.key,
           name: i.name,
           avatar: i.avatar,
+          isBot: i.kind === "agent",
           title: i.name,
           preview: i.preview,
           time: i.time,
@@ -336,7 +337,7 @@ export function Sidebar({
                       title={row.title}
                       className={cn("h-auto! min-h-0 w-full justify-start gap-3 whitespace-normal rounded-lg px-2.5 py-2 text-left font-normal", row.active ? "bg-accent/12" : "hover:bg-card-hover")}
                     >
-                      <Avatar name={row.name} src={row.avatar} />
+                      <Avatar name={row.name} src={row.avatar} isBot={row.isBot} />
                       <span className="min-w-0 flex-1">
                         <span className="flex items-baseline justify-between gap-2">
                           <span className="truncate text-sm font-medium text-foreground">{row.name}</span>

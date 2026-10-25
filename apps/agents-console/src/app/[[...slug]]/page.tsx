@@ -1974,7 +1974,7 @@ function ChatPageContent() {
       title={threadAgent?.name ?? currentThread?.name ?? ""}
       subtitle={agentWorking ? "typing…" : (threadAgent?.role || "Agent")}
       live={agentWorking}
-      avatar={<Avatar name={threadAgent?.name ?? currentThread?.name ?? ""} src={threadAgent?.avatar} className="size-10" />}
+      avatar={<Avatar name={threadAgent?.name ?? currentThread?.name ?? ""} src={threadAgent?.avatar} className="size-10" isBot={!!threadAgent} badgeClassName="size-4 -bottom-0.5 -right-0.5 ring-2 ring-background" />}
     >
       <Button variant="ghost" size="icon" aria-label="Computer: files and activity" aria-pressed={computerOpen} onClick={() => setComputerOpen((o) => !o)}>
         <Monitor />
@@ -2177,7 +2177,7 @@ function ChatPageContent() {
                         <div className="mx-auto max-w-chat">
                           {threadAgent ? (
                             <div className="flex items-end gap-2">
-                              <Avatar name={threadAgent.name} src={threadAgent.avatar} className="size-8 text-xs" />
+                              <Avatar name={threadAgent.name} src={threadAgent.avatar} className="size-8 text-xs" isBot={true} />
                               <div className="rounded-xl rounded-tl-sm bg-card px-3 shadow-sm">
                                 <WaitingIndicator />
                               </div>

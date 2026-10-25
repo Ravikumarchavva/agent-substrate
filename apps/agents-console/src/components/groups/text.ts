@@ -75,7 +75,7 @@ export function fileSize(bytes: number): string {
 
 /** What a chat list shows for a message: its text, or the files when there is none ("📎 budget.xlsx", "📎 3 files"). */
 export function previewOf(text: string, attachments: { name: string }[]): string {
-  const plain = toSpeechText(text).replace(/\s+/g, " ");
+  const plain = toSpeechText(text).replace(/^🤖\s*/g, "").replace(/\s+/g, " ").trim();
   if (plain) return plain;
   if (attachments.length === 1) return `📎 ${attachments[0].name}`;
   return attachments.length > 1 ? `📎 ${attachments.length} files` : "";

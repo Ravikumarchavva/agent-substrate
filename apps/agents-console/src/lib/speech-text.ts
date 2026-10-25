@@ -1,6 +1,8 @@
 /** Markdown reduced to what a person would say aloud: no asterisks, hashes, link syntax, citation numbers or table pipes. */
 export function toSpeechText(markdown: string): string {
   return markdown
+    .replace(/^🤖\s*/gm, "")
+    .replace(/[🤖]/g, "")
     .replace(/```[\s\S]*?```/g, " ") // code blocks are not read out
     .replace(/<[^>]+>/g, " ")
     .replace(/!\[[^\]]*\]\([^)]*\)/g, " ")

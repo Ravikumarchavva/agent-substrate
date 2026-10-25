@@ -50,13 +50,13 @@ function RailButton({ icon: Icon, label, onClick, active, count, compact, highli
 }
 
 /** A chat you pinned, as its avatar: a ring when it is the one open, a count for what you have not read, a green dot while it is typing. */
-function RailChat({ name, avatar, active, unread, typing, onClick }: { name: string; avatar: string | null; active: boolean; unread: number; typing: boolean; onClick: () => void }) {
+function RailChat({ name, avatar, active, unread, typing, isBot, onClick }: { name: string; avatar: string | null; active: boolean; unread: number; typing: boolean; isBot?: boolean; onClick: () => void }) {
   return (
     <Tooltip label={typing ? `${name} is typing…` : name} side="right">
       <Button variant="ghost" onClick={onClick} aria-label={name} aria-current={active ? "page" : undefined} className={cn("relative size-11 h-11! rounded-full p-0", active && "ring-2 ring-accent")}>
-        <Avatar name={name} src={avatar} className="size-9 text-sm" />
+        <Avatar name={name} src={avatar} className="size-9 text-sm" isBot={isBot} />
         {unread > 0 && !active && <Count n={unread} />}
-        {typing && <span className="absolute bottom-0.5 right-0.5 size-2.5 rounded-full bg-success ring-2 ring-card" aria-hidden />}
+        {typing && <span className="absolute top-0.5 right-0.5 size-2.5 rounded-full bg-success ring-2 ring-card" aria-hidden />}
       </Button>
     </Tooltip>
   );
@@ -208,6 +208,7 @@ export function CollapsedRail({
                         avatar={chat.avatar}
                         unread={chat.unread}
                         typing={chat.typing.length > 0}
+                        isBot={chat.kind === "agent"}
                         active={isOpenChat(chat, { agentId: openAgentId, groupId: openGroupId })}
                         onClick={() => (chat.kind === "group" ? onOpenGroup?.(chat.id) : agent && onOpenAgent?.(agent))}
                       />

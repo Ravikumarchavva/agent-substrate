@@ -150,6 +150,7 @@ function ChatPageContent() {
   // "your turn" state, not the active "running" spinners.
   const [hitlPending, setHitlPending] = useState(false);
   const [desktopSidebarOpen, setDesktopSidebarOpen] = useState(true);
+  const [chatListCollapsed, setChatListCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [lastActiveThreadId, setLastActiveThreadId] = useState<string | null>(null);
   const [authNotice, setAuthNotice] = useState<string | null>(null);
@@ -1968,6 +1969,8 @@ function ChatPageContent() {
   const chatHeader = isAgentChat ? (
     <ChatHeader
       onBack={agentChatId ? () => handleSelectChat("agent", null) : undefined}
+      onToggleList={() => setChatListCollapsed((c) => !c)}
+      isListOpen={!chatListCollapsed}
       title={threadAgent?.name ?? currentThread?.name ?? ""}
       subtitle={agentWorking ? "typing…" : (threadAgent?.role || "Agent")}
       live={agentWorking}
@@ -2029,7 +2032,7 @@ function ChatPageContent() {
                   />
                   )
                 ) : (
-                  <div className={`mx-auto w-full py-8 ${isAgentChat ? "space-y-3" : "space-y-8"}`}>
+                  <div className={`mx-auto w-full py-4 sm:py-6 ${isAgentChat ? "space-y-3" : "space-y-6"}`}>
                     {messages.map((m, index) => {
                       if (m.role === "tool_approval" && m.metadata) {
                         return (
@@ -2358,7 +2361,7 @@ function ChatPageContent() {
       <ViewAsPicker agents={agents} open={viewPickerOpen} onOpenChange={setViewPickerOpen} onPick={(a) => handleViewAs(a.id)} />
       {/* Desktop Sidebar */}
       <div
-        className={`hidden shrink-0 overflow-hidden transition-all duration-300 ease-in-out lg:block ${desktopSidebarOpen ? "lg:w-[20rem]" : "lg:w-0"
+        className={`hidden shrink-0 overflow-hidden transition-all duration-300 ease-in-out lg:block ${desktopSidebarOpen ? "lg:w-[15rem]" : "lg:w-0"
           }`}
       >
         <Sidebar
@@ -2485,6 +2488,8 @@ function ChatPageContent() {
               onSelect={handleSelectChat}
               onViewAs={handleViewAs}
               onChanged={refreshChats}
+              listCollapsed={chatListCollapsed}
+              onToggleList={() => setChatListCollapsed((c) => !c)}
               conversation={
                 <>
                   {chatHeader}

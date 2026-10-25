@@ -888,9 +888,9 @@ export function MessageBubble({
       <div className="substrate-fade-up group relative px-4 sm:px-6">
         <div className="mx-auto max-w-chat">
           {/* Content column */}
-          <div className={speaker ? "flex items-end gap-2" : undefined}>
-          {speaker && <Avatar name={speaker.name} src={speaker.avatar} className="size-8 text-xs" />}
-          <div className={speaker ? "min-w-0 max-w-[85%] space-y-2 rounded-xl rounded-tl-sm bg-card px-3 py-2 shadow-sm @3xl:max-w-[70%]" : "space-y-3"}>
+          <div className={speaker ? "flex items-start gap-3" : undefined}>
+          {speaker && <Avatar name={speaker.name} src={speaker.avatar} className="size-8 text-xs shrink-0 mt-0.5" />}
+          <div className={speaker ? "min-w-0 flex-1 max-w-[96%] space-y-2 rounded-2xl rounded-tl-sm bg-card px-4 py-3 shadow-sm @3xl:max-w-[92%]" : "space-y-3"}>
             {speaker && (
               <p className="text-xs font-semibold" style={{ color: `hsl(${hueOf(speaker.name)} 55% 45%)` }}>
                 {speaker.name}
@@ -1119,7 +1119,7 @@ export function MessageBubble({
                                 onOpenArtifact(path, name);
                               }
                             }}
-                            className={`my-1 flex w-full max-w-md items-center gap-3 rounded-2xl border border-border bg-card p-3 shadow-xs hover:shadow-sm hover:bg-card-hover hover:border-border-hover transition-all duration-200 ${onOpenArtifact ? "cursor-pointer" : ""}`}
+                            className={`my-1 flex w-full max-w-xl items-center gap-3 rounded-2xl border border-border bg-card p-3 shadow-xs hover:shadow-sm hover:bg-card-hover hover:border-border-hover transition-all duration-200 ${onOpenArtifact ? "cursor-pointer" : ""}`}
                           >
                             <FileTypeIcon name={name} size="lg" as="span" />
                             <span className="min-w-0 flex-1">
@@ -1175,7 +1175,7 @@ export function MessageBubble({
 
             {/* Generated/Attached Documents (left-aligned for assistant) */}
             {documentAttachments.length > 0 && (
-              <div className="flex w-full max-w-xl flex-wrap gap-2.5 pt-1">
+              <div className="flex w-full max-w-2xl flex-wrap gap-2.5 pt-1">
                 {documentAttachments.map((attachment) => (
                   <AttachmentDocumentCard key={attachment.id} attachment={attachment} onOpenArtifact={onOpenArtifact} />
                 ))}

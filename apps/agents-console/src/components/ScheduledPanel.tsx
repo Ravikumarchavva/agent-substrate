@@ -210,7 +210,7 @@ export function ScheduledPanel({ onOpenThread }: ScheduledPanelProps) {
   if (!loading && tasks.length > 0) {
     return (
       <div className="@container h-full w-full bg-background text-foreground">
-        <div className="grid h-full min-h-0 @4xl:grid-cols-[minmax(22rem,26rem)_minmax(0,1fr)]">
+        <div className="grid h-full min-h-0 @4xl:grid-cols-[minmax(16rem,18rem)_minmax(0,1fr)]">
           <div className={cn("min-h-0 @4xl:border-r @4xl:border-border", selected && "hidden @4xl:block")}>
             <Pane>
               <PageHeading title="Scheduled tasks" subtitle="Run tasks on a schedule or whenever you need them." actions={newTaskMenu} />

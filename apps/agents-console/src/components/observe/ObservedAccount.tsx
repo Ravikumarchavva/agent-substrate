@@ -67,7 +67,7 @@ export function ObservedAccount({ agent, chatKey, onOpen, onSwitch, onExit }: Pr
   return (
     <div className="@container flex h-full min-h-0 w-full flex-col bg-background text-foreground">
       <ViewBanner name={agent.name} onSwitch={onSwitch} onExit={onExit} />
-      <div className="grid min-h-0 flex-1 @4xl:grid-cols-[minmax(20rem,26rem)_minmax(0,1fr)]">
+      <div className="grid min-h-0 flex-1 @4xl:grid-cols-[minmax(16rem,18rem)_minmax(0,1fr)]">
         <div className={cn("min-h-0 @4xl:border-r @4xl:border-border", open && "hidden @4xl:block")}>
           <ChatList
             title={`${agent.name}'s chats`}

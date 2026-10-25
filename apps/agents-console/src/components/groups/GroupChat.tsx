@@ -20,6 +20,8 @@ type Props = {
   group: Group;
   agents: Agent[];
   onBack: () => void;
+  onToggleList?: () => void;
+  isListOpen?: boolean;
   /** The group changed (members, name) or was read: the lists that show it should refresh. */
   onChanged: () => void;
   onDeleted: () => void;
@@ -31,7 +33,7 @@ type Props = {
  */
 const HISTORY_PAGE = 200;
 
-export function GroupChat({ group, agents, onBack, onChanged, onDeleted }: Props) {
+export function GroupChat({ group, agents, onBack, onToggleList, isListOpen, onChanged, onDeleted }: Props) {
   const [entries, setEntries] = useState<GroupEntry[]>([]);
   const [typing, setTyping] = useState<string[]>([]);
   const [replyTo, setReplyTo] = useState<GroupEntry | null>(null);
@@ -149,6 +151,8 @@ export function GroupChat({ group, agents, onBack, onChanged, onDeleted }: Props
         )}
         <ChatHeader
           onBack={onBack}
+          onToggleList={onToggleList}
+          isListOpen={isListOpen}
           title={group.name}
           subtitle={typing.length > 0 ? typingLine(typing) : ["You", ...names].join(", ")}
           live={typing.length > 0}
@@ -172,7 +176,7 @@ export function GroupChat({ group, agents, onBack, onChanged, onDeleted }: Props
         <Composer ref={composer} groupId={group.id} names={names} avatars={avatars} replyTo={replyTo} onClearReply={() => setReplyTo(null)} onSend={send} />
       </section>
       {infoOpen && (
-        <aside className="scroll-area h-full min-h-0 w-full border-l border-border @3xl:w-96 @3xl:shrink-0">
+        <aside className="scroll-area h-full min-h-0 w-full border-l border-border @3xl:w-80 @3xl:shrink-0">
           <div className="px-4 pb-8 pt-16 sm:px-6 sm:pt-6">
             <div className="mb-4 flex items-center gap-2 @3xl:hidden">
               <Button variant="ghost" size="icon" aria-label="Back to the conversation" onClick={() => setInfoOpen(false)}>

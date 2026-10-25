@@ -30,13 +30,19 @@ type Props = {
   onChanged: () => void;
   /** The open agent's conversation, drawn by the page (it owns the streaming state), shown where its profile would be. */
   conversation: ReactNode;
+  /** Whether the chats list is collapsed on desktop. */
+  listCollapsed?: boolean;
+  onToggleList?: () => void;
 };
 
 /**
  * The messenger: every agent and group as a chat list on the left, and whatever you opened on the right: a group's conversation, or an agent as a contact.
  * On a phone it is one or the other. Pinned chats are the ones the sidebar keeps; the rest are found here.
  */
-export function ChatsPanel({ agents, groups, selection, onSelect, onViewAs, onChanged, conversation }: Props) {
+export function ChatsPanel({ agents, groups, selection, onSelect, onViewAs, onChanged, conversation, listCollapsed: externalCollapsed, onToggleList }: Props) {
+  const [internalCollapsed, setInternalCollapsed] = useState(false);
+  const isCollapsed = externalCollapsed !== undefined ? externalCollapsed : internalCollapsed;
+  const toggleList = onToggleList || (() => setInternalCollapsed((c) => !c));
   const [tools, setTools] = useState<ToolInfo[]>([]);
   useEffect(() => {
     api.getAgentTools().then(setTools).catch((err) => reportError("Couldn't load the tool list", err));
@@ -92,17 +98,27 @@ export function ChatsPanel({ agents, groups, selection, onSelect, onViewAs, onCh
 
   return (
     <div className="@container h-full w-full bg-background text-foreground">
-      <div className="grid h-full min-h-0 @4xl:grid-cols-[minmax(20rem,26rem)_minmax(0,1fr)]">
-        <div className={cn("min-h-0 @4xl:border-r @4xl:border-border", detailOpen && "hidden @4xl:block")}>
+      <div className="flex h-full min-h-0 w-full overflow-hidden">
+        <div
+          className={cn(
+            "min-h-0 shrink-0 border-r border-border transition-all duration-300 ease-in-out overflow-hidden",
+            detailOpen
+              ? isCollapsed
+                ? "w-0 border-r-0 hidden"
+                : "hidden w-64 sm:w-72 @4xl:block"
+              : "w-full @4xl:w-72"
+          )}
+        >
           <ChatList
             items={items}
             selectedKey={selectedKey}
             onSelect={(i) => onSelect(i.kind, i.id)}
             onTogglePin={(i) => void pin(i.kind, i.id, !i.pinned, i.name)}
             onNew={(kind) => onSelect(kind, NEW)}
+            onCollapse={detailOpen ? toggleList : undefined}
           />
         </div>
-        <div className={cn("min-h-0", !detailOpen && "hidden @4xl:block")}>
+        <div className={cn("min-h-0 flex-1 min-w-0 flex flex-col", !detailOpen && "hidden @4xl:flex")}>
           {selection?.kind === "group" && selection.id === NEW ? (
             <NewGroup
               agents={agents}
@@ -118,6 +134,8 @@ export function ChatsPanel({ agents, groups, selection, onSelect, onViewAs, onCh
               group={group}
               agents={agents}
               onBack={() => onSelect("group", null)}
+              onToggleList={toggleList}
+              isListOpen={!isCollapsed}
               onChanged={onChanged}
               onDeleted={() => {
                 onChanged();
@@ -128,7 +146,7 @@ export function ChatsPanel({ agents, groups, selection, onSelect, onViewAs, onCh
             <div className="@container flex h-full min-h-0 w-full">
               <div className={cn("relative flex min-w-0 flex-1 flex-col", selection?.tab === "info" && "hidden @3xl:flex")}>{conversation}</div>
               {selection?.tab === "info" && (
-                <aside className="h-full min-h-0 w-full border-l border-border @3xl:w-96 @3xl:shrink-0">{profile()}</aside>
+                <aside className="h-full min-h-0 w-full border-l border-border @3xl:w-80 @3xl:shrink-0">{profile()}</aside>
               )}
             </div>
           ) : selection?.kind === "agent" && selection.id === NEW ? (

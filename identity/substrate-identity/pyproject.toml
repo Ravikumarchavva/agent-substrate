@@ -5,7 +5,7 @@ description = "Verify Keycloak (OIDC) access tokens and trusted-issuer tokens; o
 readme = "README.md"
 requires-python = ">=3.13"
 # Deliberately small: every service imports this.
-dependencies = ["pyjwt[crypto]>=2.10", "httpx>=0.28,<1"]
+dependencies = ["pyjwt[crypto]>=2.15.1", "httpx>=0.28,<1"]
 
 [project.optional-dependencies]
 fastapi = ["fastapi>=0.115,<1"]

@@ -26,7 +26,7 @@ COPY data/embedding-reranker data/embedding-reranker
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-editable --package embedding-reranker
 
-FROM python:3.14-slim-bookworm AS runtime
+FROM python:3.15-slim-bookworm AS runtime
 RUN useradd --system --uid 10001 --create-home app
 COPY --from=build --chown=app:app /app/.venv /app/.venv
 ENV PATH="/app/.venv/bin:$PATH" PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1

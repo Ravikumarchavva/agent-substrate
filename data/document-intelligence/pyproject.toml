@@ -28,7 +28,7 @@ paddle-gpu = ["paddleocr[doc-parser]>=3.7.0", "paddlepaddle-gpu==3.3.0", "nvidia
 test = ["pytest>=9.0.3", "pytest-asyncio>=1.4.0", "httpx>=0.27.0", "pypdf>=6.13.0"]
 
 [build-system]
-requires = ["uv_build>=0.11.16,<0.12"]
+requires = ["uv_build>=0.11.16,<0.14"]
 build-backend = "uv_build"
 
 [tool.uv.build-backend]

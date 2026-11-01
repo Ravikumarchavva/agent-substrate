@@ -15,7 +15,7 @@ dependencies = [
     "python-multipart>=0.0.20",
     "sqlglot>=27,<29",
     "pyiceberg[pyarrow]>=0.10,<0.13",
-    "pyjwt[crypto]>=2.10",
+    "pyjwt[crypto]>=2.15.1",
     "orjson>=3.10",
     "boto3>=1.40",
     "substrate-data-client[arrow]",

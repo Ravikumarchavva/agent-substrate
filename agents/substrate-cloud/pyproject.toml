@@ -1,6 +1,6 @@
 [project]
 name = "substrate-cloud"
-version = "0.2.0"
+version = "0.2.1"
 description = "The multi-tenant Substrate platform: the monolith API, the nine microservices behind its gateway, and the composition root that picks backends. A consumer of the agent-substrate library."
 requires-python = ">=3.13"
 # Everything the library keeps optional is chosen here, because this is where backends are chosen: the library's extras

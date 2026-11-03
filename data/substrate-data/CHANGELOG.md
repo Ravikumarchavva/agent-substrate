@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.2](https://github.com/Ravikumarchavva/agent-substrate/compare/substrate-data-v0.1.1...substrate-data-v0.1.2) (2026-10-18)
+
+
+### Bug Fixes
+
+* **cell:** wire the agent server to substrate-data end to end ([5839a69](https://github.com/Ravikumarchavva/agent-substrate/commit/5839a693701a14673e6927b91798ddc658afe452))
+
 ## [0.1.1](https://github.com/Ravikumarchavva/agent-substrate/compare/substrate-data-v0.1.0...substrate-data-v0.1.1) (2026-10-18)
 
 
